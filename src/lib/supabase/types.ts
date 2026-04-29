@@ -47,6 +47,8 @@ export type ProfileRow = {
   dob: string | null;
   default_currency: string | null;
   starting_balance: number | null;
+  notebook_url: string | null;
+  theme: string | null;
   created_at: string;
   updated_at: string;
 };

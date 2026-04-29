@@ -1,7 +1,10 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
-  darkMode: "class",
+  // Use class-based dark mode but trigger on any of our theme classes.
+  // Triggers Tailwind's `dark:` variant when an ancestor has `.theme-dark`
+  // or `.theme-gray`. Light theme stays in default mode.
+  darkMode: ["selector", ":is(.theme-dark, .theme-gray) &"],
   content: [
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -21,6 +24,10 @@ const config: Config = {
           subtle: "rgb(var(--fg-subtle) / <alpha-value>)"
         },
         line: "rgb(var(--line) / <alpha-value>)",
+        accent: {
+          DEFAULT: "rgb(var(--accent) / <alpha-value>)",
+          fg: "rgb(var(--accent-fg) / <alpha-value>)"
+        },
         brand: {
           50: "#f3eaff",
           100: "#e1ccff",
@@ -33,8 +40,14 @@ const config: Config = {
           800: "#3a107f",
           900: "#290a5c"
         },
-        success: { DEFAULT: "#16a34a", soft: "rgba(22,163,74,0.15)" },
-        danger: { DEFAULT: "#ef4444", soft: "rgba(239,68,68,0.15)" },
+        success: {
+          DEFAULT: "rgb(var(--pos) / <alpha-value>)",
+          soft: "rgba(22,163,74,0.15)"
+        },
+        danger: {
+          DEFAULT: "rgb(var(--neg) / <alpha-value>)",
+          soft: "rgba(239,68,68,0.15)"
+        },
         warn: { DEFAULT: "#f59e0b", soft: "rgba(245,158,11,0.15)" }
       },
       fontFamily: {

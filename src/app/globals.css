@@ -2,28 +2,89 @@
 @tailwind components;
 @tailwind utilities;
 
+/* =====================================================================
+   THEMES
+   - Public/landing pages keep the purple "aurora" treatment.
+   - Inside the app the user can pick: dark / light / gray.
+   - The chosen theme drives ALL chart/widget colors via CSS vars so
+     contrast adjusts automatically.
+   ===================================================================== */
+
 :root {
-  --bg: 248 247 252;
-  --bg-soft: 244 242 250;
-  --bg-elevated: 255 255 255;
-  --fg: 17 17 24;
-  --fg-muted: 75 75 95;
-  --fg-subtle: 130 130 150;
-  --line: 226 226 235;
+  /* default = dark */
+  --bg: 9 10 13;
+  --bg-soft: 14 16 21;
+  --bg-elevated: 19 21 28;
+  --fg: 245 245 248;
+  --fg-muted: 165 165 180;
+  --fg-subtle: 120 120 140;
+  --line: 32 33 40;
+
+  --accent: 138 58 255;
+  --accent-fg: 245 244 250;
+
+  --pos: 22 197 94;
+  --neg: 239 68 68;
+
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Inter,
     "Helvetica Neue", sans-serif;
   --font-display: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, sans-serif;
 }
 
-.dark {
-  --bg: 11 9 18;
-  --bg-soft: 16 14 26;
-  --bg-elevated: 22 19 36;
-  --fg: 245 244 250;
-  --fg-muted: 175 172 195;
-  --fg-subtle: 130 128 155;
-  --line: 39 34 60;
+/* light */
+.theme-light,
+html.theme-light {
+  --bg: 252 252 254;
+  --bg-soft: 246 246 250;
+  --bg-elevated: 255 255 255;
+  --fg: 17 17 24;
+  --fg-muted: 80 82 96;
+  --fg-subtle: 130 132 145;
+  --line: 226 227 235;
+  --accent: 111 27 255;
+  --accent-fg: 255 255 255;
+  --pos: 22 163 74;
+  --neg: 220 38 38;
 }
+
+/* dark (Tradezella-style true dark) */
+.theme-dark,
+html.theme-dark,
+html.dark {
+  --bg: 9 10 13;
+  --bg-soft: 14 16 21;
+  --bg-elevated: 19 21 28;
+  --fg: 245 245 248;
+  --fg-muted: 165 165 180;
+  --fg-subtle: 120 120 140;
+  --line: 32 33 40;
+  --accent: 138 58 255;
+  --accent-fg: 245 244 250;
+  --pos: 22 197 94;
+  --neg: 239 68 68;
+}
+
+/* gray (Tradezella daytime / muted slate) */
+.theme-gray,
+html.theme-gray {
+  --bg: 32 36 44;
+  --bg-soft: 42 47 56;
+  --bg-elevated: 52 58 68;
+  --fg: 240 242 247;
+  --fg-muted: 178 184 196;
+  --fg-subtle: 132 140 156;
+  --line: 64 70 82;
+  --accent: 138 58 255;
+  --accent-fg: 245 244 250;
+  --pos: 34 197 94;
+  --neg: 239 68 68;
+}
+
+/* Keep .dark working as an alias for legacy components */
+html.dark { color-scheme: dark; }
+html.theme-dark { color-scheme: dark; }
+html.theme-gray { color-scheme: dark; }
+html.theme-light { color-scheme: light; }
 
 html,
 body {
@@ -38,12 +99,15 @@ body {
   border-color: rgb(var(--line));
 }
 
-/* Animated background for auth pages */
+/* =====================================================================
+   Aurora is reserved for the public/landing/login pages only.
+   In-app pages should NOT use it.
+   ===================================================================== */
 .aurora {
   background:
-    radial-gradient(60% 40% at 20% 10%, rgba(138, 58, 255, 0.35), transparent 60%),
-    radial-gradient(50% 40% at 80% 20%, rgba(255, 110, 199, 0.18), transparent 60%),
-    radial-gradient(60% 60% at 50% 100%, rgba(80, 30, 200, 0.35), transparent 60%);
+    radial-gradient(60% 40% at 20% 10%, rgba(138, 58, 255, 0.42), transparent 60%),
+    radial-gradient(50% 40% at 80% 20%, rgba(255, 110, 199, 0.22), transparent 60%),
+    radial-gradient(60% 60% at 50% 100%, rgba(80, 30, 200, 0.42), transparent 60%);
 }
 
 .bg-grid {
@@ -59,11 +123,26 @@ body {
   transform: scaleX(-1);
 }
 
-/* Recharts tooltip dark/light coherence */
+/* =====================================================================
+   Recharts theming — readable in all three themes
+   ===================================================================== */
 .recharts-default-tooltip {
   background: rgb(var(--bg-elevated)) !important;
   border-color: rgb(var(--line)) !important;
   border-radius: 12px !important;
+  color: rgb(var(--fg)) !important;
+}
+.recharts-tooltip-label,
+.recharts-tooltip-item {
+  color: rgb(var(--fg)) !important;
+}
+.recharts-cartesian-grid line,
+.recharts-polar-grid-concentric circle,
+.recharts-polar-grid-concentric polygon {
+  stroke: rgb(var(--line)) !important;
+}
+.recharts-cartesian-axis-tick text {
+  fill: rgb(var(--fg-subtle)) !important;
 }
 
 /* Scrollbar */
@@ -73,3 +152,20 @@ body {
   border-radius: 8px;
 }
 ::-webkit-scrollbar-track { background: transparent; }
+
+/* Calendar heat cell utility */
+.cal-cell {
+  border: 1px solid rgb(var(--line));
+  background: rgb(var(--bg-soft) / 0.6);
+}
+.cal-cell.cal-pos { background: rgba(34, 197, 94, 0.18); border-color: rgba(34, 197, 94, 0.45); }
+.cal-cell.cal-neg { background: rgba(239, 68, 68, 0.18); border-color: rgba(239, 68, 68, 0.45); }
+.cal-cell.cal-flat { background: rgba(120, 120, 140, 0.18); border-color: rgba(120, 120, 140, 0.45); }
+
+/* Number tickers / monospaced money */
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* Subtle elevation for cards inside the gray theme */
+.theme-gray .card-elev {
+  box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset, 0 8px 28px -16px rgba(0,0,0,0.55);
+}

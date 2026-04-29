@@ -24,7 +24,6 @@ export function GsScoreRadar({ parts, score }: { parts: GsScoreInputs; score: nu
         </RadarChart>
       </ResponsiveContainer>
       <div className="absolute inset-x-0 -bottom-1 text-center">
-        <div className="text-xs text-fg-muted">GS Score</div>
         <div className="text-2xl font-semibold tracking-tight text-brand-300">{score}</div>
       </div>
     </div>
