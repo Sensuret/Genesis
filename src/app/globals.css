@@ -1,0 +1,75 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: 248 247 252;
+  --bg-soft: 244 242 250;
+  --bg-elevated: 255 255 255;
+  --fg: 17 17 24;
+  --fg-muted: 75 75 95;
+  --fg-subtle: 130 130 150;
+  --line: 226 226 235;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Inter,
+    "Helvetica Neue", sans-serif;
+  --font-display: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, sans-serif;
+}
+
+.dark {
+  --bg: 11 9 18;
+  --bg-soft: 16 14 26;
+  --bg-elevated: 22 19 36;
+  --fg: 245 244 250;
+  --fg-muted: 175 172 195;
+  --fg-subtle: 130 128 155;
+  --line: 39 34 60;
+}
+
+html,
+body {
+  background: rgb(var(--bg));
+  color: rgb(var(--fg));
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  border-color: rgb(var(--line));
+}
+
+/* Animated background for auth pages */
+.aurora {
+  background:
+    radial-gradient(60% 40% at 20% 10%, rgba(138, 58, 255, 0.35), transparent 60%),
+    radial-gradient(50% 40% at 80% 20%, rgba(255, 110, 199, 0.18), transparent 60%),
+    radial-gradient(60% 60% at 50% 100%, rgba(80, 30, 200, 0.35), transparent 60%);
+}
+
+.bg-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* Mirrored E for the GƎNƎSIS wordmark */
+.mirror-e {
+  display: inline-block;
+  transform: scaleX(-1);
+}
+
+/* Recharts tooltip dark/light coherence */
+.recharts-default-tooltip {
+  background: rgb(var(--bg-elevated)) !important;
+  border-color: rgb(var(--line)) !important;
+  border-radius: 12px !important;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--line));
+  border-radius: 8px;
+}
+::-webkit-scrollbar-track { background: transparent; }
