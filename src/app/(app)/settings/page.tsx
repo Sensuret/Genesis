@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
 import type { ProfileRow } from "@/lib/supabase/types";
+import { ThemePicker } from "@/components/theme-picker";
 
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
@@ -128,6 +129,19 @@ export default function SettingsPage() {
           </CardBody>
         </Card>
       </form>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Appearance</CardTitle>
+        </CardHeader>
+        <CardBody className="space-y-3">
+          <p className="text-xs text-fg-muted">
+            The Sun/Moon toggle in the sidebar flips between Pure White and the original Purple. Pick
+            Pure Black or Grey here for the full TradeZella-style charcoal experience.
+          </p>
+          <ThemePicker />
+        </CardBody>
+      </Card>
 
       <Card>
         <CardHeader><CardTitle>Change password</CardTitle></CardHeader>
