@@ -226,6 +226,36 @@ create trigger numerology_others_updated_at
   for each row execute function public.handle_updated_at();
 
 -- =====================================================================
+-- playbooks: user-defined trading models with rules + symbol aliases.
+-- =====================================================================
+create table if not exists public.playbooks (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null,
+  description text,
+  rules jsonb not null default '{}'::jsonb,
+  symbol_aliases text[] not null default array[]::text[],
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists playbooks_user_idx on public.playbooks(user_id);
+
+alter table public.playbooks enable row level security;
+drop policy if exists "playbooks: own" on public.playbooks;
+create policy "playbooks: own" on public.playbooks
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+drop trigger if exists playbooks_updated_at on public.playbooks;
+create trigger playbooks_updated_at
+  before update on public.playbooks
+  for each row execute function public.handle_updated_at();
+
+-- Add playbook_id to trades. Safe to re-run.
+alter table public.trades
+  add column if not exists playbook_id uuid references public.playbooks(id) on delete set null;
+create index if not exists trades_user_playbook_idx on public.trades(user_id, playbook_id);
+
+-- =====================================================================
 -- user_settings: per-user JSON blob for notebook embeds, scratchpad,
 -- preferred currency, etc. One row per user.
 -- =====================================================================

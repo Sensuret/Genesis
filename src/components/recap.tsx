@@ -69,7 +69,7 @@ export function Recap({ period }: { period: RecapPeriod }) {
               <CardHeader><CardTitle>Daily P&L</CardTitle></CardHeader>
               <CardBody><DailyPnlChart data={dailyPnl(subset)} /></CardBody>
             </Card>
-            <MoonWidget />
+            <MoonWidget date={new Date(range.to)} />
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">

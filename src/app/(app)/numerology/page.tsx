@@ -13,11 +13,29 @@ import {
   buildNumerologySnapshot, compatibility, advancedInsights,
   type NumerologySnapshot
 } from "@/lib/numerology";
-import { getSignProfile, lunarForecast, moonPhase, moonTradeNote, ALL_SIGNS } from "@/lib/astrology";
+import {
+  getSignProfile,
+  lunarForecast,
+  moonPhase,
+  moonTradeNote,
+  ALL_SIGNS,
+  horoscopeFor,
+  type HoroscopeTimeframe
+} from "@/lib/astrology";
+import { westernZodiac, type WesternSign } from "@/lib/numerology";
 import type { NumerologyOtherRow, NumerologyProfileRow } from "@/lib/supabase/types";
 import { Plus, Sparkles, Trash2 } from "lucide-react";
 
-const TABS = ["My Profile", "Calculate For Others", "Combined", "Lunar Cycle", "Advanced Insights"] as const;
+const TABS = [
+  "My Profile",
+  "Calculate For Others",
+  "Combined",
+  "Lunar Cycle",
+  "Horoscope",
+  "Education Insights",
+  "General Knowledge",
+  "Advanced Insights"
+] as const;
 type Tab = (typeof TABS)[number];
 
 const RELATIONSHIPS = [
@@ -82,6 +100,12 @@ export default function NumerologyPage() {
         <Combined profile={my} others={others} />
       ) : tab === "Lunar Cycle" ? (
         <Lunar />
+      ) : tab === "Horoscope" ? (
+        <HoroscopeView profile={my} />
+      ) : tab === "Education Insights" ? (
+        <Education />
+      ) : tab === "General Knowledge" ? (
+        <GeneralKnowledge />
       ) : (
         <Insights profile={my} />
       )}
@@ -498,6 +522,222 @@ function Block({ title, items, variant }: { title: string; items: string[]; vari
       <div className="flex flex-wrap gap-1.5">
         {items.map((i) => <Badge key={i} variant={variant}>{i}</Badge>)}
       </div>
+    </div>
+  );
+}
+
+function HoroscopeView({ profile }: { profile: NumerologyProfileRow | null }) {
+  const [tf, setTf] = useState<HoroscopeTimeframe>("daily");
+  const defaultSign: WesternSign = profile?.dob ? westernZodiac(profile.dob) : "Aries";
+  const [sign, setSign] = useState<WesternSign>(defaultSign);
+  const horo = useMemo(() => horoscopeFor(sign, tf, new Date()), [sign, tf]);
+  const sp = getSignProfile(`2000-${signMonth(sign)}-15`);
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Daily / Weekly / Monthly Horoscope</CardTitle>
+        </CardHeader>
+        <CardBody className="space-y-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex rounded-xl border border-line bg-bg-elevated p-1">
+              {(["daily", "weekly", "monthly"] as HoroscopeTimeframe[]).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setTf(t)}
+                  className={`rounded-lg px-3 py-1 text-xs ${
+                    tf === t ? "bg-brand-500 text-white" : "text-fg-muted hover:text-fg"
+                  }`}
+                >
+                  {t === "daily" ? "Daily" : t === "weekly" ? "Weekly" : "Monthly"}
+                </button>
+              ))}
+            </div>
+            <Select
+              value={sign}
+              onChange={(e) => setSign(e.target.value as WesternSign)}
+              className="w-44"
+            >
+              {ALL_SIGNS.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </Select>
+          </div>
+
+          <div className="rounded-xl border border-line bg-bg-soft/40 p-4">
+            <div className="flex items-center gap-3">
+              <div className="text-3xl">{sp.symbol}</div>
+              <div>
+                <div className="text-lg font-semibold">{sign}</div>
+                <div className="text-xs text-fg-subtle">{horo.periodLabel}</div>
+              </div>
+            </div>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <Chip label="General" body={horo.general} />
+              <Chip label="Trading" body={horo.trade} />
+              <Chip label="Love" body={horo.love} />
+              <Chip label="Health" body={horo.health} />
+            </div>
+          </div>
+        </CardBody>
+      </Card>
+    </div>
+  );
+}
+
+function Chip({ label, body }: { label: string; body: string }) {
+  return (
+    <div className="rounded-xl border border-line bg-bg-elevated p-3">
+      <div className="text-xs uppercase tracking-wide text-fg-subtle">{label}</div>
+      <div className="mt-1 text-sm">{body}</div>
+    </div>
+  );
+}
+
+function Education() {
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader><CardTitle>How to use this page</CardTitle></CardHeader>
+        <CardBody className="space-y-3 text-sm text-fg-muted">
+          <p>
+            Start in <span className="text-fg">My Profile</span> — enter the full name on your birth
+            certificate plus your date of birth. Genesis computes your Pythagorean numerology core
+            (Life Path, Destiny, Soul Urge, Personality, Birthday) and your Chinese / Western zodiac
+            in one pass.
+          </p>
+          <p>
+            <span className="text-fg">Calculate For Others</span> stores the same profile for people
+            in your life. Use <span className="text-fg">Combined</span> to see today's stacked
+            reading (numerology personal year + sun sign + moon phase) and compatibility scores.
+          </p>
+          <p>
+            <span className="text-fg">Lunar Cycle</span> tracks the moon phase for now and the next
+            30 days — pair it with your trade journal to spot lunar patterns in your P&amp;L.
+          </p>
+          <p>
+            <span className="text-fg">Horoscope</span> gives a daily / weekly / monthly outlook by
+            sign — its trading line is the only one tied to markets; the rest are general life
+            guidance.
+          </p>
+          <p>
+            <span className="text-fg">Advanced Insights</span> applies your numbers to brand / city /
+            car suggestions for harmony or friction (lifestyle layer; not investment advice).
+          </p>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>What each metric means</CardTitle></CardHeader>
+        <CardBody className="space-y-3 text-sm">
+          <Def title="Life Path">
+            Sum of your full date of birth reduced to one digit (or master 11 / 22 / 33). Your core
+            life lesson and natural rhythm.
+          </Def>
+          <Def title="Destiny / Expression">
+            Sum of letters in your full birth name. The blueprint of who you become.
+          </Def>
+          <Def title="Soul Urge">
+            Sum of the vowels in your full name. Your inner motivation — what really drives you.
+          </Def>
+          <Def title="Personality">
+            Sum of the consonants in your name. The mask others see before they know you.
+          </Def>
+          <Def title="Birthday number">
+            Just your day of birth (1–31). A focused gift you carry.
+          </Def>
+          <Def title="Personal Year">
+            Life Path + current calendar year, reduced. Tells you which 1–9 cycle you're in this year.
+          </Def>
+          <Def title="Western zodiac">
+            Sun sign by birth date. Element + modality + planetary ruler shape your default style.
+          </Def>
+          <Def title="Chinese zodiac">
+            Year animal on the lunar calendar. Pairs and conflicts with other animals.
+          </Def>
+          <Def title="Moon phase">
+            Where the moon is in its 29.5-day synodic cycle on a given day. Used here purely as a
+            ritual / journaling cue.
+          </Def>
+        </CardBody>
+      </Card>
+    </div>
+  );
+}
+
+function Def({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border border-line bg-bg-soft/40 p-3">
+      <div className="text-xs font-medium text-fg">{title}</div>
+      <div className="mt-1 text-xs text-fg-muted">{children}</div>
+    </div>
+  );
+}
+
+function GeneralKnowledge() {
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader><CardTitle>Pythagorean numerology — the short history</CardTitle></CardHeader>
+        <CardBody className="space-y-3 text-sm text-fg-muted">
+          <p>
+            Pythagoras (c. 570–495 BCE) and his school in Croton taught that{" "}
+            <em>“number is the ruler of forms and ideas, and the cause of gods and demons.”</em>{" "}
+            Numbers were treated not as quantities but as the underlying language of harmony,
+            geometry, and music. The reduction system used here — letters mapped to 1–9, summed
+            and reduced — is a Western adaptation of that Pythagorean alphabet.
+          </p>
+          <p>
+            Master numbers <span className="text-fg">11</span>, <span className="text-fg">22</span>,{" "}
+            and <span className="text-fg">33</span> are not reduced because they're considered
+            higher-octave channels of 2, 4 and 6 respectively.
+          </p>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Astrology fundamentals</CardTitle></CardHeader>
+        <CardBody className="space-y-3 text-sm text-fg-muted">
+          <p>
+            Western astrology divides the ecliptic into 12 signs of 30° each. A sign's character
+            comes from three stacks: <span className="text-fg">element</span> (Fire / Earth / Air /
+            Water), <span className="text-fg">modality</span> (Cardinal / Fixed / Mutable), and{" "}
+            <span className="text-fg">planetary ruler</span>. Stacking those three is enough for a
+            sharp character sketch even before going into a full natal chart.
+          </p>
+          <p>
+            Chinese astrology uses a 12-year animal cycle layered with five elements (Wood, Fire,
+            Earth, Metal, Water) and yin/yang polarity, producing a 60-year sexagenary cycle. The
+            simplified "year animal" used in this app is the surface layer.
+          </p>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>The lunar synodic cycle</CardTitle></CardHeader>
+        <CardBody className="space-y-3 text-sm text-fg-muted">
+          <p>
+            The synodic month — new moon to new moon — averages{" "}
+            <span className="text-fg">29.530588 days</span>. Eight named phases divide that cycle:
+            New, Waxing Crescent, First Quarter, Waxing Gibbous, Full, Waning Gibbous, Last
+            Quarter, Waning Crescent.
+          </p>
+          <p>
+            The phase shown for any given date in this app is computed analytically (Conway / Meeus
+            simplified) and is accurate to within ±0.5 days — enough for journaling and ritual,
+            not for navigation.
+          </p>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Disclaimer</CardTitle></CardHeader>
+        <CardBody className="text-xs text-fg-muted">
+          Nothing on this page is financial, medical, legal, or psychological advice. Numerology
+          and astrology are interpretive frameworks for self-reflection, not predictive tools.
+        </CardBody>
+      </Card>
     </div>
   );
 }

@@ -6,12 +6,13 @@ import { ChevronDown, User, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { useFilters, CURRENCIES, DATE_RANGES, type AppFilters } from "@/lib/filters/store";
-import type { ProfileRow, TradeFileRow } from "@/lib/supabase/types";
+import type { PlaybookRow, ProfileRow, TradeFileRow } from "@/lib/supabase/types";
 
 export function TopBar() {
   const { filters, setFilters, reset } = useFilters();
   const [profile, setProfile] = useState<Partial<ProfileRow> | null>(null);
   const [accounts, setAccounts] = useState<TradeFileRow[]>([]);
+  const [playbooks, setPlaybooks] = useState<PlaybookRow[]>([]);
   const [greeting, setGreeting] = useState<string>("");
 
   useEffect(() => {
@@ -25,16 +26,18 @@ export function TopBar() {
       const { data: userData } = await supabase.auth.getUser();
       const user = userData.user;
       if (!user) return;
-      const [{ data: prof }, { data: files }] = await Promise.all([
+      const [{ data: prof }, { data: files }, { data: pbs }] = await Promise.all([
         supabase
           .from("profiles")
           .select("full_name,avatar_url,email,default_currency")
           .eq("id", user.id)
           .maybeSingle(),
-        supabase.from("trade_files").select("*").order("created_at", { ascending: false })
+        supabase.from("trade_files").select("*").order("created_at", { ascending: false }),
+        supabase.from("playbooks").select("*").order("name", { ascending: true })
       ]);
       setProfile(prof ?? { email: user.email });
       setAccounts(files ?? []);
+      setPlaybooks((pbs ?? []) as PlaybookRow[]);
       // If user has a default currency in their profile and the filter is the
       // initial default, prefer the profile currency.
       if (prof?.default_currency && filters.currency === "USD") {
@@ -75,6 +78,11 @@ export function TopBar() {
         accounts={accounts}
         value={filters.accountIds}
         onChange={(v) => setFilters({ accountIds: v })}
+      />
+      <PlaybookPicker
+        playbooks={playbooks}
+        value={filters.playbookId}
+        onChange={(v) => setFilters({ playbookId: v })}
       />
 
       <button
@@ -219,6 +227,64 @@ function DateRangePicker({
           )}
         >
           {d.label}
+        </button>
+      ))}
+    </Pop>
+  );
+}
+
+function PlaybookPicker({
+  playbooks,
+  value,
+  onChange
+}: {
+  playbooks: PlaybookRow[];
+  value: string | null;
+  onChange: (v: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const current = value ? playbooks.find((p) => p.id === value) : null;
+  const label = current ? current.name : "All playbooks";
+  return (
+    <Pop
+      label={<>Playbook · <span className="text-fg">{label}</span></>}
+      open={open}
+      onToggle={() => setOpen((o) => !o)}
+      onClose={() => setOpen(false)}
+      width="w-64"
+    >
+      <button
+        type="button"
+        onClick={() => {
+          onChange(null);
+          setOpen(false);
+        }}
+        className={cn(
+          "block w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-brand-500/10",
+          value === null ? "text-brand-300" : "text-fg-muted"
+        )}
+      >
+        All playbooks
+      </button>
+      {playbooks.length === 0 && (
+        <p className="px-3 py-2 text-xs text-fg-subtle">
+          No playbooks yet — create one in the Playbooks page.
+        </p>
+      )}
+      {playbooks.map((p) => (
+        <button
+          key={p.id}
+          type="button"
+          onClick={() => {
+            onChange(p.id);
+            setOpen(false);
+          }}
+          className={cn(
+            "block w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-brand-500/10",
+            p.id === value ? "text-brand-300" : "text-fg-muted"
+          )}
+        >
+          {p.name}
         </button>
       ))}
     </Pop>

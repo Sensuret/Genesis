@@ -128,3 +128,129 @@ export const ALL_SIGNS: WesternSign[] = [
   "Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo",
   "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"
 ];
+
+// ---------------------------------------------------------------------
+// Horoscope generator (deterministic, no external API).
+// Gives a daily / weekly / monthly outlook per sign by hashing the
+// (sign, period, period-index) tuple into curated phrase banks.
+// ---------------------------------------------------------------------
+export type HoroscopeTimeframe = "daily" | "weekly" | "monthly";
+
+const PHRASES_BY_ELEMENT: Record<Element, string[]> = {
+  Fire: [
+    "Channel restless energy into one decisive action.",
+    "Bold moves favor you — but document your reasoning first.",
+    "Heat rises in your relationships; speak warmly, not loudly.",
+    "Take initiative on a project that has been stalling.",
+    "Watch impulsivity around money and contracts.",
+    "Creative breakthroughs arrive when you slow down briefly."
+  ],
+  Earth: [
+    "Steady progress beats brilliance today; show up.",
+    "Tend to the unglamorous foundations of a goal.",
+    "A practical conversation unlocks a long-stuck issue.",
+    "Patience compounds — resist shortcut temptations.",
+    "Ground yourself before signing or committing.",
+    "Material plans benefit from one quiet review."
+  ],
+  Air: [
+    "Ideas crystallize through writing or talking them out.",
+    "Network deliberately — one connection moves a goal.",
+    "Stay curious without scattering your attention.",
+    "Read between the lines of a friend's message.",
+    "Avoid debating for sport; aim at understanding.",
+    "Mental clarity arrives after a real break from screens."
+  ],
+  Water: [
+    "Honor what you actually feel before deciding.",
+    "Intuition is loud — log it, even if you don't act on it.",
+    "Dreams or memories surface for a reason; sit with them.",
+    "Boundaries are an act of love; reset one today.",
+    "Creative or healing work flows easier than usual.",
+    "Don't absorb someone else's mood as your own."
+  ]
+};
+
+const TRADE_PHRASES: string[] = [
+  "Trade smaller while you find your rhythm — risk discipline pays.",
+  "Stick to your A+ setup; force-trades will be punished.",
+  "If thesis fails, exit — don't argue with price.",
+  "Clearest setups come after the open settles.",
+  "Favor sessions you statistically win in.",
+  "Watch for revenge-trade triggers and pre-empt them."
+];
+
+const LOVE_PHRASES: string[] = [
+  "Express appreciation explicitly — small words land big.",
+  "Listen twice as long as you speak today.",
+  "An old miscommunication can be cleaned up gently.",
+  "Solo time refuels what shared time depletes.",
+  "Be specific about what you want; people aren't mind-readers.",
+  "Match someone's calm rather than their drama."
+];
+
+const HEALTH_PHRASES: string[] = [
+  "Hydration + sunlight first thing reframes the day.",
+  "Move your body in a way that feels good, not punishing.",
+  "Sleep is leverage — protect tonight's window.",
+  "Cut one stimulant; notice the difference.",
+  "Stretch the part of you that sat too long yesterday.",
+  "Slow breathing for 5 minutes resets your nervous system."
+];
+
+function hash(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i += 1) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return Math.abs(h);
+}
+
+function pick<T>(arr: T[], seed: number): T {
+  return arr[seed % arr.length];
+}
+
+function periodKey(date: Date, timeframe: HoroscopeTimeframe): string {
+  if (timeframe === "daily") return date.toISOString().slice(0, 10);
+  if (timeframe === "weekly") {
+    const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+    const dayNum = (d.getUTCDay() + 6) % 7;
+    d.setUTCDate(d.getUTCDate() - dayNum + 3);
+    const firstThursday = new Date(Date.UTC(d.getUTCFullYear(), 0, 4));
+    const week = 1 + Math.round(((d.getTime() - firstThursday.getTime()) / 86_400_000 - 3) / 7);
+    return `${d.getUTCFullYear()}-W${week}`;
+  }
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+export type Horoscope = {
+  sign: WesternSign;
+  timeframe: HoroscopeTimeframe;
+  periodLabel: string;
+  general: string;
+  trade: string;
+  love: string;
+  health: string;
+};
+
+export function horoscopeFor(
+  sign: WesternSign,
+  timeframe: HoroscopeTimeframe,
+  date: Date = new Date()
+): Horoscope {
+  const key = `${sign}|${timeframe}|${periodKey(date, timeframe)}`;
+  const seed = hash(key);
+  const element = ATTRIBUTES[sign].element;
+  const general = pick(PHRASES_BY_ELEMENT[element], seed);
+  const trade = pick(TRADE_PHRASES, seed >> 3);
+  const love = pick(LOVE_PHRASES, seed >> 5);
+  const health = pick(HEALTH_PHRASES, seed >> 7);
+  const periodLabel =
+    timeframe === "daily"
+      ? date.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })
+      : timeframe === "weekly"
+      ? `Week of ${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`
+      : date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  return { sign, timeframe, periodLabel, general, trade, love, health };
+}
