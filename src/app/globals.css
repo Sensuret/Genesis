@@ -11,7 +11,26 @@
 /* The landing page (pre-login) ignores these and uses its own aurora. */
 /* ----------------------------------------------------------------- */
 
-:root,
+/* :root mirrors the *default* theme (purple), NOT light. Otherwise a
+   brief class-less moment during next-themes' swap (remove old class →
+   add new class) makes the page flash white-on-light before settling.
+   The purple defaults match defaultTheme="purple" in the provider. */
+:root {
+  --bg: 11 9 18;
+  --bg-soft: 16 14 26;
+  --bg-elevated: 22 19 36;
+  --fg: 245 244 250;
+  --fg-muted: 175 172 195;
+  --fg-subtle: 130 128 155;
+  --line: 39 34 60;
+  --hover: 138 58 255;
+  --positive: 22 163 74;
+  --negative: 239 68 68;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Inter,
+    "Helvetica Neue", sans-serif;
+  --font-display: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, sans-serif;
+}
+
 .light {
   --bg: 255 255 255;
   --bg-soft: 246 247 251;
@@ -23,9 +42,6 @@
   --hover: 138 58 255; /* purple hover preserved per spec */
   --positive: 22 163 74;
   --negative: 220 38 38;
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Inter,
-    "Helvetica Neue", sans-serif;
-  --font-display: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, sans-serif;
 }
 
 .dark {
@@ -81,17 +97,52 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 
-/* Permanent, smooth color transitions on every element so theme switches
-   (and any other color change — hover, active state, etc.) ease rather
-   than flash. We deliberately limit the transition to color-related
-   properties so transforms / opacity / size animations stay snappy. */
+/* Smooth color transitions for hover / focus / active states. We
+   deliberately limit the transition to color-related properties so
+   transforms / opacity / size animations stay snappy. Theme switches
+   are handled separately via the View Transitions API below to avoid
+   per-element staggering. */
 *,
 *::before,
 *::after {
   transition-property: background-color, color, border-color, fill, stroke,
     box-shadow, outline-color, text-decoration-color;
-  transition-duration: 280ms;
+  transition-duration: 200ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* View Transitions API: when supported, theme switching uses a real
+   cross-fade between the snapshot of the OLD state and the NEW state
+   instead of per-element animation. This eliminates the staggered
+   "overlay" effect entirely. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 380ms;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  mix-blend-mode: normal;
+}
+::view-transition-old(root) {
+  animation-name: gns-fade-out;
+}
+::view-transition-new(root) {
+  animation-name: gns-fade-in;
+}
+@keyframes gns-fade-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+@keyframes gns-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* While the View Transition is running, freeze regular element-level
+   color transitions so they don't double-animate underneath the
+   crossfade snapshot. */
+html.theme-switching *,
+html.theme-switching *::before,
+html.theme-switching *::after {
+  transition: none !important;
 }
 
 /* Respect user OS-level reduced-motion preference. */
@@ -100,6 +151,10 @@ body {
   *::before,
   *::after {
     transition-duration: 0ms !important;
+  }
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 0ms !important;
   }
 }
 

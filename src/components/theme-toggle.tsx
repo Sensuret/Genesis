@@ -4,6 +4,7 @@ import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { smoothSetTheme } from "@/lib/theme-switch";
 
 /**
  * Quick Sun/Moon toggle in the sidebar — flips Light <-> Purple (the two
@@ -27,7 +28,7 @@ export function ThemeToggle({ className }: { className?: string }) {
       aria-label={`Switch to ${next} mode`}
       title={`Switch to ${next} mode`}
       className={className}
-      onClick={() => setTheme(next)}
+      onClick={() => smoothSetTheme(setTheme, next)}
     >
       {isLight ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
     </Button>

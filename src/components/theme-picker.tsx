@@ -4,6 +4,7 @@ import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { smoothSetTheme } from "@/lib/theme-switch";
 
 type Variant = { id: "light" | "dark" | "grey" | "purple"; label: string; swatches: string[] };
 
@@ -34,7 +35,7 @@ export function ThemePicker() {
           <button
             key={v.id}
             type="button"
-            onClick={() => setTheme(v.id)}
+            onClick={() => smoothSetTheme(setTheme, v.id)}
             className={cn(
               "group relative flex flex-col gap-3 rounded-2xl border p-4 text-left transition",
               active
