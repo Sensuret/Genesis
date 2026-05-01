@@ -48,17 +48,17 @@ export function EquityCurveChart({ data }: { data: EquityPoint[] }) {
               <stop offset="0%" stopColor="rgb(63 219 131)" stopOpacity={0.55} />
               <stop offset="30%" stopColor="rgb(34 197 94)" stopOpacity={0.32} />
               <stop offset={`${splitOffset * 100}%`} stopColor="rgb(20 83 45)" stopOpacity={0.05} />
-              <stop offset={`${splitOffset * 100}%`} stopColor="rgb(127 29 29)" stopOpacity={0.05} />
-              <stop offset="70%" stopColor="rgb(239 68 68)" stopOpacity={0.32} />
-              <stop offset="100%" stopColor="rgb(248 113 113)" stopOpacity={0.55} />
+              <stop offset={`${splitOffset * 100}%`} stopColor="rgb(159 18 57)" stopOpacity={0.05} />
+              <stop offset="70%" stopColor="rgb(244 63 94)" stopOpacity={0.32} />
+              <stop offset="100%" stopColor="rgb(255 90 120)" stopOpacity={0.55} />
             </linearGradient>
             {/* Two-tone stroke matching the fill so the curve itself
                 also flips colour at the zero line. */}
             <linearGradient id="equity-stroke" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="rgb(63 219 131)" />
               <stop offset={`${splitOffset * 100}%`} stopColor="rgb(63 219 131)" />
-              <stop offset={`${splitOffset * 100}%`} stopColor="rgb(248 113 113)" />
-              <stop offset="100%" stopColor="rgb(248 113 113)" />
+              <stop offset={`${splitOffset * 100}%`} stopColor="rgb(244 63 94)" />
+              <stop offset="100%" stopColor="rgb(244 63 94)" />
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(127,127,150,0.15)" />

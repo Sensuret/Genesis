@@ -29,9 +29,9 @@ export function DailyPnlChart({ data }: { data: Array<{ date: string; pnl: numbe
               <stop offset="100%" stopColor="rgb(20 83 45)" stopOpacity={0.7} />
             </linearGradient>
             <linearGradient id="bar-down" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="rgb(248 113 113)" stopOpacity={1} />
-              <stop offset="55%" stopColor="rgb(239 68 68)" stopOpacity={0.9} />
-              <stop offset="100%" stopColor="rgb(127 29 29)" stopOpacity={0.7} />
+              <stop offset="0%" stopColor="rgb(255 90 120)" stopOpacity={1} />
+              <stop offset="55%" stopColor="rgb(244 63 94)" stopOpacity={0.9} />
+              <stop offset="100%" stopColor="rgb(159 18 57)" stopOpacity={0.7} />
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(127,127,150,0.15)" />
