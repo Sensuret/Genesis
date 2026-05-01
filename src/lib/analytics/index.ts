@@ -4,8 +4,105 @@
 // =====================================================================
 
 import type { TradeRow } from "@/lib/supabase/types";
+import type { AppFilters } from "@/lib/filters/store";
 
 export type EquityPoint = { date: string; equity: number; pnl: number };
+
+/**
+ * Realised RR computed from entry / stop-loss / exit (and side).
+ * Returns null when we don't have enough data to compute it (no SL,
+ * or zero risk, etc.).
+ */
+export function realisedRR(t: TradeRow): number | null {
+  if (t.entry == null || t.stop_loss == null || t.exit_price == null) return null;
+  const risk = Math.abs(t.entry - t.stop_loss);
+  if (!Number.isFinite(risk) || risk === 0) return null;
+  const reward = t.side === "short" ? t.entry - t.exit_price : t.exit_price - t.entry;
+  if (!Number.isFinite(reward)) return null;
+  return reward / risk;
+}
+
+/**
+ * A row counts as "real" if it has any of the meaningful fields populated.
+ * The legacy parser sometimes appended an empty trailing row (the famous
+ * "April 29 ghost row" the user reported) — those have no pair, no pnl,
+ * no entry. We filter those out everywhere they're displayed.
+ */
+export function isRealTrade(t: TradeRow): boolean {
+  return !!(t.pair || t.pnl != null || t.entry != null || t.exit_price != null || t.lot_size != null);
+}
+
+export function applyDateRange(trades: TradeRow[], range: AppFilters["dateRange"]): TradeRow[] {
+  if (range === "all") return trades;
+  const now = new Date();
+  let from: Date;
+  switch (range) {
+    case "7d":
+      from = new Date(now.getTime() - 7 * 86_400_000);
+      break;
+    case "30d":
+      from = new Date(now.getTime() - 30 * 86_400_000);
+      break;
+    case "90d":
+      from = new Date(now.getTime() - 90 * 86_400_000);
+      break;
+    case "ytd":
+      from = new Date(now.getFullYear(), 0, 1);
+      break;
+    case "1y":
+      from = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+      break;
+    default:
+      return trades;
+  }
+  return trades.filter((t) => {
+    if (!t.trade_date) return false;
+    const d = new Date(t.trade_date);
+    return !Number.isNaN(d.getTime()) && d >= from;
+  });
+}
+
+export function applyAccountFilter(trades: TradeRow[], accountIds: string[]): TradeRow[] {
+  if (!accountIds.length) return trades;
+  const set = new Set(accountIds);
+  return trades.filter((t) => t.file_id && set.has(t.file_id));
+}
+
+export function applyPlaybookFilter(trades: TradeRow[], playbookId: string | null): TradeRow[] {
+  if (!playbookId) return trades;
+  return trades.filter((t) => t.playbook_id === playbookId);
+}
+
+export function applyAllFilters(trades: TradeRow[], filters: AppFilters): TradeRow[] {
+  const real = trades.filter(isRealTrade);
+  const range = applyDateRange(real, filters.dateRange);
+  const acct = applyAccountFilter(range, filters.accountIds);
+  return applyPlaybookFilter(acct, filters.playbookId);
+}
+
+export type TpBeSlBreakdown = { tp: number; be: number; sl: number; total: number; winRate: number };
+
+/**
+ * Classify each trade as Take-Profit / Break-Even / Stop-Loss using the realised PnL:
+ *   - pnl > 0 → TP
+ *   - pnl < 0 → SL
+ *   - pnl === 0 → BE
+ *   - null pnl is excluded
+ * Win rate is TP / (TP + SL) (BE doesn't count toward either side).
+ */
+export function tpBeSl(trades: TradeRow[]): TpBeSlBreakdown {
+  let tp = 0;
+  let be = 0;
+  let sl = 0;
+  for (const t of trades) {
+    if (t.pnl == null) continue;
+    if (t.pnl > 0) tp += 1;
+    else if (t.pnl < 0) sl += 1;
+    else be += 1;
+  }
+  const decided = tp + sl;
+  return { tp, be, sl, total: tp + be + sl, winRate: decided ? (tp / decided) * 100 : 0 };
+}
 
 export function sortByDate(trades: TradeRow[]): TradeRow[] {
   return [...trades].sort((a, b) => {
@@ -200,6 +297,40 @@ export function yearStreaks(trades: TradeRow[]) {
   return computeStreaks(bucket(trades, (d) => String(d.getUTCFullYear())));
 }
 
+/**
+ * Session streaks — group by trading day, computing win/loss streak per session
+ * (NY / London / Asia / Sydney). Each entry in the returned map is the streak
+ * series for that session.
+ */
+export function sessionStreaks(
+  trades: TradeRow[],
+  resolveSession: (t: TradeRow) => string | null
+): Record<string, Streak[]> {
+  const bySession: Record<string, TradeRow[]> = {};
+  for (const t of trades) {
+    const s = resolveSession(t);
+    if (!s) continue;
+    (bySession[s] ??= []).push(t);
+  }
+  const out: Record<string, Streak[]> = {};
+  for (const [session, ts] of Object.entries(bySession)) {
+    out[session] = computeStreaks(bucket(ts, isoDayKey));
+  }
+  return out;
+}
+
+function isoDayKey(d: Date) {
+  return d.toISOString().slice(0, 10);
+}
+
+export function totalLotSize(trades: TradeRow[]): number {
+  let sum = 0;
+  for (const t of trades) {
+    if (typeof t.lot_size === "number" && Number.isFinite(t.lot_size)) sum += t.lot_size;
+  }
+  return sum;
+}
+
 function bucket(trades: TradeRow[], keyFn: (d: Date) => string) {
   const out: Record<string, number> = {};
   for (const t of trades) {
@@ -242,25 +373,49 @@ function quarterKey(d: Date) {
 
 // ---------------------------------------------------------------------
 // R:R distribution helper
+//
+// For each trade, prefer the live-computed realised RR (entry / SL / exit)
+// because most imports — including MetaTrader — don't carry an "R multiple"
+// column, so `t.result_r` is null on the majority of rows. Falling back to
+// `t.result_r` lets pre-tagged journals still light up the chart.
+//
+// Trades with no usable RR are excluded entirely (not bucketed as 0R) so
+// the chart reflects only trades where RR is actually known.
+//
+// Buckets are integer-snapped: a trade at 1.4R counts as "1R", 2.6R as
+// "3R", -0.3R as "0R". Anything beyond ±5R is collapsed into ≤-5R / ≥5R
+// so a single big winner doesn't blow the X axis out.
 // ---------------------------------------------------------------------
+const RR_BUCKETS = [
+  "≤-5R", "-4R", "-3R", "-2R", "-1R", "0R", "+1R", "+2R", "+3R", "+4R", "≥+5R"
+] as const;
+type RrBucket = (typeof RR_BUCKETS)[number];
+
+function rrBucketFor(r: number): RrBucket {
+  if (!Number.isFinite(r)) return "0R";
+  const rounded = Math.round(r);
+  if (rounded <= -5) return "≤-5R";
+  if (rounded >= 5) return "≥+5R";
+  if (rounded === 0) return "0R";
+  if (rounded > 0) return `+${rounded}R` as RrBucket;
+  return `${rounded}R` as RrBucket;
+}
+
 export function rDistribution(trades: TradeRow[]) {
-  const buckets: Record<string, number> = {
-    "<-3R": 0, "-3R": 0, "-2R": 0, "-1R": 0, "0R": 0, "+1R": 0, "+2R": 0, "+3R": 0, ">+3R": 0
+  const buckets: Record<RrBucket, number> = {
+    "≤-5R": 0, "-4R": 0, "-3R": 0, "-2R": 0, "-1R": 0,
+    "0R": 0,
+    "+1R": 0, "+2R": 0, "+3R": 0, "+4R": 0, "≥+5R": 0
   };
   for (const t of trades) {
-    const r = t.result_r;
-    if (r === null || r === undefined || Number.isNaN(r)) continue;
-    if (r < -3) buckets["<-3R"] += 1;
-    else if (r < -2) buckets["-3R"] += 1;
-    else if (r < -1) buckets["-2R"] += 1;
-    else if (r < 0) buckets["-1R"] += 1;
-    else if (r === 0) buckets["0R"] += 1;
-    else if (r <= 1) buckets["+1R"] += 1;
-    else if (r <= 2) buckets["+2R"] += 1;
-    else if (r <= 3) buckets["+3R"] += 1;
-    else buckets[">+3R"] += 1;
+    let r = realisedRR(t);
+    if (r === null && typeof t.result_r === "number" && Number.isFinite(t.result_r)) {
+      r = t.result_r;
+    }
+    if (r === null || !Number.isFinite(r)) continue;
+    buckets[rrBucketFor(r)] += 1;
   }
-  return Object.entries(buckets).map(([key, count]) => ({ bucket: key, count }));
+  return RR_BUCKETS.map((bucket) => ({ bucket, count: buckets[bucket] }));
 }
 
 // ---------------------------------------------------------------------

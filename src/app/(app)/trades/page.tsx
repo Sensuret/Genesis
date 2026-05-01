@@ -12,20 +12,27 @@ import { formatCurrency, formatNumber, pnlColor, shortDate } from "@/lib/utils";
 import { Empty } from "@/components/ui/empty";
 import { Plus, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { applyAllFilters, isRealTrade, realisedRR } from "@/lib/analytics";
+import { detectSession } from "@/lib/parser";
+import { useFilters } from "@/lib/filters/store";
 
 export default function TradesPage() {
   const { trades, files, loading, refresh } = useTrades();
+  const { filters } = useFilters();
   const [q, setQ] = useState("");
   const [fileFilter, setFileFilter] = useState<string>("all");
 
   const filtered = useMemo(() => {
-    return trades.filter((t) => {
+    const real = applyAllFilters(trades, filters);
+    return real.filter((t) => {
       if (fileFilter !== "all" && t.file_id !== fileFilter) return false;
       if (!q) return true;
       const blob = `${t.pair ?? ""} ${t.setup_tag ?? ""} ${t.mistake_tag ?? ""} ${t.notes ?? ""}`.toLowerCase();
       return blob.includes(q.toLowerCase());
     });
-  }, [trades, q, fileFilter]);
+  }, [trades, filters, q, fileFilter]);
+
+  const ghostCount = useMemo(() => trades.filter((t) => !isRealTrade(t)).length, [trades]);
 
   async function deleteFile(id: string) {
     if (!confirm("Delete this file and all its trades?")) return;
@@ -35,15 +42,32 @@ export default function TradesPage() {
     refresh();
   }
 
+  async function purgeGhostRows() {
+    if (!confirm(`Delete ${ghostCount} empty / ghost row(s)?`)) return;
+    const supabase = createClient();
+    const ids = trades.filter((t) => !isRealTrade(t)).map((t) => t.id);
+    if (ids.length) {
+      await supabase.from("trades").delete().in("id", ids);
+      refresh();
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Trades"
         description="Every trade across every account, filterable in one place."
         actions={
-          <Link href="/add-trade">
-            <Button><Plus className="h-4 w-4" /> Add Trade</Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            {ghostCount > 0 && (
+              <Button variant="secondary" onClick={purgeGhostRows}>
+                <Trash2 className="h-4 w-4" /> Remove {ghostCount} empty row{ghostCount === 1 ? "" : "s"}
+              </Button>
+            )}
+            <Link href="/add-trade">
+              <Button><Plus className="h-4 w-4" /> Add Trade</Button>
+            </Link>
+          </div>
         }
       />
 
@@ -88,31 +112,35 @@ export default function TradesPage() {
             <table className="w-full text-left text-sm">
               <thead className="border-b border-line text-xs text-fg-subtle">
                 <tr>
-                  {["Date", "Pair", "Side", "Session", "Entry", "Exit", "Lot", "R", "P&L", "Setup", "Mistake"].map((h) => (
+                  {["Date", "Pair", "Side", "Session", "Entry", "Exit", "Lot", "RR", "P&L", "Setup", "Mistake"].map((h) => (
                     <th key={h} className="px-4 py-3 font-medium">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((t) => (
-                  <tr key={t.id} className="border-b border-line/50 last:border-0">
-                    <td className="px-4 py-2.5 text-fg-muted">{shortDate(t.trade_date)}</td>
-                    <td className="px-4 py-2.5 font-medium">{t.pair ?? "—"}</td>
-                    <td className="px-4 py-2.5">
-                      {t.side ? (
-                        <Badge variant={t.side === "long" ? "success" : "danger"}>{t.side}</Badge>
-                      ) : "—"}
-                    </td>
-                    <td className="px-4 py-2.5 text-fg-muted">{t.session ?? "—"}</td>
-                    <td className="px-4 py-2.5">{formatNumber(t.entry, 5)}</td>
-                    <td className="px-4 py-2.5">{formatNumber(t.exit_price, 5)}</td>
-                    <td className="px-4 py-2.5">{formatNumber(t.lot_size)}</td>
-                    <td className={`px-4 py-2.5 ${pnlColor(t.result_r)}`}>{formatNumber(t.result_r, 2)}</td>
-                    <td className={`px-4 py-2.5 font-medium ${pnlColor(t.pnl)}`}>{formatCurrency(t.pnl)}</td>
-                    <td className="px-4 py-2.5 text-fg-muted">{t.setup_tag ?? "—"}</td>
-                    <td className="px-4 py-2.5 text-fg-muted">{t.mistake_tag ?? "—"}</td>
-                  </tr>
-                ))}
+                {filtered.map((t) => {
+                  const rr = realisedRR(t);
+                  const session = t.session ?? detectSession(t.trade_date);
+                  return (
+                    <tr key={t.id} className="border-b border-line/50 last:border-0">
+                      <td className="px-4 py-2.5 text-fg-muted">{shortDate(t.trade_date)}</td>
+                      <td className="px-4 py-2.5 font-medium">{t.pair ?? "—"}</td>
+                      <td className="px-4 py-2.5">
+                        {t.side ? (
+                          <Badge variant={t.side === "long" ? "success" : "danger"}>{t.side}</Badge>
+                        ) : "—"}
+                      </td>
+                      <td className="px-4 py-2.5 text-fg-muted">{session ?? "—"}</td>
+                      <td className="px-4 py-2.5">{formatNumber(t.entry, 5)}</td>
+                      <td className="px-4 py-2.5">{formatNumber(t.exit_price, 5)}</td>
+                      <td className="px-4 py-2.5">{formatNumber(t.lot_size)}</td>
+                      <td className={`px-4 py-2.5 ${pnlColor(rr)}`}>{rr === null ? "—" : `${rr.toFixed(2)}R`}</td>
+                      <td className={`px-4 py-2.5 font-medium ${pnlColor(t.pnl)}`}>{formatCurrency(t.pnl, filters.currency)}</td>
+                      <td className="px-4 py-2.5 text-fg-muted">{t.setup_tag ?? "—"}</td>
+                      <td className="px-4 py-2.5 text-fg-muted">{t.mistake_tag ?? "—"}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

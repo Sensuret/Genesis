@@ -1,4 +1,7 @@
+"use client";
+
 import { cn, formatCurrency, formatNumber, formatPercent, pnlColor } from "@/lib/utils";
+import { useFilters } from "@/lib/filters/store";
 import { Card } from "./card";
 
 type StatProps = {
@@ -8,16 +11,20 @@ type StatProps = {
   hint?: React.ReactNode;
   positive?: boolean;
   className?: string;
+  /** Override the currency for currency-formatted stats (defaults to the active filter currency). */
+  currency?: string;
 };
 
-export function Stat({ label, value, format = "number", hint, positive, className }: StatProps) {
+export function Stat({ label, value, format = "number", hint, positive, className, currency }: StatProps) {
+  const { filters } = useFilters();
+  const cur = currency ?? filters.currency;
   const display =
     typeof value === "string"
       ? value
       : value === null || value === undefined
         ? "—"
         : format === "currency"
-          ? formatCurrency(value)
+          ? formatCurrency(value, cur)
           : format === "percent"
             ? formatPercent(value)
             : formatNumber(value);

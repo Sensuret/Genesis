@@ -26,6 +26,18 @@ export type TradeRow = {
   emotions: string[] | null;
   notes: string | null;
   screenshot_url: string | null;
+  playbook_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PlaybookRow = {
+  id: string;
+  user_id: string;
+  name: string;
+  description: string | null;
+  rules: Json;
+  symbol_aliases: string[];
   created_at: string;
   updated_at: string;
 };
@@ -159,6 +171,11 @@ export type Database = {
         Insert: Omit<UserSettingsRow, "created_at" | "updated_at"> &
           Partial<Pick<UserSettingsRow, "created_at" | "updated_at">>;
         Update: Updatable<UserSettingsRow>;
+      };
+      playbooks: {
+        Row: PlaybookRow;
+        Insert: Insertable<PlaybookRow>;
+        Update: Updatable<PlaybookRow>;
       };
     };
     Views: Record<string, never>;
