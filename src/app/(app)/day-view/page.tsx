@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Stat } from "@/components/ui/stat";
 import { Badge } from "@/components/ui/badge";
 import { useTrades } from "@/lib/hooks/use-trades";
@@ -28,7 +28,7 @@ export default function DayViewPage() {
       <PageHeader
         title="Day View"
         description="Every trade — and every emotion — from a single day."
-        actions={<Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-44" />}
+        actions={<DatePicker value={date} onChange={(next) => next && setDate(next)} max={new Date().toISOString().slice(0, 10)} />}
       />
 
       {loading ? (

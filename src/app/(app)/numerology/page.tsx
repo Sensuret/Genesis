@@ -8,6 +8,7 @@ import { Empty } from "@/components/ui/empty";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { createClient } from "@/lib/supabase/client";
 import {
   buildNumerologySnapshot, compatibility, advancedInsights,
@@ -154,7 +155,7 @@ function MyProfile({
         <CardHeader><CardTitle>Your numerology inputs</CardTitle></CardHeader>
         <CardBody className="grid gap-4 md:grid-cols-2">
           <div><Label>Full name (as on birth certificate)</Label><Input value={name} onChange={(e) => setName(e.target.value)} /></div>
-          <div><Label>Date of birth</Label><Input type="date" value={dob} onChange={(e) => setDob(e.target.value)} /></div>
+          <div><Label>Date of birth</Label><DatePicker value={dob} onChange={(next) => setDob(next)} max={new Date().toISOString().slice(0, 10)} className="w-full" inputClassName="flex-1" /></div>
           {error && <div className="md:col-span-2 rounded-lg bg-danger/10 p-3 text-xs text-danger">{error}</div>}
           <div className="md:col-span-2 flex justify-end">
             <Button disabled={!snapshot || busy} onClick={save}>{busy ? "Saving…" : "Save profile"}</Button>
@@ -267,7 +268,7 @@ function Others({
           <CardBody className="grid gap-3 md:grid-cols-4 border-t border-line pt-5">
             <div><Label>Full name</Label><Input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} /></div>
             <div><Label>Nickname</Label><Input value={form.nickname} onChange={(e) => setForm({ ...form, nickname: e.target.value })} /></div>
-            <div><Label>DOB</Label><Input type="date" value={form.dob} onChange={(e) => setForm({ ...form, dob: e.target.value })} /></div>
+            <div><Label>DOB</Label><DatePicker value={form.dob} onChange={(next) => setForm({ ...form, dob: next })} max={new Date().toISOString().slice(0, 10)} className="w-full" inputClassName="flex-1" /></div>
             <div>
               <Label>Relationship</Label>
               <Select value={form.relationship} onChange={(e) => setForm({ ...form, relationship: e.target.value })}>
