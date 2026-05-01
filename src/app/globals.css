@@ -2,20 +2,59 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --bg: 248 247 252;
-  --bg-soft: 244 242 250;
+/* ----------------------------------------------------------------- */
+/* Theme variants — controlled by `class` on <html> via next-themes.   */
+/* `light`  = Pure White  (TradeZella light)                           */
+/* `dark`   = Pure Black  (TradeZella dark, default in app)            */
+/* `grey`   = Charcoal    (TradeZella mid-tone)                        */
+/* `purple` = Original Genesis purple (legacy)                         */
+/* The landing page (pre-login) ignores these and uses its own aurora. */
+/* ----------------------------------------------------------------- */
+
+:root,
+.light {
+  --bg: 255 255 255;
+  --bg-soft: 246 247 251;
   --bg-elevated: 255 255 255;
   --fg: 17 17 24;
   --fg-muted: 75 75 95;
   --fg-subtle: 130 130 150;
   --line: 226 226 235;
+  --hover: 138 58 255; /* purple hover preserved per spec */
+  --positive: 22 163 74;
+  --negative: 220 38 38;
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Inter,
     "Helvetica Neue", sans-serif;
   --font-display: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, sans-serif;
 }
 
 .dark {
+  --bg: 9 11 14;
+  --bg-soft: 14 16 22;
+  --bg-elevated: 19 22 30;
+  --fg: 240 242 247;
+  --fg-muted: 158 162 175;
+  --fg-subtle: 110 114 128;
+  --line: 36 40 52;
+  --hover: 138 58 255;
+  --positive: 34 197 94;
+  --negative: 239 68 68;
+}
+
+.grey {
+  --bg: 22 25 33;
+  --bg-soft: 28 32 42;
+  --bg-elevated: 34 38 50;
+  --fg: 235 237 244;
+  --fg-muted: 160 164 180;
+  --fg-subtle: 116 121 138;
+  --line: 50 55 70;
+  --hover: 138 58 255;
+  --positive: 34 197 94;
+  --negative: 239 68 68;
+}
+
+.purple {
   --bg: 11 9 18;
   --bg-soft: 16 14 26;
   --bg-elevated: 22 19 36;
@@ -23,6 +62,9 @@
   --fg-muted: 175 172 195;
   --fg-subtle: 130 128 155;
   --line: 39 34 60;
+  --hover: 138 58 255;
+  --positive: 22 163 74;
+  --negative: 239 68 68;
 }
 
 html,
@@ -38,7 +80,7 @@ body {
   border-color: rgb(var(--line));
 }
 
-/* Animated background for auth pages */
+/* Animated background for the landing/auth pages — purple aurora kept. */
 .aurora {
   background:
     radial-gradient(60% 40% at 20% 10%, rgba(138, 58, 255, 0.35), transparent 60%),
@@ -53,17 +95,45 @@ body {
   background-size: 40px 40px;
 }
 
-/* Mirrored E for the GƎNƎSIS wordmark */
+/* Mirrored E for the GƎNƎSIS wordmark. */
 .mirror-e {
   display: inline-block;
   transform: scaleX(-1);
 }
 
-/* Recharts tooltip dark/light coherence */
+/* Glossy P&L bars — applied across charts so green/red look premium, not flat. */
+.gloss-green {
+  background-image: linear-gradient(180deg,
+    rgba(255, 255, 255, 0.18) 0%,
+    rgba(34, 197, 94, 0.95) 35%,
+    rgba(22, 130, 60, 1) 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 1px 8px rgba(34,197,94,0.18);
+}
+.gloss-red {
+  background-image: linear-gradient(180deg,
+    rgba(255, 255, 255, 0.16) 0%,
+    rgba(239, 68, 68, 0.95) 35%,
+    rgba(150, 30, 30, 1) 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), 0 1px 8px rgba(239,68,68,0.18);
+}
+
+/* Recharts tooltip — adapt to current theme. */
 .recharts-default-tooltip {
   background: rgb(var(--bg-elevated)) !important;
   border-color: rgb(var(--line)) !important;
   border-radius: 12px !important;
+  color: rgb(var(--fg)) !important;
+}
+
+/* Recharts axis text — inherit theme foreground. */
+.recharts-cartesian-axis-tick-value tspan {
+  fill: rgb(var(--fg-subtle)) !important;
+}
+
+/* Sidebar nav purple hover (per user spec, preserved across all themes). */
+.nav-item-hover:hover {
+  background-color: rgba(138, 58, 255, 0.12);
+  color: rgb(168, 102, 255);
 }
 
 /* Scrollbar */
@@ -73,3 +143,9 @@ body {
   border-radius: 8px;
 }
 ::-webkit-scrollbar-track { background: transparent; }
+
+/* Smooth theme transitions. */
+html.theme-transition,
+html.theme-transition * {
+  transition: background-color 200ms ease, color 200ms ease, border-color 200ms ease;
+}
