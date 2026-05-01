@@ -285,6 +285,32 @@ export function dayStreaks(trades: TradeRow[]) {
   return computeStreaks(days.map((d) => ({ date: d.date, pnl: d.pnl })));
 }
 
+/**
+ * Current day-streak — extends the most recent run of winning *or* losing
+ * days (whichever the latest day is). Returns the streak length in days
+ * and trades plus the type. Days with zero PnL break the streak.
+ */
+export function currentDayStreak(trades: TradeRow[]): {
+  type: "win" | "loss" | null;
+  days: number;
+  trades: number;
+} {
+  const days = dailyPnl(trades).filter((d) => d.pnl !== 0);
+  if (!days.length) return { type: null, days: 0, trades: 0 };
+  const last = days[days.length - 1];
+  const type: "win" | "loss" = last.pnl > 0 ? "win" : "loss";
+  let count = 0;
+  let tradeTotal = 0;
+  for (let i = days.length - 1; i >= 0; i -= 1) {
+    const d = days[i];
+    const t: "win" | "loss" = d.pnl > 0 ? "win" : "loss";
+    if (t !== type) break;
+    count += 1;
+    tradeTotal += d.trades;
+  }
+  return { type, days: count, trades: tradeTotal };
+}
+
 export function weekStreaks(trades: TradeRow[]) {
   return computeStreaks(bucket(trades, weekKey));
 }

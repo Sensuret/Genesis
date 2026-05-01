@@ -13,11 +13,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <FiltersProvider>
-      <div className="flex min-h-screen">
+      {/* h-screen on the outer flex pins the viewport height so only <main>
+          scrolls. The sidebar stays static when the page content overflows. */}
+      <div className="flex h-screen overflow-hidden">
         <Sidebar />
-        <div className="flex min-h-screen flex-1 flex-col">
+        <div className="flex h-screen min-w-0 flex-1 flex-col">
           <TopBar />
-          <main className="flex-1 overflow-y-auto bg-bg p-8">{children}</main>
+          <main className="flex-1 overflow-y-auto overscroll-contain bg-bg p-8">
+            {children}
+          </main>
         </div>
       </div>
     </FiltersProvider>

@@ -1,7 +1,8 @@
 "use client";
 
-import { cn, formatCurrency, formatNumber, formatPercent, pnlColor } from "@/lib/utils";
-import { useFilters } from "@/lib/filters/store";
+import { cn, formatNumber, formatPercent, pnlColor } from "@/lib/utils";
+import { useMoney } from "@/lib/filters/store";
+import { formatMoney, convertFromUSD } from "@/lib/fx";
 import { Card } from "./card";
 
 type StatProps = {
@@ -16,15 +17,15 @@ type StatProps = {
 };
 
 export function Stat({ label, value, format = "number", hint, positive, className, currency }: StatProps) {
-  const { filters } = useFilters();
-  const cur = currency ?? filters.currency;
+  const { currency: activeCurrency, rates } = useMoney();
+  const cur = currency ?? activeCurrency;
   const display =
     typeof value === "string"
       ? value
       : value === null || value === undefined
         ? "—"
         : format === "currency"
-          ? formatCurrency(value, cur)
+          ? formatMoney(convertFromUSD(value, cur, rates), cur)
           : format === "percent"
             ? formatPercent(value)
             : formatNumber(value);
