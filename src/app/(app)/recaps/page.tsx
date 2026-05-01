@@ -82,7 +82,7 @@ function ScoreCard({ label, value, sub, tone }: { label: string; value: string; 
   );
 }
 
-function SessionRow({ session, b, pnl }: { session: string; b: TpBeSlBreakdown; pnl: number }) {
+function SessionRow({ session, b, pnl, currency }: { session: string; b: TpBeSlBreakdown; pnl: number; currency: string }) {
   return (
     <tr className="border-b border-line/50 last:border-0">
       <td className="px-4 py-3 font-medium">{session}</td>
@@ -92,7 +92,7 @@ function SessionRow({ session, b, pnl }: { session: string; b: TpBeSlBreakdown; 
       <td className="px-4 py-3 text-danger">{b.sl}</td>
       <td className="px-4 py-3">{formatPercent(b.winRate, 1)}</td>
       <td className={`px-4 py-3 font-medium ${pnl >= 0 ? "text-success" : "text-danger"}`}>
-        {formatCurrency(pnl)}
+        {formatCurrency(pnl, currency)}
       </td>
     </tr>
   );
@@ -185,7 +185,7 @@ export default function RecapsPage() {
                   </thead>
                   <tbody>
                     {bySession.map((row) => (
-                      <SessionRow key={row.session} session={row.session} b={row.b} pnl={row.pnl} />
+                      <SessionRow key={row.session} session={row.session} b={row.b} pnl={row.pnl} currency={filters.currency} />
                     ))}
                   </tbody>
                 </table>

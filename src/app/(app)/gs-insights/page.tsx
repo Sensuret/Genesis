@@ -26,7 +26,7 @@ import type { TradeRow } from "@/lib/supabase/types";
 
 type Insight = { tone: "good" | "warn" | "bad"; title: string; detail: string };
 
-function buildInsights(trades: TradeRow[]): Insight[] {
+function buildInsights(trades: TradeRow[], currency: string): Insight[] {
   const out: Insight[] = [];
   if (!trades.length) return out;
 
@@ -55,7 +55,7 @@ function buildInsights(trades: TradeRow[]): Insight[] {
       out.push({
         tone: "warn",
         title: `${worst.key} is dragging you down`,
-        detail: `${best.key} is your best session (${formatCurrency(best.pnl)}). Consider sitting out ${worst.key}.`
+        detail: `${best.key} is your best session (${formatCurrency(best.pnl, currency)}). Consider sitting out ${worst.key}.`
       });
     }
   }
@@ -67,7 +67,7 @@ function buildInsights(trades: TradeRow[]): Insight[] {
     out.push({
       tone: "bad",
       title: `Top mistake: "${worst.key}"`,
-      detail: `${worst.trades} trades, ${formatCurrency(worst.pnl)} lost. Build a checklist rule against this.`
+      detail: `${worst.trades} trades, ${formatCurrency(worst.pnl, currency)} lost. Build a checklist rule against this.`
     });
   }
 
@@ -92,7 +92,7 @@ export default function GsInsightsPage() {
 
   const parts = useMemo(() => computeGsScoreParts(filtered), [filtered]);
   const score = useMemo(() => gsScore(parts), [parts]);
-  const insights = useMemo(() => buildInsights(filtered), [filtered]);
+  const insights = useMemo(() => buildInsights(filtered, filters.currency), [filtered, filters.currency]);
 
   if (loading) return <div className="text-sm text-fg-muted">Loading insights…</div>;
   if (!filtered.length)

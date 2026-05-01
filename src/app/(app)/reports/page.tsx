@@ -76,7 +76,7 @@ export default function ReportsPage() {
       </div>
 
       {tab === "Overview" && <Overview trades={filtered} currency={filters.currency} />}
-      {tab === "Detailed" && <Detailed trades={filtered} />}
+      {tab === "Detailed" && <Detailed trades={filtered} currency={filters.currency} />}
       {tab === "Risk" && <Risk trades={filtered} currency={filters.currency} />}
       {tab === "Wins vs Losses" && <WinsLosses trades={filtered} currency={filters.currency} />}
       {tab === "Compare" && <Compare trades={filtered} currency={filters.currency} />}
@@ -113,7 +113,7 @@ function Overview({ trades, currency }: { trades: TradeRow[]; currency: string }
   );
 }
 
-function Detailed({ trades }: { trades: TradeRow[] }) {
+function Detailed({ trades, currency }: { trades: TradeRow[]; currency: string }) {
   const byMistake = performanceBy(trades, "mistake_tag");
   const bySetup = performanceBy(trades, "setup_tag");
   const byEmotion = useEmotions(trades);
@@ -169,7 +169,7 @@ function Detailed({ trades }: { trades: TradeRow[] }) {
                       <td className="px-3 py-2 font-medium">{e.emotion}</td>
                       <td className="px-3 py-2">{e.trades}</td>
                       <td className="px-3 py-2">{formatPercent(e.winRate)}</td>
-                      <td className="px-3 py-2">{formatCurrency(e.pnl)}</td>
+                      <td className="px-3 py-2">{formatCurrency(e.pnl, currency)}</td>
                     </tr>
                   ))}
                 </tbody>

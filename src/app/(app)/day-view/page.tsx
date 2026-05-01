@@ -7,15 +7,20 @@ import { Input } from "@/components/ui/input";
 import { Stat } from "@/components/ui/stat";
 import { Badge } from "@/components/ui/badge";
 import { useTrades } from "@/lib/hooks/use-trades";
-import { totalPnl, winRate, profitFactor, totalCommissions, totalSpread } from "@/lib/analytics";
+import { totalPnl, winRate, profitFactor, totalCommissions, totalSpread, applyAllFilters, realisedRR } from "@/lib/analytics";
+import { useFilters } from "@/lib/filters/store";
+import { MoonWidget } from "@/components/moon-widget";
 import { formatCurrency, formatNumber, pnlColor, shortDate } from "@/lib/utils";
 import { Empty } from "@/components/ui/empty";
 
 export default function DayViewPage() {
   const { trades, loading } = useTrades();
+  const { filters } = useFilters();
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
 
-  const today = useMemo(() => trades.filter((t) => t.trade_date === date), [trades, date]);
+  const filtered = useMemo(() => applyAllFilters(trades, filters), [trades, filters]);
+  const today = useMemo(() => filtered.filter((t) => t.trade_date === date), [filtered, date]);
+  const moonDate = useMemo(() => new Date(`${date}T12:00:00Z`), [date]);
 
   return (
     <div className="space-y-6">
@@ -31,6 +36,14 @@ export default function DayViewPage() {
         <Empty title={`No trades on ${shortDate(date)}`} description="Pick another day or import data." />
       ) : (
         <>
+          <div className="grid gap-4 lg:grid-cols-3">
+            <MoonWidget date={moonDate} />
+            <Card className="lg:col-span-2 p-5">
+              <div className="text-xs text-fg-muted">{shortDate(date)}</div>
+              <div className="mt-1 text-sm text-fg-muted">Day-in-detail view. The moon widget shows the moon phase for this exact date.</div>
+            </Card>
+          </div>
+
           <div className="grid gap-4 md:grid-cols-5">
             <Stat label="Trades" value={today.length} />
             <Stat label="Net P&L" value={totalPnl(today)} format="currency" positive={totalPnl(today) >= 0} />
@@ -45,7 +58,7 @@ export default function DayViewPage() {
               <table className="w-full text-left text-sm">
                 <thead className="border-b border-line text-xs text-fg-subtle">
                   <tr>
-                    {["Pair", "Side", "Session", "P&L", "R", "Setup", "Mistake", "Emotions", "Notes"].map((h) => (
+                    {["Pair", "Side", "Session", "P&L", "RR", "Setup", "Mistake", "Emotions", "Notes"].map((h) => (
                       <th key={h} className="px-3 py-2.5 font-medium">{h}</th>
                     ))}
                   </tr>
@@ -56,8 +69,8 @@ export default function DayViewPage() {
                       <td className="px-3 py-2.5 font-medium">{t.pair ?? "—"}</td>
                       <td className="px-3 py-2.5">{t.side ? <Badge variant={t.side === "long" ? "success" : "danger"}>{t.side}</Badge> : "—"}</td>
                       <td className="px-3 py-2.5 text-fg-muted">{t.session ?? "—"}</td>
-                      <td className={`px-3 py-2.5 font-medium ${pnlColor(t.pnl)}`}>{formatCurrency(t.pnl)}</td>
-                      <td className={`px-3 py-2.5 ${pnlColor(t.result_r)}`}>{formatNumber(t.result_r, 2)}</td>
+                      <td className={`px-3 py-2.5 font-medium ${pnlColor(t.pnl)}`}>{formatCurrency(t.pnl, filters.currency)}</td>
+                      <td className={`px-3 py-2.5 ${pnlColor(realisedRR(t) ?? t.result_r)}`}>{formatNumber(realisedRR(t) ?? t.result_r, 2)}</td>
                       <td className="px-3 py-2.5 text-fg-muted">{t.setup_tag ?? "—"}</td>
                       <td className="px-3 py-2.5 text-fg-muted">{t.mistake_tag ?? "—"}</td>
                       <td className="px-3 py-2.5">
