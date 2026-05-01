@@ -93,6 +93,25 @@ export type EmotionRow = {
   name: string;
 };
 
+export type UserSettingsRow = {
+  user_id: string;
+  data: Json;
+  created_at: string;
+  updated_at: string;
+};
+
+export type NotebookEmbed = {
+  id: string;
+  label: string;
+  url: string;
+};
+
+export type UserSettingsData = {
+  notebook_embeds?: NotebookEmbed[];
+  notebook_active_id?: string | null;
+  notebook_scratchpad?: string;
+};
+
 type Insertable<T extends { id: string; created_at: string }> = Omit<
   T,
   "id" | "created_at" | "updated_at"
@@ -134,6 +153,12 @@ export type Database = {
         Row: EmotionRow;
         Insert: Omit<EmotionRow, "id"> & Partial<Pick<EmotionRow, "id">>;
         Update: Updatable<EmotionRow>;
+      };
+      user_settings: {
+        Row: UserSettingsRow;
+        Insert: Omit<UserSettingsRow, "created_at" | "updated_at"> &
+          Partial<Pick<UserSettingsRow, "created_at" | "updated_at">>;
+        Update: Updatable<UserSettingsRow>;
       };
     };
     Views: Record<string, never>;
