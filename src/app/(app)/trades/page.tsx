@@ -8,17 +8,18 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useTrades } from "@/lib/hooks/use-trades";
-import { formatCurrency, formatNumber, pnlColor, shortDate } from "@/lib/utils";
+import { formatNumber, pnlColor, shortDate } from "@/lib/utils";
 import { Empty } from "@/components/ui/empty";
 import { Plus, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { applyAllFilters, isRealTrade, realisedRR } from "@/lib/analytics";
 import { detectSession } from "@/lib/parser";
-import { useFilters } from "@/lib/filters/store";
+import { useFilters, useMoney } from "@/lib/filters/store";
 
 export default function TradesPage() {
   const { trades, files, loading, refresh } = useTrades();
   const { filters } = useFilters();
+  const { fmt } = useMoney();
   const [q, setQ] = useState("");
   const [fileFilter, setFileFilter] = useState<string>("all");
 
@@ -135,7 +136,7 @@ export default function TradesPage() {
                       <td className="px-4 py-2.5">{formatNumber(t.exit_price, 5)}</td>
                       <td className="px-4 py-2.5">{formatNumber(t.lot_size)}</td>
                       <td className={`px-4 py-2.5 ${pnlColor(rr)}`}>{rr === null ? "—" : `${rr.toFixed(2)}R`}</td>
-                      <td className={`px-4 py-2.5 font-medium ${pnlColor(t.pnl)}`}>{formatCurrency(t.pnl, filters.currency)}</td>
+                      <td className={`px-4 py-2.5 font-medium ${pnlColor(t.pnl)}`}>{fmt(t.pnl)}</td>
                       <td className="px-4 py-2.5 text-fg-muted">{t.setup_tag ?? "—"}</td>
                       <td className="px-4 py-2.5 text-fg-muted">{t.mistake_tag ?? "—"}</td>
                     </tr>

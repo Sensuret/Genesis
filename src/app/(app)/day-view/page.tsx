@@ -8,14 +8,15 @@ import { Stat } from "@/components/ui/stat";
 import { Badge } from "@/components/ui/badge";
 import { useTrades } from "@/lib/hooks/use-trades";
 import { totalPnl, winRate, profitFactor, totalCommissions, totalSpread, applyAllFilters, realisedRR } from "@/lib/analytics";
-import { useFilters } from "@/lib/filters/store";
+import { useFilters, useMoney } from "@/lib/filters/store";
 import { MoonWidget } from "@/components/moon-widget";
-import { formatCurrency, formatNumber, pnlColor, shortDate } from "@/lib/utils";
+import { formatNumber, pnlColor, shortDate } from "@/lib/utils";
 import { Empty } from "@/components/ui/empty";
 
 export default function DayViewPage() {
   const { trades, loading } = useTrades();
   const { filters } = useFilters();
+  const { fmt } = useMoney();
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
 
   const filtered = useMemo(() => applyAllFilters(trades, filters), [trades, filters]);
@@ -69,7 +70,7 @@ export default function DayViewPage() {
                       <td className="px-3 py-2.5 font-medium">{t.pair ?? "—"}</td>
                       <td className="px-3 py-2.5">{t.side ? <Badge variant={t.side === "long" ? "success" : "danger"}>{t.side}</Badge> : "—"}</td>
                       <td className="px-3 py-2.5 text-fg-muted">{t.session ?? "—"}</td>
-                      <td className={`px-3 py-2.5 font-medium ${pnlColor(t.pnl)}`}>{formatCurrency(t.pnl, filters.currency)}</td>
+                      <td className={`px-3 py-2.5 font-medium ${pnlColor(t.pnl)}`}>{fmt(t.pnl)}</td>
                       <td className={`px-3 py-2.5 ${pnlColor(realisedRR(t) ?? t.result_r)}`}>{formatNumber(realisedRR(t) ?? t.result_r, 2)}</td>
                       <td className="px-3 py-2.5 text-fg-muted">{t.setup_tag ?? "—"}</td>
                       <td className="px-3 py-2.5 text-fg-muted">{t.mistake_tag ?? "—"}</td>

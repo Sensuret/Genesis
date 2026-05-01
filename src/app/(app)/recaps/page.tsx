@@ -6,11 +6,11 @@ import { CalendarRange, ArrowRight } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { useTrades } from "@/lib/hooks/use-trades";
-import { useFilters } from "@/lib/filters/store";
+import { useFilters, useMoney } from "@/lib/filters/store";
 import { applyAllFilters, tpBeSl, type TpBeSlBreakdown } from "@/lib/analytics";
 import { detectSession } from "@/lib/parser";
 import type { TradeRow } from "@/lib/supabase/types";
-import { formatCurrency, formatPercent } from "@/lib/utils";
+import { formatPercent } from "@/lib/utils";
 
 type ScorePeriod = "day" | "week" | "month" | "quarter" | "year";
 
@@ -82,7 +82,7 @@ function ScoreCard({ label, value, sub, tone }: { label: string; value: string; 
   );
 }
 
-function SessionRow({ session, b, pnl, currency }: { session: string; b: TpBeSlBreakdown; pnl: number; currency: string }) {
+function SessionRow({ session, b, pnl, fmt }: { session: string; b: TpBeSlBreakdown; pnl: number; fmt: (n: number | null | undefined) => string }) {
   return (
     <tr className="border-b border-line/50 last:border-0">
       <td className="px-4 py-3 font-medium">{session}</td>
@@ -92,7 +92,7 @@ function SessionRow({ session, b, pnl, currency }: { session: string; b: TpBeSlB
       <td className="px-4 py-3 text-danger">{b.sl}</td>
       <td className="px-4 py-3">{formatPercent(b.winRate, 1)}</td>
       <td className={`px-4 py-3 font-medium ${pnl >= 0 ? "text-success" : "text-danger"}`}>
-        {formatCurrency(pnl, currency)}
+        {fmt(pnl)}
       </td>
     </tr>
   );
@@ -101,6 +101,7 @@ function SessionRow({ session, b, pnl, currency }: { session: string; b: TpBeSlB
 export default function RecapsPage() {
   const { trades, loading } = useTrades();
   const { filters } = useFilters();
+  const { fmt } = useMoney();
   const [period, setPeriod] = useState<ScorePeriod>("week");
 
   const filtered = useMemo(() => applyAllFilters(trades, filters), [trades, filters]);
@@ -165,7 +166,7 @@ export default function RecapsPage() {
                 <ScoreCard
                   label="Win rate"
                   value={formatPercent(overall.winRate, 1)}
-                  sub={`Net ${formatCurrency(overallPnl, filters.currency)}`}
+                  sub={`Net ${fmt(overallPnl)}`}
                   tone="win"
                 />
               </div>
@@ -185,7 +186,7 @@ export default function RecapsPage() {
                   </thead>
                   <tbody>
                     {bySession.map((row) => (
-                      <SessionRow key={row.session} session={row.session} b={row.b} pnl={row.pnl} currency={filters.currency} />
+                      <SessionRow key={row.session} session={row.session} b={row.b} pnl={row.pnl} fmt={fmt} />
                     ))}
                   </tbody>
                 </table>
