@@ -74,6 +74,17 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  /* Lock the document to the viewport on mobile so the page can't be
+     dragged around / rubber-banded once the user is signed in. */
+  overscroll-behavior: none;
+  touch-action: pan-x pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+
+html,
+body {
+  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 * {

@@ -6,7 +6,7 @@ import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Stat } from "@/components/ui/stat";
 import { Empty } from "@/components/ui/empty";
 import { useTrades } from "@/lib/hooks/use-trades";
-import { useFilters } from "@/lib/filters/store";
+import { useFilters, useMoney } from "@/lib/filters/store";
 import {
   applyAllFilters,
   computeGsScoreParts,
@@ -21,12 +21,12 @@ import {
   realisedRR
 } from "@/lib/analytics";
 import { GsScoreRadar } from "@/components/charts/gs-score-radar";
-import { formatPercent, formatCurrency, formatNumber } from "@/lib/utils";
+import { formatPercent, formatNumber } from "@/lib/utils";
 import type { TradeRow } from "@/lib/supabase/types";
 
 type Insight = { tone: "good" | "warn" | "bad"; title: string; detail: string };
 
-function buildInsights(trades: TradeRow[], currency: string): Insight[] {
+function buildInsights(trades: TradeRow[], fmt: (n: number | null | undefined) => string): Insight[] {
   const out: Insight[] = [];
   if (!trades.length) return out;
 
@@ -55,7 +55,7 @@ function buildInsights(trades: TradeRow[], currency: string): Insight[] {
       out.push({
         tone: "warn",
         title: `${worst.key} is dragging you down`,
-        detail: `${best.key} is your best session (${formatCurrency(best.pnl, currency)}). Consider sitting out ${worst.key}.`
+        detail: `${best.key} is your best session (${fmt(best.pnl)}). Consider sitting out ${worst.key}.`
       });
     }
   }
@@ -67,7 +67,7 @@ function buildInsights(trades: TradeRow[], currency: string): Insight[] {
     out.push({
       tone: "bad",
       title: `Top mistake: "${worst.key}"`,
-      detail: `${worst.trades} trades, ${formatCurrency(worst.pnl, currency)} lost. Build a checklist rule against this.`
+      detail: `${worst.trades} trades, ${fmt(worst.pnl)} lost. Build a checklist rule against this.`
     });
   }
 
@@ -88,11 +88,12 @@ function buildInsights(trades: TradeRow[], currency: string): Insight[] {
 export default function GsInsightsPage() {
   const { trades, loading } = useTrades();
   const { filters } = useFilters();
+  const { fmt } = useMoney();
   const filtered = useMemo(() => applyAllFilters(trades, filters), [trades, filters]);
 
   const parts = useMemo(() => computeGsScoreParts(filtered), [filtered]);
   const score = useMemo(() => gsScore(parts), [parts]);
-  const insights = useMemo(() => buildInsights(filtered, filters.currency), [filtered, filters.currency]);
+  const insights = useMemo(() => buildInsights(filtered, fmt), [filtered, fmt]);
 
   if (loading) return <div className="text-sm text-fg-muted">Loading insights…</div>;
   if (!filtered.length)

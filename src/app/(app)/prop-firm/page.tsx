@@ -20,7 +20,7 @@ import {
 import { applyAllFilters } from "@/lib/analytics";
 import { useFilters } from "@/lib/filters/store";
 import { EquityCurveChart } from "@/components/charts/equity-curve";
-import { formatCurrency, formatPercent, shortDate } from "@/lib/utils";
+import { formatPercent, shortDate } from "@/lib/utils";
 
 type PhaseTemplate = "1" | "2" | "3";
 

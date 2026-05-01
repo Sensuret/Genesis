@@ -285,6 +285,91 @@ export function dayStreaks(trades: TradeRow[]) {
   return computeStreaks(days.map((d) => ({ date: d.date, pnl: d.pnl })));
 }
 
+/**
+ * Current day-streak — extends the most recent run of winning *or* losing
+ * days (whichever the latest day is). Returns the streak length in days
+ * and trades plus the type. Days with zero PnL break the streak.
+ */
+export function currentDayStreak(trades: TradeRow[]): {
+  type: "win" | "loss" | null;
+  days: number;
+  trades: number;
+} {
+  const days = dailyPnl(trades).filter((d) => d.pnl !== 0);
+  if (!days.length) return { type: null, days: 0, trades: 0 };
+  const last = days[days.length - 1];
+  const type: "win" | "loss" = last.pnl > 0 ? "win" : "loss";
+  let count = 0;
+  let tradeTotal = 0;
+  for (let i = days.length - 1; i >= 0; i -= 1) {
+    const d = days[i];
+    const t: "win" | "loss" = d.pnl > 0 ? "win" : "loss";
+    if (t !== type) break;
+    count += 1;
+    tradeTotal += d.trades;
+  }
+  return { type, days: count, trades: tradeTotal };
+}
+
+/**
+ * Best (longest) winning *and* losing day-streak ever recorded across the
+ * full filtered set. Used for the secondary "best 4 days" badge on the
+ * dashboard hero card.
+ */
+export function bestDayStreak(trades: TradeRow[]): { winDays: number; lossDays: number } {
+  const streaks = dayStreaks(trades);
+  let win = 0;
+  let loss = 0;
+  for (const s of streaks) {
+    if (s.type === "win" && s.length > win) win = s.length;
+    if (s.type === "loss" && s.length > loss) loss = s.length;
+  }
+  return { winDays: win, lossDays: loss };
+}
+
+/**
+ * Current consecutive-trade streak — walks the filtered trade history in
+ * date order and extends the most recent run of winners or losers. Trades
+ * with zero PnL break the streak. Returns trade-level type + length.
+ */
+export function currentTradeStreak(trades: TradeRow[]): {
+  type: "win" | "loss" | null;
+  trades: number;
+} {
+  const decided = sortByDate(trades).filter((t) => (t.pnl ?? 0) !== 0);
+  if (!decided.length) return { type: null, trades: 0 };
+  const last = decided[decided.length - 1];
+  const type: "win" | "loss" = (last.pnl ?? 0) > 0 ? "win" : "loss";
+  let count = 0;
+  for (let i = decided.length - 1; i >= 0; i -= 1) {
+    const t = (decided[i].pnl ?? 0) > 0 ? "win" : "loss";
+    if (t !== type) break;
+    count += 1;
+  }
+  return { type, trades: count };
+}
+
+/** Best (longest) consecutive-trade streak ever recorded — winners + losers. */
+export function bestTradeStreak(trades: TradeRow[]): { winTrades: number; lossTrades: number } {
+  const decided = sortByDate(trades).filter((t) => (t.pnl ?? 0) !== 0);
+  let win = 0;
+  let loss = 0;
+  let curWin = 0;
+  let curLoss = 0;
+  for (const t of decided) {
+    if ((t.pnl ?? 0) > 0) {
+      curWin += 1;
+      curLoss = 0;
+      if (curWin > win) win = curWin;
+    } else {
+      curLoss += 1;
+      curWin = 0;
+      if (curLoss > loss) loss = curLoss;
+    }
+  }
+  return { winTrades: win, lossTrades: loss };
+}
+
 export function weekStreaks(trades: TradeRow[]) {
   return computeStreaks(bucket(trades, weekKey));
 }

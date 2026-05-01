@@ -19,9 +19,9 @@ import {
 } from "@/lib/analytics";
 import { detectSession } from "@/lib/parser";
 import { Camera, Share2, Flame, Filter, X } from "lucide-react";
-import { formatCurrency, formatNumber } from "@/lib/utils";
+import { formatNumber } from "@/lib/utils";
 import { LogoMark, Wordmark } from "@/components/logo";
-import { useFilters } from "@/lib/filters/store";
+import { useFilters, useMoney } from "@/lib/filters/store";
 import type { TradeRow } from "@/lib/supabase/types";
 
 function resolveSession(t: TradeRow): string | null {
@@ -31,6 +31,7 @@ function resolveSession(t: TradeRow): string | null {
 export default function StreaksPage() {
   const { trades, loading } = useTrades();
   const { filters } = useFilters();
+  const { fmt } = useMoney();
   const captureRef = useRef<HTMLDivElement>(null);
 
   const allAssets = useMemo(() => {
@@ -176,22 +177,22 @@ export default function StreaksPage() {
           <Stat
             label="Best day streak"
             value={best(days)?.length ?? 0}
-            hint={best(days) ? `${formatCurrency(best(days)!.pnl, filters.currency)} earned` : ""}
+            hint={best(days) ? `${fmt(best(days)!.pnl)} earned` : ""}
           />
           <Stat
             label="Best week streak"
             value={best(weeks)?.length ?? 0}
-            hint={best(weeks) ? `${formatCurrency(best(weeks)!.pnl, filters.currency)} earned` : ""}
+            hint={best(weeks) ? `${fmt(best(weeks)!.pnl)} earned` : ""}
           />
           <Stat
             label="Best quarter streak"
             value={best(quarters)?.length ?? 0}
-            hint={best(quarters) ? `${formatCurrency(best(quarters)!.pnl, filters.currency)} earned` : ""}
+            hint={best(quarters) ? `${fmt(best(quarters)!.pnl)} earned` : ""}
           />
           <Stat
             label="Best year streak"
             value={best(years)?.length ?? 0}
-            hint={best(years) ? `${formatCurrency(best(years)!.pnl, filters.currency)} earned` : ""}
+            hint={best(years) ? `${fmt(best(years)!.pnl)} earned` : ""}
           />
         </div>
 
@@ -201,10 +202,10 @@ export default function StreaksPage() {
         </div>
 
         <div className="grid gap-4 lg:grid-cols-2">
-          <StreakCard title="Day streaks" data={days} unit="day" currency={filters.currency} />
-          <StreakCard title="Week streaks" data={weeks} unit="week" currency={filters.currency} />
-          <StreakCard title="Quarter streaks" data={quarters} unit="quarter" currency={filters.currency} />
-          <StreakCard title="Year streaks" data={years} unit="year" currency={filters.currency} />
+          <StreakCard title="Day streaks" data={days} unit="day" fmt={fmt} />
+          <StreakCard title="Week streaks" data={weeks} unit="week" fmt={fmt} />
+          <StreakCard title="Quarter streaks" data={quarters} unit="quarter" fmt={fmt} />
+          <StreakCard title="Year streaks" data={years} unit="year" fmt={fmt} />
         </div>
 
         <Card>
@@ -220,7 +221,7 @@ export default function StreaksPage() {
                   <div className="text-xs uppercase tracking-wide text-fg-subtle">{s}</div>
                   <div className="mt-1 text-2xl font-semibold">{top?.length ?? 0}</div>
                   <div className="mt-0.5 text-xs text-fg-muted">
-                    {top ? `Best green run · ${formatCurrency(top.pnl, filters.currency)}` : "No streaks yet"}
+                    {top ? `Best green run · ${fmt(top.pnl)}` : "No streaks yet"}
                   </div>
                 </div>
               );
@@ -240,12 +241,12 @@ function StreakCard({
   title,
   data,
   unit,
-  currency
+  fmt
 }: {
   title: string;
   data: Streak[];
   unit: string;
-  currency: string;
+  fmt: (usd: number | null | undefined) => string;
 }) {
   return (
     <Card>
@@ -272,7 +273,7 @@ function StreakCard({
                     </span>
                   </span>
                   <span className={s.type === "win" ? "text-success" : "text-danger"}>
-                    {formatCurrency(s.pnl, currency)}
+                    {fmt(s.pnl)}
                   </span>
                 </li>
               ))}

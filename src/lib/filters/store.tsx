@@ -1,6 +1,20 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState
+} from "react";
+import {
+  SEED_RATES,
+  convertFromUSD,
+  formatMoney,
+  loadRates,
+  type Rates
+} from "@/lib/fx";
 
 export type AppFilters = {
   currency: string;
@@ -22,12 +36,14 @@ type Ctx = {
   filters: AppFilters;
   setFilters: (next: Partial<AppFilters>) => void;
   reset: () => void;
+  rates: Rates;
 };
 
 const FiltersContext = createContext<Ctx | null>(null);
 
 export function FiltersProvider({ children }: { children: React.ReactNode }) {
   const [filters, setState] = useState<AppFilters>(DEFAULT_FILTERS);
+  const [rates, setRates] = useState<Rates>(SEED_RATES);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -40,6 +56,16 @@ export function FiltersProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // ignore
     }
+  }, []);
+
+  // Refresh FX rates once on mount so the currency converter actually moves
+  // numbers (e.g. $1 → KES 129) instead of just swapping the symbol.
+  useEffect(() => {
+    const ctrl = new AbortController();
+    loadRates(ctrl.signal).then((live) => {
+      if (live) setRates({ ...SEED_RATES, ...live });
+    });
+    return () => ctrl.abort();
   }, []);
 
   const setFilters = useCallback((next: Partial<AppFilters>) => {
@@ -58,7 +84,10 @@ export function FiltersProvider({ children }: { children: React.ReactNode }) {
 
   const reset = useCallback(() => setFilters(DEFAULT_FILTERS), [setFilters]);
 
-  const value = useMemo(() => ({ filters, setFilters, reset }), [filters, setFilters, reset]);
+  const value = useMemo(
+    () => ({ filters, setFilters, reset, rates }),
+    [filters, setFilters, reset, rates]
+  );
 
   return <FiltersContext.Provider value={value}>{children}</FiltersContext.Provider>;
 }
@@ -72,13 +101,48 @@ export function useFilters(): Ctx {
     return {
       filters: DEFAULT_FILTERS,
       setFilters: () => {},
-      reset: () => {}
+      reset: () => {},
+      rates: SEED_RATES
     };
   }
   return ctx;
 }
 
-export const CURRENCIES = ["USD", "EUR", "GBP", "JPY", "AUD", "CAD", "CHF", "NZD", "ZAR"];
+/**
+ * Returns helpers bound to the current currency filter + live FX rates.
+ *
+ *  - `fmt(usd)` — convert a USD-base amount and format it.
+ *  - `convert(usd)` — just convert (no formatting).
+ *  - `currency` — active currency code.
+ */
+export function useMoney() {
+  const { filters, rates } = useFilters();
+  const fmt = useCallback(
+    (usd: number | null | undefined) => {
+      if (usd === null || usd === undefined || Number.isNaN(usd)) return "—";
+      return formatMoney(convertFromUSD(usd, filters.currency, rates), filters.currency);
+    },
+    [filters.currency, rates]
+  );
+  const convert = useCallback(
+    (usd: number) => convertFromUSD(usd, filters.currency, rates),
+    [filters.currency, rates]
+  );
+  return { fmt, convert, currency: filters.currency, rates };
+}
+
+export const CURRENCIES = [
+  "USD",
+  "EUR",
+  "GBP",
+  "JPY",
+  "AUD",
+  "CAD",
+  "CHF",
+  "NZD",
+  "ZAR",
+  "KES"
+];
 
 export const DATE_RANGES: { id: AppFilters["dateRange"]; label: string }[] = [
   { id: "all", label: "All time" },

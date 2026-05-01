@@ -25,9 +25,11 @@ import { detectSession } from "@/lib/parser";
 import { PerfBar } from "@/components/charts/perf-bar";
 import { DailyPnlChart } from "@/components/charts/daily-pnl";
 import { Empty } from "@/components/ui/empty";
-import { formatCurrency, formatNumber, formatPercent } from "@/lib/utils";
+import { formatNumber, formatPercent } from "@/lib/utils";
 import type { TradeRow } from "@/lib/supabase/types";
-import { useFilters } from "@/lib/filters/store";
+import { useFilters, useMoney } from "@/lib/filters/store";
+
+type Fmt = (n: number | null | undefined) => string;
 
 const TABS = ["Overview", "Detailed", "Risk", "Wins vs Losses", "Compare", "Calendar"] as const;
 type Tab = (typeof TABS)[number];
@@ -35,6 +37,7 @@ type Tab = (typeof TABS)[number];
 export default function ReportsPage() {
   const { trades, loading } = useTrades();
   const { filters } = useFilters();
+  const { fmt } = useMoney();
   const [tab, setTab] = useState<Tab>("Overview");
 
   const filtered = useMemo(() => applyAllFilters(trades, filters), [trades, filters]);
@@ -76,11 +79,11 @@ export default function ReportsPage() {
       </div>
 
       {tab === "Overview" && <Overview trades={filtered} currency={filters.currency} />}
-      {tab === "Detailed" && <Detailed trades={filtered} currency={filters.currency} />}
+      {tab === "Detailed" && <Detailed trades={filtered} fmt={fmt} />}
       {tab === "Risk" && <Risk trades={filtered} currency={filters.currency} />}
-      {tab === "Wins vs Losses" && <WinsLosses trades={filtered} currency={filters.currency} />}
-      {tab === "Compare" && <Compare trades={filtered} currency={filters.currency} />}
-      {tab === "Calendar" && <CalendarView trades={filtered} currency={filters.currency} />}
+      {tab === "Wins vs Losses" && <WinsLosses trades={filtered} fmt={fmt} />}
+      {tab === "Compare" && <Compare trades={filtered} fmt={fmt} />}
+      {tab === "Calendar" && <CalendarView trades={filtered} fmt={fmt} />}
     </div>
   );
 }
@@ -104,16 +107,21 @@ function Overview({ trades, currency }: { trades: TradeRow[]; currency: string }
         <CardHeader><CardTitle>Daily net P&L</CardTitle></CardHeader>
         <CardBody><DailyPnlChart data={dailyPnl(trades).slice(-60)} /></CardBody>
       </Card>
-      {currency !== "USD" && (
-        <div className="text-xs text-fg-subtle">
-          Note: amounts are stored in account currency; the {currency} symbol is shown for display only.
-        </div>
-      )}
+      <DisplayCurrencyNote currency={currency} />
     </>
   );
 }
 
-function Detailed({ trades, currency }: { trades: TradeRow[]; currency: string }) {
+function DisplayCurrencyNote({ currency }: { currency: string }) {
+  if (currency === "USD") return null;
+  return (
+    <div className="text-xs text-fg-subtle">
+      Amounts are converted from USD to {currency} using live FX rates.
+    </div>
+  );
+}
+
+function Detailed({ trades, fmt }: { trades: TradeRow[]; fmt: Fmt }) {
   const byMistake = performanceBy(trades, "mistake_tag");
   const bySetup = performanceBy(trades, "setup_tag");
   const byEmotion = useEmotions(trades);
@@ -169,7 +177,7 @@ function Detailed({ trades, currency }: { trades: TradeRow[]; currency: string }
                       <td className="px-3 py-2 font-medium">{e.emotion}</td>
                       <td className="px-3 py-2">{e.trades}</td>
                       <td className="px-3 py-2">{formatPercent(e.winRate)}</td>
-                      <td className="px-3 py-2">{formatCurrency(e.pnl, currency)}</td>
+                      <td className="px-3 py-2">{fmt(e.pnl)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -210,7 +218,7 @@ function Risk({ trades, currency }: { trades: TradeRow[]; currency: string }) {
         <CardBody>
           <div className="text-xs text-fg-muted">
             Avg RR is computed from trades where entry, stop-loss and exit price are all present.
-            Currency: <span className="text-fg">{currency}</span>.
+            Display currency: <span className="text-fg">{currency}</span>.
           </div>
         </CardBody>
       </Card>
@@ -222,7 +230,7 @@ function avg(arr: number[]): number {
   return arr.length ? arr.reduce((s, x) => s + x, 0) / arr.length : 0;
 }
 
-function WinsLosses({ trades, currency }: { trades: TradeRow[]; currency: string }) {
+function WinsLosses({ trades, fmt }: { trades: TradeRow[]; fmt: Fmt }) {
   const wins = trades.filter((t) => (t.pnl ?? 0) > 0);
   const losses = trades.filter((t) => (t.pnl ?? 0) < 0);
   const breakEven = trades.filter((t) => (t.pnl ?? 0) === 0);
@@ -247,8 +255,8 @@ function WinsLosses({ trades, currency }: { trades: TradeRow[]; currency: string
         <CardHeader><CardTitle>Average trade size</CardTitle></CardHeader>
         <CardBody>
           <div className="grid gap-4 md:grid-cols-3 text-sm">
-            <Cell label="Avg win">{formatCurrency(wins.length ? totalWin / wins.length : 0, currency)}</Cell>
-            <Cell label="Avg loss">{formatCurrency(losses.length ? totalLoss / losses.length : 0, currency)}</Cell>
+            <Cell label="Avg win">{fmt(wins.length ? totalWin / wins.length : 0)}</Cell>
+            <Cell label="Avg loss">{fmt(losses.length ? totalLoss / losses.length : 0)}</Cell>
             <Cell label="Win/loss ratio">{losses.length ? formatNumber(Math.abs(totalWin / totalLoss), 2) : "—"}</Cell>
           </div>
         </CardBody>
@@ -266,7 +274,7 @@ function Cell({ label, children }: { label: string; children: React.ReactNode })
   );
 }
 
-function Compare({ trades, currency }: { trades: TradeRow[]; currency: string }) {
+function Compare({ trades, fmt }: { trades: TradeRow[]; fmt: Fmt }) {
   // Compare sessions side-by-side.
   const sessions = ["New York", "London", "Asia", "Sydney"];
   const rows = sessions.map((s) => {
@@ -300,8 +308,8 @@ function Compare({ trades, currency }: { trades: TradeRow[]; currency: string })
               <tr key={r.session} className="border-b border-line/50 last:border-0">
                 <td className="px-3 py-2 font-medium">{r.session}</td>
                 <td className="px-3 py-2">{r.trades}</td>
-                <td className={`px-3 py-2 font-medium ${r.pnl >= 0 ? "text-success" : "text-danger"}`}>{formatCurrency(r.pnl, currency)}</td>
-                <td className="px-3 py-2">{formatCurrency(r.avg, currency)}</td>
+                <td className={`px-3 py-2 font-medium ${r.pnl >= 0 ? "text-success" : "text-danger"}`}>{fmt(r.pnl)}</td>
+                <td className="px-3 py-2">{fmt(r.avg)}</td>
                 <td className="px-3 py-2">{formatPercent(r.winRate, 1)}</td>
                 <td className="px-3 py-2">{formatNumber(r.pf, 2)}</td>
               </tr>
@@ -313,7 +321,7 @@ function Compare({ trades, currency }: { trades: TradeRow[]; currency: string })
   );
 }
 
-function CalendarView({ trades, currency }: { trades: TradeRow[]; currency: string }) {
+function CalendarView({ trades, fmt }: { trades: TradeRow[]; fmt: Fmt }) {
   const days = dailyPnl(trades);
   const totalsByMonth = days.reduce<Record<string, { trades: number; pnl: number }>>((acc, d) => {
     const m = d.date.slice(0, 7);
@@ -340,7 +348,7 @@ function CalendarView({ trades, currency }: { trades: TradeRow[]; currency: stri
               <tr key={m} className="border-b border-line/50 last:border-0">
                 <td className="px-3 py-2 font-medium">{m}</td>
                 <td className="px-3 py-2">{v.trades}</td>
-                <td className={`px-3 py-2 font-medium ${v.pnl >= 0 ? "text-success" : "text-danger"}`}>{formatCurrency(v.pnl, currency)}</td>
+                <td className={`px-3 py-2 font-medium ${v.pnl >= 0 ? "text-success" : "text-danger"}`}>{fmt(v.pnl)}</td>
               </tr>
             ))}
           </tbody>

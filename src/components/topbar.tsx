@@ -47,14 +47,18 @@ export function TopBar() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const firstName = (profile?.full_name ?? profile?.email ?? "").split(/[\s@]/)[0];
+  // Show the full name when we have one ("Money Khari"), otherwise the
+  // local-part of the email so we don't greet someone with their full email.
+  const displayName = (profile?.full_name && profile.full_name.trim())
+    ? profile.full_name.trim()
+    : (profile?.email ?? "").split("@")[0];
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-line bg-bg/85 px-6 backdrop-blur">
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-medium text-fg">
           {greeting}
-          {firstName ? `, ${firstName}` : ""} 
+          {displayName ? `, ${displayName}` : ""}
         </div>
         <div className="truncate text-xs text-fg-subtle">
           {new Date().toLocaleDateString(undefined, {
