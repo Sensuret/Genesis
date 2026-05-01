@@ -373,25 +373,49 @@ function quarterKey(d: Date) {
 
 // ---------------------------------------------------------------------
 // R:R distribution helper
+//
+// For each trade, prefer the live-computed realised RR (entry / SL / exit)
+// because most imports — including MetaTrader — don't carry an "R multiple"
+// column, so `t.result_r` is null on the majority of rows. Falling back to
+// `t.result_r` lets pre-tagged journals still light up the chart.
+//
+// Trades with no usable RR are excluded entirely (not bucketed as 0R) so
+// the chart reflects only trades where RR is actually known.
+//
+// Buckets are integer-snapped: a trade at 1.4R counts as "1R", 2.6R as
+// "3R", -0.3R as "0R". Anything beyond ±5R is collapsed into ≤-5R / ≥5R
+// so a single big winner doesn't blow the X axis out.
 // ---------------------------------------------------------------------
+const RR_BUCKETS = [
+  "≤-5R", "-4R", "-3R", "-2R", "-1R", "0R", "+1R", "+2R", "+3R", "+4R", "≥+5R"
+] as const;
+type RrBucket = (typeof RR_BUCKETS)[number];
+
+function rrBucketFor(r: number): RrBucket {
+  if (!Number.isFinite(r)) return "0R";
+  const rounded = Math.round(r);
+  if (rounded <= -5) return "≤-5R";
+  if (rounded >= 5) return "≥+5R";
+  if (rounded === 0) return "0R";
+  if (rounded > 0) return `+${rounded}R` as RrBucket;
+  return `${rounded}R` as RrBucket;
+}
+
 export function rDistribution(trades: TradeRow[]) {
-  const buckets: Record<string, number> = {
-    "<-3R": 0, "-3R": 0, "-2R": 0, "-1R": 0, "0R": 0, "+1R": 0, "+2R": 0, "+3R": 0, ">+3R": 0
+  const buckets: Record<RrBucket, number> = {
+    "≤-5R": 0, "-4R": 0, "-3R": 0, "-2R": 0, "-1R": 0,
+    "0R": 0,
+    "+1R": 0, "+2R": 0, "+3R": 0, "+4R": 0, "≥+5R": 0
   };
   for (const t of trades) {
-    const r = t.result_r;
-    if (r === null || r === undefined || Number.isNaN(r)) continue;
-    if (r < -3) buckets["<-3R"] += 1;
-    else if (r < -2) buckets["-3R"] += 1;
-    else if (r < -1) buckets["-2R"] += 1;
-    else if (r < 0) buckets["-1R"] += 1;
-    else if (r === 0) buckets["0R"] += 1;
-    else if (r <= 1) buckets["+1R"] += 1;
-    else if (r <= 2) buckets["+2R"] += 1;
-    else if (r <= 3) buckets["+3R"] += 1;
-    else buckets[">+3R"] += 1;
+    let r = realisedRR(t);
+    if (r === null && typeof t.result_r === "number" && Number.isFinite(t.result_r)) {
+      r = t.result_r;
+    }
+    if (r === null || !Number.isFinite(r)) continue;
+    buckets[rrBucketFor(r)] += 1;
   }
-  return Object.entries(buckets).map(([key, count]) => ({ bucket: key, count }));
+  return RR_BUCKETS.map((bucket) => ({ bucket, count: buckets[bucket] }));
 }
 
 // ---------------------------------------------------------------------
