@@ -15,7 +15,7 @@ import { formatMoney } from "@/lib/fx";
  * The split point is computed from where 0 lives inside the visible
  * y-domain so the colour transition snaps to the zero line.
  */
-export function EquityCurveChart({ data }: { data: EquityPoint[] }) {
+export function EquityCurveChart({ data, variant = "default" }: { data: EquityPoint[]; variant?: "default" | "purple" }) {
   const { convert, currency } = useMoney();
   const converted = useMemo(
     () => data.map((d) => ({ ...d, equity: convert(d.equity), pnl: convert(d.pnl) })),
@@ -39,27 +39,36 @@ export function EquityCurveChart({ data }: { data: EquityPoint[] }) {
       <ResponsiveContainer>
         <AreaChart data={converted}>
           <defs>
-            {/* Glossy split fill: bright green/red highlight at top of each
-                half fading to translucency. The split offset matches the
-                zero line so positive equity renders green, negative red. */}
-            <linearGradient id="equity-fill" x1="0" y1="0" x2="0" y2="1">
-              {/* Bright emerald top fading to deep emerald, then to almost-zero
-                  opacity at the zero line; mirrored for coral red below. */}
-              <stop offset="0%" stopColor="rgb(63 219 131)" stopOpacity={0.55} />
-              <stop offset="30%" stopColor="rgb(34 197 94)" stopOpacity={0.32} />
-              <stop offset={`${splitOffset * 100}%`} stopColor="rgb(20 83 45)" stopOpacity={0.05} />
-              <stop offset={`${splitOffset * 100}%`} stopColor="rgb(127 29 29)" stopOpacity={0.05} />
-              <stop offset="70%" stopColor="rgb(239 68 68)" stopOpacity={0.32} />
-              <stop offset="100%" stopColor="rgb(248 113 113)" stopOpacity={0.55} />
-            </linearGradient>
-            {/* Two-tone stroke matching the fill so the curve itself
-                also flips colour at the zero line. */}
-            <linearGradient id="equity-stroke" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="rgb(63 219 131)" />
-              <stop offset={`${splitOffset * 100}%`} stopColor="rgb(63 219 131)" />
-              <stop offset={`${splitOffset * 100}%`} stopColor="rgb(239 68 68)" />
-              <stop offset="100%" stopColor="rgb(239 68 68)" />
-            </linearGradient>
+            {variant === "purple" ? (
+              <>
+                <linearGradient id="equity-fill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="rgb(168 102 255)" stopOpacity={0.55} />
+                  <stop offset="50%" stopColor="rgb(138 58 255)" stopOpacity={0.25} />
+                  <stop offset="100%" stopColor="rgb(80 30 200)" stopOpacity={0.05} />
+                </linearGradient>
+                <linearGradient id="equity-stroke" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="rgb(168 102 255)" />
+                  <stop offset="100%" stopColor="rgb(138 58 255)" />
+                </linearGradient>
+              </>
+            ) : (
+              <>
+                <linearGradient id="equity-fill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="rgb(63 219 131)" stopOpacity={0.55} />
+                  <stop offset="30%" stopColor="rgb(34 197 94)" stopOpacity={0.32} />
+                  <stop offset={`${splitOffset * 100}%`} stopColor="rgb(20 83 45)" stopOpacity={0.05} />
+                  <stop offset={`${splitOffset * 100}%`} stopColor="rgb(127 29 29)" stopOpacity={0.05} />
+                  <stop offset="70%" stopColor="rgb(239 68 68)" stopOpacity={0.32} />
+                  <stop offset="100%" stopColor="rgb(248 113 113)" stopOpacity={0.55} />
+                </linearGradient>
+                <linearGradient id="equity-stroke" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="rgb(63 219 131)" />
+                  <stop offset={`${splitOffset * 100}%`} stopColor="rgb(63 219 131)" />
+                  <stop offset={`${splitOffset * 100}%`} stopColor="rgb(239 68 68)" />
+                  <stop offset="100%" stopColor="rgb(239 68 68)" />
+                </linearGradient>
+              </>
+            )}
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(127,127,150,0.15)" />
           <XAxis dataKey="date" stroke="rgb(130 130 150)" fontSize={11} tickLine={false} axisLine={false} />
