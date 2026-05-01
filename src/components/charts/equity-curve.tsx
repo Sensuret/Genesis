@@ -43,26 +43,22 @@ export function EquityCurveChart({ data }: { data: EquityPoint[] }) {
                 half fading to translucency. The split offset matches the
                 zero line so positive equity renders green, negative red. */}
             <linearGradient id="equity-fill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="rgb(74 222 128)" stopOpacity={0.85} />
-              <stop offset="20%" stopColor="rgb(34 197 94)" stopOpacity={0.55} />
-              <stop offset={`${splitOffset * 100}%`} stopColor="rgb(34 197 94)" stopOpacity={0.05} />
-              <stop offset={`${splitOffset * 100}%`} stopColor="rgb(239 68 68)" stopOpacity={0.05} />
-              <stop offset="80%" stopColor="rgb(239 68 68)" stopOpacity={0.55} />
-              <stop offset="100%" stopColor="rgb(248 113 113)" stopOpacity={0.85} />
+              {/* Bright emerald top fading to deep emerald, then to almost-zero
+                  opacity at the zero line; mirrored for coral red below. */}
+              <stop offset="0%" stopColor="rgb(63 219 131)" stopOpacity={0.55} />
+              <stop offset="30%" stopColor="rgb(34 197 94)" stopOpacity={0.32} />
+              <stop offset={`${splitOffset * 100}%`} stopColor="rgb(20 83 45)" stopOpacity={0.05} />
+              <stop offset={`${splitOffset * 100}%`} stopColor="rgb(127 29 29)" stopOpacity={0.05} />
+              <stop offset="70%" stopColor="rgb(239 68 68)" stopOpacity={0.32} />
+              <stop offset="100%" stopColor="rgb(248 113 113)" stopOpacity={0.55} />
             </linearGradient>
             {/* Two-tone stroke matching the fill so the curve itself
                 also flips colour at the zero line. */}
             <linearGradient id="equity-stroke" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="rgb(74 222 128)" />
-              <stop offset={`${splitOffset * 100}%`} stopColor="rgb(34 197 94)" />
-              <stop offset={`${splitOffset * 100}%`} stopColor="rgb(239 68 68)" />
+              <stop offset="0%" stopColor="rgb(63 219 131)" />
+              <stop offset={`${splitOffset * 100}%`} stopColor="rgb(63 219 131)" />
+              <stop offset={`${splitOffset * 100}%`} stopColor="rgb(248 113 113)" />
               <stop offset="100%" stopColor="rgb(248 113 113)" />
-            </linearGradient>
-            {/* Glassy highlight overlay — thin white sheen across the top
-                of the area to give it the glossy reflective look. */}
-            <linearGradient id="equity-gloss" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="rgba(255,255,255,0.18)" />
-              <stop offset="35%" stopColor="rgba(255,255,255,0)" />
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(127,127,150,0.15)" />
@@ -85,17 +81,9 @@ export function EquityCurveChart({ data }: { data: EquityPoint[] }) {
             dataKey="equity"
             stroke="url(#equity-stroke)"
             fill="url(#equity-fill)"
-            strokeWidth={2.5}
+            strokeWidth={2}
             name={`Equity (${currency})`}
             isAnimationActive={false}
-          />
-          <Area
-            type="monotone"
-            dataKey="equity"
-            stroke="none"
-            fill="url(#equity-gloss)"
-            isAnimationActive={false}
-            legendType="none"
           />
         </AreaChart>
       </ResponsiveContainer>
