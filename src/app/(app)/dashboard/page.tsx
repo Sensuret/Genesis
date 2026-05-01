@@ -40,7 +40,7 @@ import { GsScoreRadar } from "@/components/charts/gs-score-radar";
 import { PerfBar } from "@/components/charts/perf-bar";
 import { RDistributionChart } from "@/components/charts/r-distribution";
 import { DailyPnlChart } from "@/components/charts/daily-pnl";
-import { MoonWidget } from "@/components/moon-widget";
+import { MoonInline } from "@/components/moon-inline";
 import { TradeCalendar } from "@/components/trade-calendar";
 import { Empty } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
@@ -147,6 +147,7 @@ export default function DashboardPage() {
     <div className="space-y-4">
       <PageHeader
         title="Dashboard"
+        extra={<MoonInline />}
         actions={
           <Link href="/add-trade">
             <Button><Plus className="h-4 w-4" /> Add Trade</Button>
@@ -179,9 +180,9 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* Equity curve (left, 5 cols) + Trade calendar (right, 7 cols). */}
+      {/* Equity curve (left, 4 cols) + Trade calendar (right, 8 cols). */}
       <div className="grid gap-4 lg:grid-cols-12">
-        <Card className="lg:col-span-5">
+        <Card className="lg:col-span-4">
           <CardHeader>
             <CardTitle>Daily net cumulative P&L</CardTitle>
           </CardHeader>
@@ -189,7 +190,7 @@ export default function DashboardPage() {
             <EquityCurveChart data={equity} />
           </CardBody>
         </Card>
-        <Card className="lg:col-span-7">
+        <Card className="lg:col-span-8">
           <CardHeader>
             <CardTitle>Trade calendar</CardTitle>
           </CardHeader>
@@ -218,9 +219,6 @@ export default function DashboardPage() {
           </CardBody>
         </Card>
       </div>
-
-      {/* Current Moon Cycle (only addition the user asked for over TradeZella). */}
-      <MoonWidget />
 
       {/* R:R distribution + Performance breakdowns. */}
       <div className="grid gap-4 lg:grid-cols-2">
