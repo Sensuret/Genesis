@@ -4,7 +4,6 @@ import { useMemo } from "react";
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
-import { Stat } from "@/components/ui/stat";
 import { PageHeader } from "@/components/page-header";
 import { useTrades } from "@/lib/hooks/use-trades";
 import {
@@ -12,8 +11,11 @@ import {
   avgLoss,
   avgWin,
   avgWinLoss,
+  bestDayStreak,
+  bestTradeStreak,
   computeGsScoreParts,
   currentDayStreak,
+  currentTradeStreak,
   dailyPnl,
   equityCurve,
   gsScore,
@@ -21,12 +23,18 @@ import {
   netPnl,
   performanceBy,
   profitFactor,
-  recoveryFactor,
   tpBeSl,
   totalLotSize,
   winners,
   winRate
 } from "@/lib/analytics";
+import {
+  AvgWinLossCard,
+  CurrentStreakCard,
+  NetPnlCard,
+  ProfitFactorCard,
+  WinRateCard
+} from "@/components/dashboard/hero-stats";
 import { EquityCurveChart } from "@/components/charts/equity-curve";
 import { GsScoreRadar } from "@/components/charts/gs-score-radar";
 import { PerfBar } from "@/components/charts/perf-bar";
@@ -36,8 +44,8 @@ import { MoonWidget } from "@/components/moon-widget";
 import { TradeCalendar } from "@/components/trade-calendar";
 import { Empty } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
-import { useFilters, useMoney } from "@/lib/filters/store";
 import { formatNumber } from "@/lib/utils";
+import { useFilters } from "@/lib/filters/store";
 
 export default function DashboardPage() {
   const { trades, files, loading } = useTrades();
@@ -54,13 +62,15 @@ export default function DashboardPage() {
   const byMistake = useMemo(() => performanceBy(filtered, "mistake_tag").slice(0, 8), [filtered]);
   const daily = useMemo(() => dailyPnl(filtered).slice(-30), [filtered]);
   const breakdown = useMemo(() => tpBeSl(filtered), [filtered]);
-  const streak = useMemo(() => currentDayStreak(filtered), [filtered]);
+  const dayStreakNow = useMemo(() => currentDayStreak(filtered), [filtered]);
+  const dayStreakBest = useMemo(() => bestDayStreak(filtered), [filtered]);
+  const tradeStreakNow = useMemo(() => currentTradeStreak(filtered), [filtered]);
+  const tradeStreakBest = useMemo(() => bestTradeStreak(filtered), [filtered]);
   const stats = useMemo(
     () => ({
       net: netPnl(filtered),
       win: winRate(filtered),
       pf: profitFactor(filtered),
-      rf: recoveryFactor(filtered),
       avgWl: avgWinLoss(filtered),
       avgW: avgWin(filtered),
       avgL: avgLoss(filtered),
@@ -118,8 +128,23 @@ export default function DashboardPage() {
     );
   }
 
+  // Best-streak metrics for the secondary badge on the streak card —
+  // current streak's matching "best" sits next to it.
+  const dayBestForType =
+    dayStreakNow.type === "win"
+      ? dayStreakBest.winDays
+      : dayStreakNow.type === "loss"
+        ? dayStreakBest.lossDays
+        : Math.max(dayStreakBest.winDays, dayStreakBest.lossDays);
+  const tradeBestForType =
+    tradeStreakNow.type === "win"
+      ? tradeStreakBest.winTrades
+      : tradeStreakNow.type === "loss"
+        ? tradeStreakBest.lossTrades
+        : Math.max(tradeStreakBest.winTrades, tradeStreakBest.lossTrades);
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Dashboard"
         actions={
@@ -129,35 +154,32 @@ export default function DashboardPage() {
         }
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <Stat
-          label="Net P&L"
-          value={stats.net}
-          format="currency"
-          positive={stats.net >= 0}
-          hint={`${filtered.length} trade${filtered.length === 1 ? "" : "s"}`}
-        />
-        <WinRateStat
+      {/* Hero row — 5 stat cards mirroring the TradeZella reference. */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <NetPnlCard value={stats.net} tradeCount={filtered.length} />
+        <WinRateCard
           winRate={stats.win}
-          tp={breakdown.tp}
-          be={breakdown.be}
-          sl={breakdown.sl}
+          wins={breakdown.tp}
+          breakeven={breakdown.be}
+          losses={breakdown.sl}
         />
-        <AvgWinLossStat avgWl={stats.avgWl} avgW={stats.avgW} avgL={stats.avgL} />
-        <Stat
-          label="Profit factor"
-          value={stats.pf}
-          format="number"
-          positive={stats.pf >= 1}
-          hint={`Recovery factor ${formatNumber(stats.rf, 2)}`}
+        <AvgWinLossCard
+          ratio={stats.avgWl}
+          avgWin={stats.avgW}
+          avgLoss={stats.avgL}
         />
-        <CurrentStreakStat
-          type={streak.type}
-          days={streak.days}
-          trades={streak.trades}
+        <ProfitFactorCard value={stats.pf} />
+        <CurrentStreakCard
+          daysCurrent={dayStreakNow.days}
+          daysBest={dayBestForType}
+          daysType={dayStreakNow.type}
+          tradesCurrent={tradeStreakNow.trades}
+          tradesBest={tradeBestForType}
+          tradesType={tradeStreakNow.type}
         />
       </div>
 
+      {/* Equity curve (left, 5 cols) + Trade calendar (right, 7 cols). */}
       <div className="grid gap-4 lg:grid-cols-12">
         <Card className="lg:col-span-5">
           <CardHeader>
@@ -177,6 +199,7 @@ export default function DashboardPage() {
         </Card>
       </div>
 
+      {/* GS score (left) + Net daily P&L bar chart (right). */}
       <div className="grid gap-4 lg:grid-cols-12">
         <Card className="lg:col-span-5">
           <CardHeader>
@@ -186,13 +209,7 @@ export default function DashboardPage() {
             <GsScoreRadar parts={parts} score={score} />
           </CardBody>
         </Card>
-        <div className="lg:col-span-7">
-          <MoonWidget />
-        </div>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
+        <Card className="lg:col-span-7">
           <CardHeader>
             <CardTitle>Net daily P&L (last 30)</CardTitle>
           </CardHeader>
@@ -200,6 +217,13 @@ export default function DashboardPage() {
             <DailyPnlChart data={daily} />
           </CardBody>
         </Card>
+      </div>
+
+      {/* Current Moon Cycle (only addition the user asked for over TradeZella). */}
+      <MoonWidget />
+
+      {/* R:R distribution + Performance breakdowns. */}
+      <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>R:R distribution</CardTitle>
@@ -208,9 +232,6 @@ export default function DashboardPage() {
             <RDistributionChart trades={filtered} />
           </CardBody>
         </Card>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Performance by pair</CardTitle>
@@ -219,6 +240,9 @@ export default function DashboardPage() {
             <PerfBar data={byPair} />
           </CardBody>
         </Card>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Performance by setup</CardTitle>
@@ -227,9 +251,6 @@ export default function DashboardPage() {
             <PerfBar data={bySetup} />
           </CardBody>
         </Card>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Performance by mistake</CardTitle>
@@ -238,91 +259,19 @@ export default function DashboardPage() {
             <PerfBar data={byMistake} />
           </CardBody>
         </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Volume traded</CardTitle>
-          </CardHeader>
-          <CardBody className="grid grid-cols-2 gap-4 pt-0 sm:grid-cols-3">
-            <MiniStat label="Lot size (total)" value={formatNumber(stats.lots, 2)} />
-            <MiniStat label="Wins" value={String(stats.winsCount)} accent="success" />
-            <MiniStat label="Losses" value={String(stats.lossCount)} accent="danger" />
-          </CardBody>
-        </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Volume traded</CardTitle>
+        </CardHeader>
+        <CardBody className="grid grid-cols-2 gap-4 pt-0 sm:grid-cols-3">
+          <MiniStat label="Lot size (total)" value={formatNumber(stats.lots, 2)} />
+          <MiniStat label="Wins" value={String(stats.winsCount)} accent="success" />
+          <MiniStat label="Losses" value={String(stats.lossCount)} accent="danger" />
+        </CardBody>
+      </Card>
     </div>
-  );
-}
-
-function WinRateStat({
-  winRate,
-  tp,
-  be,
-  sl
-}: {
-  winRate: number;
-  tp: number;
-  be: number;
-  sl: number;
-}) {
-  return (
-    <Card className="p-5">
-      <div className="mb-1 text-xs font-medium text-fg-muted">Trade win %</div>
-      <div className="text-2xl font-semibold tracking-tight text-fg">{winRate.toFixed(2)}%</div>
-      <div className="mt-3 flex items-center gap-2 text-[11px]">
-        <span className="rounded-md bg-success/15 px-2 py-0.5 text-success">{tp} W</span>
-        <span className="rounded-md bg-fg-muted/15 px-2 py-0.5 text-fg-muted">{be} BE</span>
-        <span className="rounded-md bg-danger/15 px-2 py-0.5 text-danger">{sl} L</span>
-      </div>
-    </Card>
-  );
-}
-
-function AvgWinLossStat({
-  avgWl,
-  avgW,
-  avgL
-}: {
-  avgWl: number;
-  avgW: number;
-  avgL: number;
-}) {
-  const { fmt } = useMoney();
-  return (
-    <Card className="p-5">
-      <div className="mb-1 text-xs font-medium text-fg-muted">Avg win/loss trade</div>
-      <div className="text-2xl font-semibold tracking-tight text-fg">{formatNumber(avgWl, 2)}</div>
-      <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
-        <div className="rounded-md bg-success/15 px-2 py-0.5 text-success">{fmt(avgW)}</div>
-        <div className="rounded-md bg-danger/15 px-2 py-0.5 text-danger">{fmt(avgL)}</div>
-      </div>
-    </Card>
-  );
-}
-
-function CurrentStreakStat({
-  type,
-  days,
-  trades
-}: {
-  type: "win" | "loss" | null;
-  days: number;
-  trades: number;
-}) {
-  const positive = type === "win";
-  return (
-    <Card className="p-5">
-      <div className="mb-1 text-xs font-medium text-fg-muted">Current streak</div>
-      {type === null ? (
-        <div className="text-2xl font-semibold tracking-tight text-fg-muted">—</div>
-      ) : (
-        <div className={`text-2xl font-semibold tracking-tight ${positive ? "text-success" : "text-danger"}`}>
-          {days} day{days === 1 ? "" : "s"} {positive ? "▲" : "▼"}
-        </div>
-      )}
-      <div className="mt-3 text-[11px] text-fg-muted">
-        {trades} trade{trades === 1 ? "" : "s"} in run
-      </div>
-    </Card>
   );
 }
 
@@ -335,14 +284,11 @@ function MiniStat({
   value: string;
   accent?: "success" | "danger";
 }) {
+  const color = accent === "success" ? "text-success" : accent === "danger" ? "text-danger" : "text-fg";
   return (
     <div>
-      <div className="text-[11px] uppercase tracking-wide text-fg-subtle">{label}</div>
-      <div
-        className={`mt-1 text-base font-semibold ${accent === "success" ? "text-success" : accent === "danger" ? "text-danger" : "text-fg"}`}
-      >
-        {value}
-      </div>
+      <div className="text-xs text-fg-muted">{label}</div>
+      <div className={`text-xl font-semibold tracking-tight ${color}`}>{value}</div>
     </div>
   );
 }
