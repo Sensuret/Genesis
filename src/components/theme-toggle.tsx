@@ -27,14 +27,7 @@ export function ThemeToggle({ className }: { className?: string }) {
       aria-label={`Switch to ${next} mode`}
       title={`Switch to ${next} mode`}
       className={className}
-      onClick={() => {
-        document.documentElement.classList.add("theme-transition");
-        setTheme(next);
-        window.setTimeout(
-          () => document.documentElement.classList.remove("theme-transition"),
-          250
-        );
-      }}
+      onClick={() => setTheme(next)}
     >
       {isLight ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
     </Button>

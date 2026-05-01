@@ -34,14 +34,7 @@ export function ThemePicker() {
           <button
             key={v.id}
             type="button"
-            onClick={() => {
-              document.documentElement.classList.add("theme-transition");
-              setTheme(v.id);
-              window.setTimeout(
-                () => document.documentElement.classList.remove("theme-transition"),
-                250
-              );
-            }}
+            onClick={() => setTheme(v.id)}
             className={cn(
               "group relative flex flex-col gap-3 rounded-2xl border p-4 text-left transition",
               active
