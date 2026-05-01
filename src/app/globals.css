@@ -81,6 +81,28 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 
+/* Permanent, smooth color transitions on every element so theme switches
+   (and any other color change — hover, active state, etc.) ease rather
+   than flash. We deliberately limit the transition to color-related
+   properties so transforms / opacity / size animations stay snappy. */
+*,
+*::before,
+*::after {
+  transition-property: background-color, color, border-color, fill, stroke,
+    box-shadow, outline-color, text-decoration-color;
+  transition-duration: 280ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Respect user OS-level reduced-motion preference. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0ms !important;
+  }
+}
+
 html,
 body {
   min-height: 100vh;
@@ -155,8 +177,4 @@ body {
 }
 ::-webkit-scrollbar-track { background: transparent; }
 
-/* Smooth theme transitions. */
-html.theme-transition,
-html.theme-transition * {
-  transition: background-color 200ms ease, color 200ms ease, border-color 200ms ease;
-}
+
