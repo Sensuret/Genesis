@@ -20,6 +20,21 @@ export function PerfBar({
     <div className="h-64 w-full">
       <ResponsiveContainer>
         <BarChart data={converted} layout="vertical" margin={{ left: 24 }}>
+          <defs>
+            {/* Same glossy emerald/red gradients as the equity curve and
+                daily P&L bars — applied left→right because the bars are
+                horizontal here. */}
+            <linearGradient id="perf-up" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor="rgb(20 83 45)" stopOpacity={0.7} />
+              <stop offset="55%" stopColor="rgb(34 197 94)" stopOpacity={0.9} />
+              <stop offset="100%" stopColor="rgb(63 219 131)" stopOpacity={1} />
+            </linearGradient>
+            <linearGradient id="perf-down" x1="1" y1="0" x2="0" y2="0">
+              <stop offset="0%" stopColor="rgb(127 29 29)" stopOpacity={0.7} />
+              <stop offset="55%" stopColor="rgb(239 68 68)" stopOpacity={0.9} />
+              <stop offset="100%" stopColor="rgb(248 113 113)" stopOpacity={1} />
+            </linearGradient>
+          </defs>
           <XAxis
             type="number"
             stroke="rgb(130 130 150)"
@@ -32,7 +47,7 @@ export function PerfBar({
           <Tooltip formatter={(v: number) => formatMoney(v, currency)} />
           <Bar dataKey="pnl" radius={[0, 6, 6, 0]}>
             {converted.map((d) => (
-              <Cell key={d.key} fill={d.pnl >= 0 ? "rgb(34 197 94)" : "rgb(239 68 68)"} />
+              <Cell key={d.key} fill={d.pnl >= 0 ? "url(#perf-up)" : "url(#perf-down)"} />
             ))}
           </Bar>
         </BarChart>
