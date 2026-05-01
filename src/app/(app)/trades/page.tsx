@@ -135,7 +135,7 @@ export default function TradesPage() {
                       <td className="px-4 py-2.5">{formatNumber(t.entry, 5)}</td>
                       <td className="px-4 py-2.5">{formatNumber(t.exit_price, 5)}</td>
                       <td className="px-4 py-2.5">{formatNumber(t.lot_size)}</td>
-                      <td className={`px-4 py-2.5 ${pnlColor(rr)}`}>{rr === null ? "—" : `${rr.toFixed(2)}R`}</td>
+                      <td className="px-4 py-2.5">{rr === null ? <span className="text-fg-muted">—</span> : `1:${rr.toFixed(2)}`}</td>
                       <td className={`px-4 py-2.5 font-medium ${pnlColor(t.pnl)}`}>{fmt(t.pnl)}</td>
                       <td className="px-4 py-2.5 text-fg-muted">{t.setup_tag ?? "—"}</td>
                       <td className="px-4 py-2.5 text-fg-muted">{t.mistake_tag ?? "—"}</td>

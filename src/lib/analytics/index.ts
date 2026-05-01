@@ -9,15 +9,20 @@ import type { AppFilters } from "@/lib/filters/store";
 export type EquityPoint = { date: string; equity: number; pnl: number };
 
 /**
- * Realised RR computed from entry / stop-loss / exit (and side).
- * Returns null when we don't have enough data to compute it (no SL,
- * or zero risk, etc.).
+ * Planned R:R for a trade — the ratio defined by the trade's
+ * take-profit and stop-loss levels relative to the entry. This is the
+ * "$1 risk → $2 reward = 1:2" number. Always positive (never negative)
+ * because it describes the *intent* of the setup, not the outcome.
+ *
+ * Returns null when the trade is missing entry / stop-loss / take-profit,
+ * or when the levels make no sense (zero risk, or TP/SL on the wrong
+ * side of entry for the trade direction).
  */
 export function realisedRR(t: TradeRow): number | null {
-  if (t.entry == null || t.stop_loss == null || t.exit_price == null) return null;
+  if (t.entry == null || t.stop_loss == null || t.take_profit == null) return null;
   const risk = Math.abs(t.entry - t.stop_loss);
+  const reward = Math.abs(t.take_profit - t.entry);
   if (!Number.isFinite(risk) || risk === 0) return null;
-  const reward = t.side === "short" ? t.entry - t.exit_price : t.exit_price - t.entry;
   if (!Number.isFinite(reward)) return null;
   return reward / risk;
 }
@@ -459,45 +464,37 @@ function quarterKey(d: Date) {
 // ---------------------------------------------------------------------
 // R:R distribution helper
 //
-// For each trade, prefer the live-computed realised RR (entry / SL / exit)
-// because most imports — including MetaTrader — don't carry an "R multiple"
-// column, so `t.result_r` is null on the majority of rows. Falling back to
-// `t.result_r` lets pre-tagged journals still light up the chart.
+// Bucketed by planned R:R (TP vs SL relative to entry). Planned RR is
+// always positive — it's the ratio you set up *before* the trade, so
+// "$1 risk → $2 reward" = 1:2.
 //
-// Trades with no usable RR are excluded entirely (not bucketed as 0R) so
-// the chart reflects only trades where RR is actually known.
+// Buckets group nearby ratios so the histogram is readable: half-step
+// bins below 1:2 (where most setups cluster) then integer bins beyond.
 //
-// Buckets are integer-snapped: a trade at 1.4R counts as "1R", 2.6R as
-// "3R", -0.3R as "0R". Anything beyond ±5R is collapsed into ≤-5R / ≥5R
-// so a single big winner doesn't blow the X axis out.
+// Trades with no usable RR (missing TP, SL or entry) are excluded.
 // ---------------------------------------------------------------------
 const RR_BUCKETS = [
-  "≤-5R", "-4R", "-3R", "-2R", "-1R", "0R", "+1R", "+2R", "+3R", "+4R", "≥+5R"
+  "<1:1", "1:1", "1:1.5", "1:2", "1:3", "1:4", "1:5+"
 ] as const;
 type RrBucket = (typeof RR_BUCKETS)[number];
 
 function rrBucketFor(r: number): RrBucket {
-  if (!Number.isFinite(r)) return "0R";
-  const rounded = Math.round(r);
-  if (rounded <= -5) return "≤-5R";
-  if (rounded >= 5) return "≥+5R";
-  if (rounded === 0) return "0R";
-  if (rounded > 0) return `+${rounded}R` as RrBucket;
-  return `${rounded}R` as RrBucket;
+  if (!Number.isFinite(r) || r < 1) return "<1:1";
+  if (r >= 5) return "1:5+";
+  if (r >= 4) return "1:4";
+  if (r >= 3) return "1:3";
+  if (r >= 2) return "1:2";
+  if (r >= 1.25) return "1:1.5";
+  return "1:1";
 }
 
 export function rDistribution(trades: TradeRow[]) {
   const buckets: Record<RrBucket, number> = {
-    "≤-5R": 0, "-4R": 0, "-3R": 0, "-2R": 0, "-1R": 0,
-    "0R": 0,
-    "+1R": 0, "+2R": 0, "+3R": 0, "+4R": 0, "≥+5R": 0
+    "<1:1": 0, "1:1": 0, "1:1.5": 0, "1:2": 0, "1:3": 0, "1:4": 0, "1:5+": 0
   };
   for (const t of trades) {
-    let r = realisedRR(t);
-    if (r === null && typeof t.result_r === "number" && Number.isFinite(t.result_r)) {
-      r = t.result_r;
-    }
-    if (r === null || !Number.isFinite(r)) continue;
+    const r = realisedRR(t);
+    if (r === null || !Number.isFinite(r) || r <= 0) continue;
     buckets[rrBucketFor(r)] += 1;
   }
   return RR_BUCKETS.map((bucket) => ({ bucket, count: buckets[bucket] }));

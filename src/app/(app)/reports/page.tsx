@@ -193,10 +193,10 @@ function Detailed({ trades, fmt }: { trades: TradeRow[]; fmt: Fmt }) {
 function Risk({ trades, currency }: { trades: TradeRow[]; currency: string }) {
   const dd = maxDrawdown(trades);
   const rf = recoveryFactor(trades);
-  const rrs = trades.map(realisedRR).filter((x): x is number => x !== null);
-  const avgRR = rrs.length ? rrs.reduce((s, x) => s + x, 0) / rrs.length : 0;
-  const winners = rrs.filter((r) => r > 0);
-  const losers = rrs.filter((r) => r < 0);
+  const winRRs = trades.filter((t) => (t.pnl ?? 0) > 0).map(realisedRR).filter((x): x is number => x !== null);
+  const lossRRs = trades.filter((t) => (t.pnl ?? 0) < 0).map(realisedRR).filter((x): x is number => x !== null);
+  const allRRs = trades.map(realisedRR).filter((x): x is number => x !== null);
+  const avgRR = allRRs.length ? allRRs.reduce((s, x) => s + x, 0) / allRRs.length : 0;
   const expectancy = trades.length
     ? trades.reduce((s, t) => s + (t.pnl ?? 0), 0) / trades.length
     : 0;
@@ -205,19 +205,19 @@ function Risk({ trades, currency }: { trades: TradeRow[]; currency: string }) {
       <div className="grid gap-4 md:grid-cols-4">
         <Stat label="Max drawdown" value={dd} format="currency" positive={false} />
         <Stat label="Recovery factor" value={rf} format="number" />
-        <Stat label="Average RR" value={avgRR} format="number" positive={avgRR >= 0} />
+        <Stat label="Avg planned R:R" value={avgRR} format="number" positive={avgRR >= 1} />
         <Stat label="Per-trade expectancy" value={expectancy} format="currency" positive={expectancy >= 0} />
       </div>
       <div className="grid gap-4 md:grid-cols-3">
-        <Stat label="Avg winning RR" value={avg(winners)} format="number" />
-        <Stat label="Avg losing RR" value={avg(losers)} format="number" positive={false} />
-        <Stat label="Trades with RR data" value={rrs.length} format="number" />
+        <Stat label="R:R on winning trades" value={avg(winRRs)} format="number" />
+        <Stat label="R:R on losing trades" value={avg(lossRRs)} format="number" positive={false} />
+        <Stat label="Trades with R:R data" value={allRRs.length} format="number" />
       </div>
       <Card>
-        <CardHeader><CardTitle>RR distribution buckets</CardTitle></CardHeader>
+        <CardHeader><CardTitle>R:R distribution buckets</CardTitle></CardHeader>
         <CardBody>
           <div className="text-xs text-fg-muted">
-            Avg RR is computed from trades where entry, stop-loss and exit price are all present.
+            Planned R:R is computed from each trade&apos;s entry, stop-loss and take-profit levels.
             Display currency: <span className="text-fg">{currency}</span>.
           </div>
         </CardBody>
