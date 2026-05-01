@@ -215,6 +215,7 @@ export default function PropFirmPage() {
               </CardHeader>
               <CardBody>
                 <EquityCurveChart
+                  variant="purple"
                   data={result.phases.flatMap((p) =>
                     p.days.map((d) => ({ date: d.date, equity: d.equity, pnl: d.pnl }))
                   )}
