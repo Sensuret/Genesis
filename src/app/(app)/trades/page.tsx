@@ -80,10 +80,12 @@ export default function TradesPage() {
               <div key={f.id} className="flex items-center justify-between rounded-xl border border-line bg-bg-soft/40 p-3">
                 <button
                   onClick={() => setFileFilter(f.id === fileFilter ? "all" : f.id)}
-                  className={`text-left ${fileFilter === f.id ? "text-brand-300" : ""}`}
+                  className={`min-w-0 flex-1 text-left ${fileFilter === f.id ? "text-brand-300" : ""}`}
                 >
-                  <div className="text-sm font-medium">{f.name}</div>
-                  <div className="text-xs text-fg-subtle">{f.trade_count} trades · {shortDate(f.created_at)}</div>
+                  <div className="truncate text-sm font-medium">{f.name}</div>
+                  <div className="text-xs text-fg-subtle">
+                    {f.trade_count} trades · imported {formatTimestamp(f.created_at)}
+                  </div>
                 </button>
                 <Button variant="ghost" size="icon" onClick={() => deleteFile(f.id)}>
                   <Trash2 className="h-4 w-4 text-danger" />
@@ -113,7 +115,7 @@ export default function TradesPage() {
             <table className="w-full text-left text-sm">
               <thead className="border-b border-line text-xs text-fg-subtle">
                 <tr>
-                  {["Date", "Added", "Pair", "Side", "Session", "Entry", "Exit", "Lot", "RR", "P&L", "Setup", "Mistake"].map((h) => (
+                  {["Date", "Pair", "Side", "Session", "Entry", "Exit", "Lot", "RR", "P&L", "Setup", "Mistake"].map((h) => (
                     <th key={h} className="px-4 py-3 font-medium">{h}</th>
                   ))}
                 </tr>
@@ -125,9 +127,6 @@ export default function TradesPage() {
                   return (
                     <tr key={t.id} className="border-b border-line/50 last:border-0">
                       <td className="px-4 py-2.5 text-fg-muted">{shortDate(t.trade_date)}</td>
-                      <td className="px-4 py-2.5 text-[11px] text-fg-subtle" title={t.created_at}>
-                        {formatTimestamp(t.created_at)}
-                      </td>
                       <td className="px-4 py-2.5 font-medium">{t.pair ?? "—"}</td>
                       <td className="px-4 py-2.5">
                         {t.side ? (

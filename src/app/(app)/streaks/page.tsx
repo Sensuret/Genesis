@@ -109,8 +109,14 @@ export default function StreaksPage() {
         description="Day, week, quarter, year and session streak history. Built-in screenshot share."
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="secondary" onClick={snapshot}>
-              <Camera className="h-4 w-4" /> Screenshot
+            <Button
+              variant="secondary"
+              size="icon"
+              onClick={snapshot}
+              aria-label="Save streaks as PNG"
+              title="Save streaks as PNG"
+            >
+              <Camera className="h-4 w-4" />
             </Button>
             <Button onClick={share}>
               <Share2 className="h-4 w-4" /> Share

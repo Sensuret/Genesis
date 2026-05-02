@@ -102,9 +102,24 @@ function Overview({ trades, currency }: { trades: TradeRow[]; currency: string }
         <Stat label="Total trades" value={trades.length} />
       </div>
       <div className="grid gap-4 md:grid-cols-3">
-        <Stat label="TP" value={breakdown.tp} format="number" />
-        <Stat label="BE" value={breakdown.be} format="number" />
-        <Stat label="SL" value={breakdown.sl} format="number" />
+        <Stat
+          label={<span className="text-success">TP</span>}
+          value={breakdown.tp}
+          format="number"
+          valueClassName="text-success"
+        />
+        <Stat
+          label={<span>BE</span>}
+          value={breakdown.be}
+          format="number"
+          valueClassName="text-fg"
+        />
+        <Stat
+          label={<span className="text-danger">SL</span>}
+          value={breakdown.sl}
+          format="number"
+          valueClassName="text-danger"
+        />
       </div>
       <Card>
         <CardHeader><CardTitle>Daily net P&L</CardTitle></CardHeader>
@@ -244,23 +259,32 @@ function WinsLosses({ trades, fmt }: { trades: TradeRow[]; fmt: Fmt }) {
   return (
     <>
       <div className="grid gap-4 md:grid-cols-3">
-        <Stat label="Wins" value={wins.length} format="number" />
-        <Stat label="Losses" value={losses.length} format="number" positive={false} />
-        <Stat label="Break-even" value={breakEven.length} format="number" />
+        <Stat label="Wins" value={wins.length} format="number" valueClassName="text-success" />
+        <Stat label="Losses" value={losses.length} format="number" valueClassName="text-danger" />
+        <Stat label="Break-even" value={breakEven.length} format="number" valueClassName="text-fg" />
       </div>
       <div className="grid gap-4 md:grid-cols-4">
-        <Stat label="Total winnings" value={totalWin} format="currency" />
-        <Stat label="Total losses" value={totalLoss} format="currency" positive={false} />
-        <Stat label="Largest win" value={largestWin} format="currency" />
-        <Stat label="Largest loss" value={largestLoss} format="currency" positive={false} />
+        <Stat label="Total winnings" value={totalWin} format="currency" valueClassName="text-success" />
+        <Stat label="Total losses" value={totalLoss} format="currency" valueClassName="text-danger" />
+        <Stat label="Largest win" value={largestWin} format="currency" valueClassName="text-success" />
+        <Stat label="Largest loss" value={largestLoss} format="currency" valueClassName="text-danger" />
       </div>
       <Card>
         <CardHeader><CardTitle>Average trade size</CardTitle></CardHeader>
         <CardBody>
           <div className="grid gap-4 md:grid-cols-3 text-sm">
-            <Cell label="Avg win">{fmt(wins.length ? totalWin / wins.length : 0)}</Cell>
-            <Cell label="Avg loss">{fmt(losses.length ? totalLoss / losses.length : 0)}</Cell>
-            <Cell label="Win/loss ratio">{losses.length ? formatNumber(Math.abs(totalWin / totalLoss), 2) : "—"}</Cell>
+            <Cell label="Avg win" valueClassName="text-success">
+              {fmt(wins.length ? totalWin / wins.length : 0)}
+            </Cell>
+            <Cell label="Avg loss" valueClassName="text-danger">
+              {fmt(losses.length ? totalLoss / losses.length : 0)}
+            </Cell>
+            <Cell
+              label="Win/loss ratio"
+              valueClassName={ratioClass(totalWin, totalLoss)}
+            >
+              {losses.length ? formatNumber(Math.abs(totalWin / totalLoss), 2) : "—"}
+            </Cell>
           </div>
         </CardBody>
       </Card>
@@ -268,13 +292,28 @@ function WinsLosses({ trades, fmt }: { trades: TradeRow[]; fmt: Fmt }) {
   );
 }
 
-function Cell({ label, children }: { label: string; children: React.ReactNode }) {
+function Cell({
+  label,
+  children,
+  valueClassName
+}: {
+  label: string;
+  children: React.ReactNode;
+  valueClassName?: string;
+}) {
   return (
     <div className="rounded-xl border border-line bg-bg-elevated p-3">
       <div className="text-xs uppercase tracking-wide text-fg-subtle">{label}</div>
-      <div className="mt-0.5 text-base font-medium">{children}</div>
+      <div className={`mt-0.5 text-base font-medium ${valueClassName ?? ""}`}>{children}</div>
     </div>
   );
+}
+
+function ratioClass(totalWin: number, totalLoss: number): string {
+  if (!totalLoss) return "text-fg";
+  const r = Math.abs(totalWin / totalLoss);
+  if (r >= 1) return "text-success";
+  return "text-danger";
 }
 
 function Compare({ trades, fmt }: { trades: TradeRow[]; fmt: Fmt }) {

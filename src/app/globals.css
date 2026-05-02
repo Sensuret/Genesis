@@ -136,6 +136,14 @@ body {
   to   { opacity: 1; }
 }
 
+@keyframes gns-galaxy-twinkle {
+  0%, 100% { opacity: 0.3; transform: scale(1); }
+  50%      { opacity: 1;   transform: scale(1.15); }
+}
+.animate-galaxy-twinkle {
+  animation: gns-galaxy-twinkle 4.5s ease-in-out infinite;
+}
+
 /* While the View Transition is running, freeze regular element-level
    color transitions so they don't double-animate underneath the
    crossfade snapshot. */

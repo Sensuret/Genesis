@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ScreenshotButton } from "@/components/ui/screenshot-button";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Stat } from "@/components/ui/stat";
@@ -201,6 +202,7 @@ function MyProfile({
     () => (gender === "female" && lastPeriod ? femaleCycleReading(lastPeriod, cycleLength) : null),
     [gender, lastPeriod, cycleLength]
   );
+  const captureRef = useRef<HTMLDivElement>(null);
 
   async function save() {
     if (!snapshot) return;
@@ -227,65 +229,77 @@ function MyProfile({
   }
 
   return (
-    <div className="space-y-6">
-      <Card className="max-w-3xl">
+    <div ref={captureRef} className="space-y-6">
+      <div className="flex justify-end" data-screenshot-ignore="true">
+        <ScreenshotButton
+          targetRef={captureRef}
+          filename={`numerology-profile-${dob || "snapshot"}`}
+          label="Save My Profile snapshot as PNG"
+        />
+      </div>
+      <Card>
         <CardHeader><CardTitle>Your numerology inputs</CardTitle></CardHeader>
-        <CardBody className="space-y-4">
-          <div>
-            <Label>Full name (as on birth certificate)</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <div className="w-44">
-              <Label>Date of birth</Label>
-              <DatePicker
-                value={dob}
-                onChange={(next) => setDob(next)}
-                max={new Date().toISOString().slice(0, 10)}
-                className="w-full"
-                inputClassName="flex-1"
-              />
-            </div>
-            <div className="w-48">
-              <Label>Gender</Label>
-              <Select value={gender} onChange={(e) => setGender(e.target.value as Gender | "")}>
-                <option value="">Select…</option>
-                <option value="male">Male</option>
-                <option value="female">Female</option>
-                <option value="prefer_not_to_say">Prefer not to say</option>
-              </Select>
-            </div>
-            {gender === "female" && (
-              <>
+        <CardBody>
+          <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,18rem)] md:items-start">
+            <div className="space-y-4">
+              <div>
+                <Label>Full name (as on birth certificate)</Label>
+                <Input value={name} onChange={(e) => setName(e.target.value)} />
+              </div>
+              <div className="flex flex-wrap gap-3">
                 <div className="w-44">
-                  <Label>Last period start</Label>
+                  <Label>Date of birth</Label>
                   <DatePicker
-                    value={lastPeriod}
-                    onChange={(next) => setLastPeriod(next)}
+                    value={dob}
+                    onChange={(next) => setDob(next)}
                     max={new Date().toISOString().slice(0, 10)}
                     className="w-full"
                     inputClassName="flex-1"
                   />
                 </div>
-                <div className="w-32">
-                  <Label>Cycle (days)</Label>
-                  <Input
-                    type="number"
-                    min={20}
-                    max={40}
-                    value={cycleLength}
-                    onChange={(e) => setCycleLength(Math.max(20, Math.min(40, Number(e.target.value) || 28)))}
-                  />
+                <div className="w-48">
+                  <Label>Gender</Label>
+                  <Select value={gender} onChange={(e) => setGender(e.target.value as Gender | "")}>
+                    <option value="">Select…</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                    <option value="prefer_not_to_say">Prefer not to say</option>
+                  </Select>
                 </div>
-              </>
-            )}
-          </div>
-          <div className="text-[11px] text-fg-subtle">
-            Gender is used to layer cycle-aware notes on your reading; it stays in your profile only.
-          </div>
-          {error && <div className="rounded-lg bg-danger/10 p-3 text-xs text-danger">{error}</div>}
-          <div className="flex justify-end">
-            <Button disabled={!snapshot || busy} onClick={save}>{busy ? "Saving…" : "Save profile"}</Button>
+                {gender === "female" && (
+                  <>
+                    <div className="w-44">
+                      <Label>Last period start</Label>
+                      <DatePicker
+                        value={lastPeriod}
+                        onChange={(next) => setLastPeriod(next)}
+                        max={new Date().toISOString().slice(0, 10)}
+                        className="w-full"
+                        inputClassName="flex-1"
+                      />
+                    </div>
+                    <div className="w-32">
+                      <Label>Cycle (days)</Label>
+                      <Input
+                        type="number"
+                        min={20}
+                        max={40}
+                        value={cycleLength}
+                        onChange={(e) => setCycleLength(Math.max(20, Math.min(40, Number(e.target.value) || 28)))}
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+              <div className="text-[11px] text-fg-subtle">
+                Gender is used to layer cycle-aware notes on your reading; it stays in your profile only.
+              </div>
+              {error && <div className="rounded-lg bg-danger/10 p-3 text-xs text-danger">{error}</div>}
+              <div className="flex justify-end">
+                <Button disabled={!snapshot || busy} onClick={save}>{busy ? "Saving…" : "Save profile"}</Button>
+              </div>
+            </div>
+            <GalaxyVisual className="hidden md:flex" />
           </div>
         </CardBody>
       </Card>
@@ -640,23 +654,70 @@ function OtherDetailModal({
   const yearSign = chineseZodiacForYear();
   const yearOutlook = yearOutlookFor(snap.chinese, yearSign);
 
+  return <OtherDetailModalContent
+    row={row}
+    snap={snap}
+    sign={sign}
+    compat={compat}
+    ins={ins}
+    gender={gender}
+    cycle={cycle}
+    yearOutlook={yearOutlook}
+    yearSign={yearSign}
+    onClose={onClose}
+  />;
+}
+
+function OtherDetailModalContent({
+  row,
+  snap,
+  sign,
+  compat,
+  ins,
+  gender,
+  cycle,
+  yearOutlook,
+  yearSign,
+  onClose
+}: {
+  row: NumerologyOtherRow;
+  snap: NumerologySnapshot;
+  sign: ReturnType<typeof getSignProfile>;
+  compat: ReturnType<typeof compatibility> | null;
+  ins: ReturnType<typeof advancedInsights>;
+  gender: Gender | "";
+  cycle: ReturnType<typeof femaleCycleReading> | null;
+  yearOutlook: YearCycleOutlook;
+  yearSign: ChineseSign;
+  onClose: () => void;
+}) {
+  const modalRef = useRef<HTMLDivElement>(null);
+
   return (
     <div
       className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
+        ref={modalRef}
         className="relative max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-line bg-bg-elevated p-6 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-xl border border-line bg-bg text-fg-muted transition hover:text-fg"
-          aria-label="Close detail"
-        >
-          <X className="h-4 w-4" />
-        </button>
+        <div className="absolute right-4 top-4 flex items-center gap-2" data-screenshot-ignore="true">
+          <ScreenshotButton
+            targetRef={modalRef}
+            filename={`numerology-${row.full_name.replace(/\s+/g, "-").toLowerCase()}`}
+            label="Save profile snapshot as PNG"
+          />
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-line bg-bg text-fg-muted transition hover:text-fg"
+            aria-label="Close detail"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
 
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <h2 className="text-xl font-semibold">{row.full_name}</h2>
@@ -956,6 +1017,19 @@ function YearCycle({ profile }: { profile: NumerologyProfileRow | null }) {
             )}
             {mySnap ? (
               <p className="text-xs text-fg-muted">{yearOutlookReason(mySnap.chinese, yearSign)}</p>
+            ) : null}
+            {mySnap && personalTheme ? (
+              <div className="flex items-center gap-3 rounded-lg border border-brand-400/40 bg-gradient-to-br from-brand-500/15 to-transparent p-3 text-xs">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-brand-400/40 bg-brand-500/15 text-base font-semibold text-brand-200">
+                  {personalTheme.number}
+                </div>
+                <div className="min-w-0 space-y-0.5">
+                  <div className="text-fg">
+                    Personal Year {personalTheme.number} · {personalTheme.title}
+                  </div>
+                  <div className="text-[11px] text-fg-muted">{personalTheme.focus}</div>
+                </div>
+              </div>
             ) : null}
             <div className="rounded-lg bg-bg-soft/40 p-3 text-[11px] text-fg-subtle">
               <span className="text-fg">Two cycles run in parallel:</span> the 12-year Chinese
@@ -1492,4 +1566,65 @@ function LawCard({ law, accent }: { law: LawEntry; accent: "brand" | "warn" }) {
       </CardBody>
     </Card>
   );
+}
+
+function GalaxyVisual({ className = "" }: { className?: string }) {
+  return (
+    <div
+      className={`relative h-48 overflow-hidden rounded-2xl border border-line shadow-inner md:h-full ${className}`}
+      aria-hidden
+    >
+      <div
+        className="absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(ellipse 120% 90% at 30% 30%, rgba(120,89,219,0.55) 0%, rgba(60,30,120,0.35) 30%, rgba(8,6,24,0.95) 65%, #050313 100%)"
+        }}
+      />
+      <div
+        className="absolute inset-0 mix-blend-screen"
+        style={{
+          background:
+            "radial-gradient(ellipse 70% 50% at 70% 65%, rgba(255,160,200,0.35), transparent 60%), radial-gradient(ellipse 60% 40% at 25% 70%, rgba(80,200,255,0.25), transparent 65%)"
+        }}
+      />
+      <div className="absolute inset-0 opacity-90" style={{ background: galaxyStarsLayer1() }} />
+      <div className="absolute inset-0 opacity-70" style={{ background: galaxyStarsLayer2() }} />
+      <div className="absolute inset-0 animate-galaxy-twinkle opacity-80" style={{ background: galaxyStarsLayer3() }} />
+      <div className="absolute inset-x-0 bottom-0 p-3 text-[10px] uppercase tracking-[0.2em] text-fg-subtle">
+        cosmos · gēnēsis
+      </div>
+    </div>
+  );
+}
+
+function galaxyStarsLayer1(): string {
+  const stars = [
+    [12, 18], [88, 22], [42, 9], [73, 14], [25, 41], [60, 35], [90, 55],
+    [8, 60], [33, 78], [55, 85], [78, 72], [18, 88], [66, 6], [50, 50],
+    [4, 32], [97, 41]
+  ];
+  return stars
+    .map(([x, y]) => `radial-gradient(circle at ${x}% ${y}%, rgba(255,255,255,0.95) 0px, rgba(255,255,255,0) 1.4px)`) 
+    .join(",");
+}
+
+function galaxyStarsLayer2(): string {
+  const stars = [
+    [22, 30], [70, 20], [82, 40], [38, 55], [12, 70], [58, 62], [85, 80],
+    [30, 88], [46, 28], [68, 48], [6, 18], [94, 64], [16, 50], [74, 90]
+  ];
+  return stars
+    .map(([x, y]) => `radial-gradient(circle at ${x}% ${y}%, rgba(220,200,255,0.7) 0px, rgba(220,200,255,0) 1px)`) 
+    .join(",");
+}
+
+function galaxyStarsLayer3(): string {
+  const stars = [
+    [9, 9], [49, 13], [83, 30], [28, 60], [62, 75], [40, 92], [88, 12],
+    [14, 42], [76, 58]
+  ];
+  return stars
+    .map(([x, y]) => `radial-gradient(circle at ${x}% ${y}%, rgba(255,236,180,0.95) 0px, rgba(255,236,180,0) 1.7px)`) 
+    .join(",");
 }
