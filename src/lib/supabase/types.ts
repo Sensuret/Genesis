@@ -20,6 +20,14 @@ export type TradeRow = {
   pnl: number | null;
   commissions: number | null;
   spread: number | null;
+  /** ISO timestamp of when the trade opened (broker time, treated as UTC). */
+  open_time: string | null;
+  /** ISO timestamp of when the trade closed (broker time, treated as UTC). */
+  close_time: string | null;
+  /** Trade duration in seconds (close_time − open_time). */
+  duration_seconds: number | null;
+  /** Net pips moved on the trade (signed: positive = winner direction). */
+  pips: number | null;
   account_balance: number | null;
   setup_tag: string | null;
   mistake_tag: string | null;

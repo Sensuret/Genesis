@@ -21,18 +21,30 @@ export function GsScoreTriangle({
   radarHeight?: string;
 }) {
   const data = [
-    { metric: "Win %", value: clamp(parts.winPct / 70 * 100) },
-    { metric: "Profit factor", value: clamp((parts.profitFactor - 1) / 2 * 100) },
-    { metric: "Avg win/loss", value: clamp((parts.avgWinLoss - 1) / 2 * 100) }
+    { metric: "Win %", value: clamp((parts.winPct / 70) * 100) },
+    { metric: "Profit Factor", value: clamp(((parts.profitFactor - 1) / 2) * 100) },
+    { metric: "Avg W/L", value: clamp(((parts.avgWinLoss - 1) / 2) * 100) }
   ];
 
   return (
     <div className="space-y-3">
       <div className={radarHeight}>
         <ResponsiveContainer>
-          <RadarChart data={data} outerRadius="78%">
+          <RadarChart
+            data={data}
+            outerRadius="68%"
+            cx="50%"
+            cy="50%"
+            margin={{ top: 4, right: 24, bottom: 4, left: 24 }}
+          >
             <PolarGrid stroke="rgba(168, 102, 255, 0.22)" />
-            <PolarAngleAxis dataKey="metric" stroke="rgb(168 102 255)" fontSize={11} />
+            <PolarAngleAxis
+              dataKey="metric"
+              stroke="rgb(168 102 255)"
+              fontSize={11}
+              tick={{ fill: "rgb(168 102 255)" }}
+              tickSize={8}
+            />
             <PolarRadiusAxis tick={false} axisLine={false} domain={[0, 100]} />
             <Radar
               name="GS"

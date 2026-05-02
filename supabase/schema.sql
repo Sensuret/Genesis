@@ -255,6 +255,16 @@ alter table public.trades
   add column if not exists playbook_id uuid references public.playbooks(id) on delete set null;
 create index if not exists trades_user_playbook_idx on public.trades(user_id, playbook_id);
 
+-- Add precise open/close timestamps + derived duration/pips. Older imports
+-- only had `trade_date` (a `date`); these columns let us surface trade
+-- duration, intraday session windows, and pips moved per trade. All nullable
+-- so existing rows aren't disturbed.
+alter table public.trades
+  add column if not exists open_time timestamptz,
+  add column if not exists close_time timestamptz,
+  add column if not exists duration_seconds integer,
+  add column if not exists pips numeric;
+
 -- =====================================================================
 -- user_settings: per-user JSON blob for notebook embeds, scratchpad,
 -- preferred currency, etc. One row per user.

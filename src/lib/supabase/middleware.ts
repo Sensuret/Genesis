@@ -26,10 +26,6 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-
   const { pathname } = request.nextUrl;
 
   const isAuthRoute = pathname.startsWith("/login") || pathname.startsWith("/register");
@@ -40,14 +36,24 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/favicon") ||
     pathname.startsWith("/logo");
 
-  if (!user && !isAuthRoute && !isPublic) {
+  // Performance: every page navigation runs through this middleware (incl.
+  // prefetch RSC requests). We use `getSession()` which reads from cookies
+  // (no network round-trip to Supabase Auth) — fast enough to gate redirects.
+  // True JWT verification still happens in `(app)/layout.tsx` via
+  // `supabase.auth.getUser()`, so security isn't relaxed.
+  const {
+    data: { session }
+  } = await supabase.auth.getSession();
+  const hasSession = !!session?.user;
+
+  if (!hasSession && !isAuthRoute && !isPublic) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("next", pathname);
     return NextResponse.redirect(url);
   }
 
-  if (user && isAuthRoute) {
+  if (hasSession && isAuthRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     url.search = "";
