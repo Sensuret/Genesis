@@ -177,22 +177,22 @@ export default function StreaksPage() {
           <Stat
             label="Best day streak"
             value={best(days)?.length ?? 0}
-            hint={best(days) ? `${fmt(best(days)!.pnl)} earned` : ""}
+            hint={best(days) ? <span className="text-success font-medium">{fmt(best(days)!.pnl)} earned</span> : ""}
           />
           <Stat
             label="Best week streak"
             value={best(weeks)?.length ?? 0}
-            hint={best(weeks) ? `${fmt(best(weeks)!.pnl)} earned` : ""}
+            hint={best(weeks) ? <span className="text-success font-medium">{fmt(best(weeks)!.pnl)} earned</span> : ""}
           />
           <Stat
             label="Best quarter streak"
             value={best(quarters)?.length ?? 0}
-            hint={best(quarters) ? `${fmt(best(quarters)!.pnl)} earned` : ""}
+            hint={best(quarters) ? <span className="text-success font-medium">{fmt(best(quarters)!.pnl)} earned</span> : ""}
           />
           <Stat
             label="Best year streak"
             value={best(years)?.length ?? 0}
-            hint={best(years) ? `${fmt(best(years)!.pnl)} earned` : ""}
+            hint={best(years) ? <span className="text-success font-medium">{fmt(best(years)!.pnl)} earned</span> : ""}
           />
         </div>
 
@@ -221,7 +221,14 @@ export default function StreaksPage() {
                   <div className="text-xs uppercase tracking-wide text-fg-subtle">{s}</div>
                   <div className="mt-1 text-2xl font-semibold">{top?.length ?? 0}</div>
                   <div className="mt-0.5 text-xs text-fg-muted">
-                    {top ? `Best green run · ${fmt(top.pnl)}` : "No streaks yet"}
+                    {top ? (
+                      <>
+                        Best green run ·{" "}
+                        <span className="font-medium text-success">{fmt(top.pnl)}</span>
+                      </>
+                    ) : (
+                      "No streaks yet"
+                    )}
                   </div>
                 </div>
               );

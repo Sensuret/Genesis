@@ -26,14 +26,14 @@ export function NetPnlCard({ value, tradeCount }: { value: number; tradeCount: n
   const { fmt } = useMoney();
   const positive = value >= 0;
   return (
-    <Card className="relative flex h-32 flex-col justify-between p-5">
+    <Card className="relative flex h-24 flex-col justify-between p-3.5">
       <div className="flex items-start justify-between">
         <HeroStatLabel label="Net P&L" />
         <span className="rounded-full bg-bg-soft px-2 py-0.5 text-[10px] font-medium text-fg-muted">
           {tradeCount}
         </span>
       </div>
-      <div className={cn("text-2xl font-semibold tracking-tight", pnlColor(value))}>
+      <div className={cn("text-xl font-semibold tracking-tight", pnlColor(value))}>
         {fmt(value)}
       </div>
     </Card>
@@ -54,10 +54,10 @@ export function WinRateCard({
   losses: number;
 }) {
   return (
-    <Card className="flex h-32 flex-col justify-between p-5">
+    <Card className="flex h-24 flex-col justify-between p-3.5">
       <HeroStatLabel label="Trade win %" />
-      <div className="flex items-end justify-between gap-3">
-        <div className="text-2xl font-semibold tracking-tight text-fg">
+      <div className="flex items-end justify-between gap-2">
+        <div className="text-xl font-semibold tracking-tight text-fg">
           {winRate.toFixed(2)}%
         </div>
         <WinRateGauge wins={wins} breakeven={breakeven} losses={losses} />
@@ -152,9 +152,9 @@ export function AvgWinLossCard({
   const winPct = total ? (winMag / total) * 100 : 50;
   const lossPct = 100 - winPct;
   return (
-    <Card className="flex h-32 flex-col justify-between p-5">
+    <Card className="flex h-24 flex-col justify-between p-3.5">
       <HeroStatLabel label="Avg win/loss trade" />
-      <div className="text-2xl font-semibold tracking-tight text-fg">
+      <div className="text-xl font-semibold tracking-tight text-fg">
         {formatNumber(ratio, 2)}
       </div>
       <div className="space-y-1.5">
@@ -179,10 +179,10 @@ export function ProfitFactorCard({ value }: { value: number }) {
   const color =
     value >= 1.5 ? "rgb(34 197 94)" : value >= 1 ? "rgb(234 179 8)" : "rgb(239 68 68)";
   return (
-    <Card className="flex h-32 flex-col justify-between p-5">
+    <Card className="flex h-24 flex-col justify-between p-3.5">
       <HeroStatLabel label="Profit factor" />
-      <div className="flex items-end justify-between gap-3">
-        <div className="text-2xl font-semibold tracking-tight text-fg">
+      <div className="flex items-end justify-between gap-2">
+        <div className="text-xl font-semibold tracking-tight text-fg">
           {Number.isFinite(value) ? value.toFixed(2) : "—"}
         </div>
         <ProfitFactorRing fill={fill} color={color} />
@@ -231,8 +231,8 @@ export function CurrentStreakCard({
   tradesType: "win" | "loss" | null;
 }) {
   return (
-    <Card className="flex h-32 flex-col p-4">
-      <div className="mb-2">
+    <Card className="flex h-24 flex-col p-3">
+      <div className="mb-1">
         <HeroStatLabel label="Current streak" />
       </div>
       <div className="grid grid-cols-2 gap-2">

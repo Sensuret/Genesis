@@ -12,9 +12,13 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { createClient } from "@/lib/supabase/client";
 import {
   buildNumerologySnapshot, compatibility, advancedInsights,
-  chineseZodiacForYear, chineseEmoji, yearOutlookFor, chinesePersonalityNote,
+  chineseZodiacForYear, chineseEmoji, yearOutlookFor, yearOutlookReason,
+  chinesePersonalityNote,
   NUMBER_VIBRATIONS, femaleCycleReading,
-  type NumerologySnapshot, type ChineseSign, type YearCycleOutlook
+  personalYearTheme, PERSONAL_YEAR_CYCLE,
+  UNIVERSAL_LAWS, MARITIME_LAWS,
+  type NumerologySnapshot, type ChineseSign, type YearCycleOutlook,
+  type LawEntry
 } from "@/lib/numerology";
 import {
   getSignProfile,
@@ -69,6 +73,7 @@ const TABS = [
   "Lunar Cycle",
   "Year Cycle",
   "Horoscope",
+  "Laws",
   "Education Insights",
   "General Knowledge",
   "Advanced Insights"
@@ -160,6 +165,8 @@ export default function NumerologyPage() {
         <YearCycle profile={my} />
       ) : tab === "Horoscope" ? (
         <HoroscopeView profile={my} />
+      ) : tab === "Laws" ? (
+        <LawsView />
       ) : tab === "Education Insights" ? (
         <Education />
       ) : tab === "General Knowledge" ? (
@@ -221,49 +228,63 @@ function MyProfile({
 
   return (
     <div className="space-y-6">
-      <Card>
+      <Card className="max-w-3xl">
         <CardHeader><CardTitle>Your numerology inputs</CardTitle></CardHeader>
-        <CardBody className="grid gap-4 md:grid-cols-2">
-          <div><Label>Full name (as on birth certificate)</Label><Input value={name} onChange={(e) => setName(e.target.value)} /></div>
-          <div><Label>Date of birth</Label><DatePicker value={dob} onChange={(next) => setDob(next)} max={new Date().toISOString().slice(0, 10)} className="w-full" inputClassName="flex-1" /></div>
+        <CardBody className="space-y-4">
           <div>
-            <Label>Gender</Label>
-            <Select value={gender} onChange={(e) => setGender(e.target.value as Gender | "")}>
-              <option value="">Select…</option>
-              <option value="male">Male</option>
-              <option value="female">Female</option>
-              <option value="prefer_not_to_say">Prefer not to say</option>
-            </Select>
-            <div className="mt-1 text-[11px] text-fg-subtle">
-              Used to layer cycle-aware notes on your reading. Stays in your profile only.
-            </div>
+            <Label>Full name (as on birth certificate)</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} />
           </div>
-          {gender === "female" && (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Last period start</Label>
-                <DatePicker
-                  value={lastPeriod}
-                  onChange={(next) => setLastPeriod(next)}
-                  max={new Date().toISOString().slice(0, 10)}
-                  className="w-full"
-                  inputClassName="flex-1"
-                />
-              </div>
-              <div>
-                <Label>Avg cycle length</Label>
-                <Input
-                  type="number"
-                  min={20}
-                  max={40}
-                  value={cycleLength}
-                  onChange={(e) => setCycleLength(Math.max(20, Math.min(40, Number(e.target.value) || 28)))}
-                />
-              </div>
+          <div className="flex flex-wrap gap-3">
+            <div className="w-44">
+              <Label>Date of birth</Label>
+              <DatePicker
+                value={dob}
+                onChange={(next) => setDob(next)}
+                max={new Date().toISOString().slice(0, 10)}
+                className="w-full"
+                inputClassName="flex-1"
+              />
             </div>
-          )}
-          {error && <div className="md:col-span-2 rounded-lg bg-danger/10 p-3 text-xs text-danger">{error}</div>}
-          <div className="md:col-span-2 flex justify-end">
+            <div className="w-48">
+              <Label>Gender</Label>
+              <Select value={gender} onChange={(e) => setGender(e.target.value as Gender | "")}>
+                <option value="">Select…</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+                <option value="prefer_not_to_say">Prefer not to say</option>
+              </Select>
+            </div>
+            {gender === "female" && (
+              <>
+                <div className="w-44">
+                  <Label>Last period start</Label>
+                  <DatePicker
+                    value={lastPeriod}
+                    onChange={(next) => setLastPeriod(next)}
+                    max={new Date().toISOString().slice(0, 10)}
+                    className="w-full"
+                    inputClassName="flex-1"
+                  />
+                </div>
+                <div className="w-32">
+                  <Label>Cycle (days)</Label>
+                  <Input
+                    type="number"
+                    min={20}
+                    max={40}
+                    value={cycleLength}
+                    onChange={(e) => setCycleLength(Math.max(20, Math.min(40, Number(e.target.value) || 28)))}
+                  />
+                </div>
+              </>
+            )}
+          </div>
+          <div className="text-[11px] text-fg-subtle">
+            Gender is used to layer cycle-aware notes on your reading; it stays in your profile only.
+          </div>
+          {error && <div className="rounded-lg bg-danger/10 p-3 text-xs text-danger">{error}</div>}
+          <div className="flex justify-end">
             <Button disabled={!snapshot || busy} onClick={save}>{busy ? "Saving…" : "Save profile"}</Button>
           </div>
         </CardBody>
@@ -306,8 +327,20 @@ function MyProfile({
             <Card>
               <CardHeader><CardTitle>Western zodiac</CardTitle></CardHeader>
               <CardBody>
-                <div className="text-3xl">{sign.symbol} <span className="font-semibold">{sign.sign}</span></div>
-                <div className="mt-1 text-xs text-fg-muted">{sign.element} · {sign.modality} · ruled by {sign.ruler}</div>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-2xl font-semibold">{sign.sign}</div>
+                    <div className="mt-1 text-xs text-fg-muted">
+                      {sign.element} · {sign.modality} · ruled by {sign.ruler}
+                    </div>
+                  </div>
+                  <div
+                    className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border border-line bg-gradient-to-br from-brand-500/20 to-brand-500/5 text-4xl"
+                    aria-hidden
+                  >
+                    {sign.symbol}
+                  </div>
+                </div>
                 <div className="mt-3 rounded-xl border border-line bg-bg-soft/40 p-3 text-xs">
                   <div className="font-medium text-fg">Trade archetype</div>
                   <div className="mt-1 text-fg-muted">{sign.tradeArchetype}</div>
@@ -317,8 +350,22 @@ function MyProfile({
             <Card>
               <CardHeader><CardTitle>Chinese zodiac</CardTitle></CardHeader>
               <CardBody>
-                <div className="text-2xl font-semibold">{snapshot.chinese}</div>
-                <div className="mt-1 text-xs text-fg-muted">Enemy sign: {snapshot.enemyChinese}</div>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-2xl font-semibold">{snapshot.chinese}</div>
+                    <div className="mt-1 text-xs text-fg-muted">Enemy sign: {snapshot.enemyChinese}</div>
+                  </div>
+                  <div
+                    className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border border-line bg-gradient-to-br from-warn/25 to-warn/5 text-4xl"
+                    aria-hidden
+                  >
+                    {chineseEmoji(snapshot.chinese)}
+                  </div>
+                </div>
+                <div className="mt-3 rounded-xl border border-line bg-bg-soft/40 p-3 text-xs">
+                  <div className="font-medium text-fg">Personality</div>
+                  <div className="mt-1 text-fg-muted">{chinesePersonalityNote(snapshot.chinese)}</div>
+                </div>
               </CardBody>
             </Card>
             <Card>
@@ -869,6 +916,7 @@ function YearCycle({ profile }: { profile: NumerologyProfileRow | null }) {
 
   const mySnap = profile ? buildNumerologySnapshot(profile.full_name, profile.dob) : null;
   const myOutlook = mySnap ? yearOutlookFor(mySnap.chinese, yearSign) : null;
+  const personalTheme = mySnap ? personalYearTheme(mySnap.personalYear) : null;
 
   const grouped: Record<YearCycleOutlook, ChineseSign[]> = {
     great: [], good: [], average: [], tough: [], challenging: []
@@ -906,49 +954,105 @@ function YearCycle({ profile }: { profile: NumerologyProfileRow | null }) {
                 this year.
               </div>
             )}
-            {mySnap && myOutlook ? (
-              <p className="text-xs text-fg-muted">
-                {myOutlook === "great"
-                  ? `${mySnap.chinese} is in trine with the ${yearSign} — momentum on your side. This is a year to lean in, scale conviction setups, and take aim at bigger goals. Edges compound.`
-                  : myOutlook === "good"
-                  ? `${mySnap.chinese} sits in its own resonance — solid presence, steady wins. Consolidate gains, refine systems, build the playbook for next year.`
-                  : myOutlook === "challenging"
-                  ? `${mySnap.chinese} sits opposite the ${yearSign} — the universe brings friction. Protect downside, slow scaling, focus on capital preservation. Lay low and let the year pass.`
-                  : myOutlook === "tough"
-                  ? `${mySnap.chinese} clashes with the trine of the ${yearSign} — expect headwinds in collaborations and outside pressure. Trade smaller, choose battles.`
-                  : `${mySnap.chinese} has a neutral relationship with the ${yearSign} — neither tailwind nor headwind. Stay disciplined; let your edge do the work.`}
-              </p>
+            {mySnap ? (
+              <p className="text-xs text-fg-muted">{yearOutlookReason(mySnap.chinese, yearSign)}</p>
             ) : null}
+            <div className="rounded-lg bg-bg-soft/40 p-3 text-[11px] text-fg-subtle">
+              <span className="text-fg">Two cycles run in parallel:</span> the 12-year Chinese
+              animal cycle (Rat → Pig) and the 1–9 numerology Personal Year cycle. The animal
+              describes the world's energy this year; your Personal Year describes the chapter
+              <em> you</em> are on inside that world.
+            </div>
           </div>
+        </CardBody>
+      </Card>
+
+      {personalTheme && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Your Personal Year — {personalTheme.number} · {personalTheme.title}</CardTitle>
+          </CardHeader>
+          <CardBody className="grid gap-4 md:grid-cols-[auto,1fr] md:items-start">
+            <div className="text-center">
+              <div className="flex h-20 w-20 items-center justify-center rounded-2xl border border-brand-400/40 bg-gradient-to-br from-brand-500/30 to-brand-500/5 text-4xl font-semibold text-brand-200">
+                {personalTheme.number}
+              </div>
+              <div className="mt-2 text-xs text-fg-subtle">Cycle 1 → 9 → repeat</div>
+            </div>
+            <div className="space-y-3 text-sm">
+              <p className="text-fg-muted"><span className="text-fg">Vibration: </span>{personalTheme.vibration}</p>
+              <p className="text-fg-muted"><span className="text-fg">Focus this year: </span>{personalTheme.focus}</p>
+              <p className="text-fg-muted"><span className="text-fg">Trading lens: </span>{personalTheme.trade}</p>
+              <p className="text-fg-muted"><span className="text-warn">Watch out for: </span>{personalTheme.caution}</p>
+            </div>
+          </CardBody>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader><CardTitle>The 1 → 9 Personal Year cycle</CardTitle></CardHeader>
+        <CardBody className="grid gap-2 md:grid-cols-3 lg:grid-cols-3">
+          {PERSONAL_YEAR_CYCLE.map((t) => {
+            const isYours = mySnap?.personalYear === t.number;
+            return (
+              <div
+                key={t.number}
+                className={`rounded-xl border p-3 ${
+                  isYours ? "border-brand-400 bg-brand-500/10" : "border-line bg-bg-soft/40"
+                }`}
+              >
+                <div className="flex items-baseline justify-between">
+                  <div className="text-2xl font-semibold">{t.number}</div>
+                  <div className="text-xs text-fg-subtle">{t.title}</div>
+                </div>
+                <div className="mt-1 text-xs text-fg-muted">{t.vibration}</div>
+                <div className="mt-1 text-xs text-fg-muted">{t.focus}</div>
+              </div>
+            );
+          })}
         </CardBody>
       </Card>
 
       <Card>
         <CardHeader><CardTitle>How every sign fares this year</CardTitle></CardHeader>
-        <CardBody className="space-y-3">
+        <CardBody className="space-y-4">
           {(["great", "good", "average", "tough", "challenging"] as YearCycleOutlook[]).map((outlook) => (
-            <div key={outlook} className="flex flex-wrap items-center gap-2">
-              <span
-                className={`inline-flex w-32 shrink-0 items-center justify-center rounded-full border px-2 py-1 text-[10px] uppercase tracking-wide ${OUTLOOK_BADGE[outlook].cls}`}
-              >
-                {OUTLOOK_BADGE[outlook].label}
-              </span>
-              <div className="flex flex-wrap gap-1.5">
+            <div key={outlook} className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span
+                  className={`inline-flex shrink-0 items-center justify-center rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide ${OUTLOOK_BADGE[outlook].cls}`}
+                >
+                  {OUTLOOK_BADGE[outlook].label}
+                </span>
+                <span className="text-[11px] text-fg-subtle">
+                  {outlook === "great" && "In a trine triangle with this year's animal — energies cooperate."}
+                  {outlook === "good" && "Same sign as the year — your own resonance amplified."}
+                  {outlook === "average" && "Neutral relationship with this year's animal."}
+                  {outlook === "tough" && "Indirect clash via the trine of your opposing sign."}
+                  {outlook === "challenging" && "Direct enemy axis — opposite this year's animal on the wheel."}
+                </span>
+              </div>
+              <div className="grid gap-1.5 sm:grid-cols-2 md:grid-cols-3">
                 {grouped[outlook].length === 0 ? (
                   <span className="text-xs text-fg-subtle">—</span>
                 ) : (
                   grouped[outlook].map((s) => (
-                    <span
+                    <div
                       key={s}
-                      className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs ${
+                      className={`rounded-lg border p-2 text-xs ${
                         mySnap?.chinese === s
-                          ? "border-brand-400 bg-brand-500/15 text-brand-200"
-                          : "border-line bg-bg-soft text-fg"
+                          ? "border-brand-400 bg-brand-500/10"
+                          : "border-line bg-bg-soft/40"
                       }`}
                     >
-                      <span>{chineseEmoji(s)}</span>
-                      <span>{s}</span>
-                    </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg leading-none">{chineseEmoji(s)}</span>
+                        <span className="font-medium text-fg">{s}</span>
+                      </div>
+                      <div className="mt-1 text-[11px] text-fg-muted">
+                        {yearOutlookReason(s, yearSign)}
+                      </div>
+                    </div>
                   ))
                 )}
               </div>
@@ -1320,5 +1424,72 @@ function GeneralKnowledge() {
         </CardBody>
       </Card>
     </div>
+  );
+}
+
+function LawsView() {
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader><CardTitle>Laws of the Universe</CardTitle></CardHeader>
+        <CardBody className="space-y-2 text-sm text-fg-muted">
+          <p>
+            Twelve <span className="text-fg">universal laws</span> distilled from hermetic and
+            wisdom traditions. Treat them as lenses for self-awareness — not financial or
+            medical advice. They apply to <em>all</em> of life, not just trading.
+          </p>
+        </CardBody>
+      </Card>
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        {UNIVERSAL_LAWS.map((law) => <LawCard key={law.name} law={law} accent="brand" />)}
+      </div>
+
+      <Card>
+        <CardHeader><CardTitle>Laws of the Sea (Maritime Laws)</CardTitle></CardHeader>
+        <CardBody className="space-y-2 text-sm text-fg-muted">
+          <p>
+            Selected principles from international maritime law. Genesis treats them as
+            metaphors for navigating life — capital, relationships, ventures and reputation are
+            all "vessels" you sail. Each entry includes the law's literal meaning and a way to
+            apply it in everyday living.
+          </p>
+        </CardBody>
+      </Card>
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        {MARITIME_LAWS.map((law) => <LawCard key={law.name} law={law} accent="warn" />)}
+      </div>
+    </div>
+  );
+}
+
+function LawCard({ law, accent }: { law: LawEntry; accent: "brand" | "warn" }) {
+  const numCls =
+    accent === "brand"
+      ? "border-brand-400/40 bg-gradient-to-br from-brand-500/25 to-brand-500/5 text-brand-200"
+      : "border-warn/40 bg-gradient-to-br from-warn/25 to-warn/5 text-warn";
+  return (
+    <Card>
+      <CardBody className="space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-base font-semibold text-fg">{law.name}</div>
+            <div className="text-xs text-fg-muted">{law.oneLiner}</div>
+          </div>
+          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border text-base font-semibold ${numCls}`}>
+            §
+          </div>
+        </div>
+        <div className="rounded-lg border border-line bg-bg-soft/40 p-3 text-xs text-fg-muted">
+          <div className="mb-1 text-[10px] uppercase tracking-wide text-fg-subtle">Meaning</div>
+          {law.meaning}
+        </div>
+        <div className="rounded-lg border border-line bg-bg-soft/40 p-3 text-xs text-fg-muted">
+          <div className="mb-1 text-[10px] uppercase tracking-wide text-fg-subtle">How to use it</div>
+          {law.use}
+        </div>
+      </CardBody>
+    </Card>
   );
 }

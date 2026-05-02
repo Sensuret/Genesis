@@ -19,7 +19,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <Sidebar />
         <div className="flex h-screen min-w-0 flex-1 flex-col">
           <TopBar />
-          <main className="flex-1 overflow-y-auto overscroll-contain bg-bg p-8">
+          <main className="flex-1 overflow-y-auto overscroll-contain bg-bg p-5 lg:p-6">
             {children}
           </main>
         </div>

@@ -95,7 +95,7 @@ export function TradeCalendar({
   );
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-2">
       {/* Header: month nav + monthly stats pill */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
@@ -148,19 +148,19 @@ export function TradeCalendar({
 
       {/* Weekday headers — 7 day columns + week summary column at the end. */}
       <div
-        className="grid gap-1.5 text-center text-[10px] uppercase tracking-wide text-fg-subtle"
-        style={{ gridTemplateColumns: "repeat(7, minmax(0, 1fr)) 6.5rem" }}
+        className="grid gap-1 text-center text-[10px] uppercase tracking-wide text-fg-subtle"
+        style={{ gridTemplateColumns: "repeat(7, minmax(0, 1fr)) 5.5rem" }}
       >
         {WEEKDAYS.map((w) => (
-          <div key={w} className="py-1">{w}</div>
+          <div key={w} className="py-0.5">{w}</div>
         ))}
-        <div className="py-1" />
+        <div className="py-0.5" />
       </div>
 
       {/* Calendar grid: each week row spans 7 day cells + 1 week summary cell. */}
       <div
-        className="grid gap-1.5"
-        style={{ gridTemplateColumns: "repeat(7, minmax(0, 1fr)) 6.5rem" }}
+        className="grid gap-1"
+        style={{ gridTemplateColumns: "repeat(7, minmax(0, 1fr)) 5.5rem" }}
       >
         {weekRows.map((week, rowIdx) => (
           <Fragment key={rowIdx}>
@@ -181,13 +181,13 @@ export function TradeCalendar({
 
 function CalendarCell({ date, bucket }: { date: Date | null; bucket: DayBucket | null }) {
   const { fmt } = useMoney();
-  if (!date) return <div className="h-20 rounded-lg" />;
+  if (!date) return <div className="h-16 rounded-lg" />;
   const isToday = sameDay(date, new Date());
   if (!bucket) {
     return (
       <div
         className={cn(
-          "flex h-20 flex-col rounded-lg border border-line/60 bg-bg-soft/40 px-1.5 py-1 text-[11px] text-fg-subtle",
+          "flex h-16 flex-col rounded-lg border border-line/60 bg-bg-soft/40 px-1.5 py-1 text-[10px] text-fg-subtle",
           isToday && "border-brand-500/60"
         )}
       >
@@ -200,7 +200,7 @@ function CalendarCell({ date, bucket }: { date: Date | null; bucket: DayBucket |
   return (
     <div
       className={cn(
-        "flex h-20 flex-col justify-between rounded-lg border px-1.5 py-1 text-[11px]",
+        "flex h-16 flex-col justify-between rounded-lg border px-1.5 py-1 text-[10px]",
         positive
           ? "border-success/40 bg-success/15 text-success"
           : "border-danger/40 bg-danger/15 text-danger",
@@ -208,14 +208,13 @@ function CalendarCell({ date, bucket }: { date: Date | null; bucket: DayBucket |
       )}
     >
       <div className="flex items-center justify-end">
-        <span className="text-[10px] font-medium opacity-70">{date.getDate()}</span>
+        <span className="text-[9px] font-medium opacity-70">{date.getDate()}</span>
       </div>
-      <div className="space-y-0.5 leading-tight">
-        <div className="truncate text-xs font-semibold">{fmt(bucket.pnl)}</div>
-        <div className="truncate text-[10px] opacity-80">
-          {bucket.trades} trade{bucket.trades === 1 ? "" : "s"}
+      <div className="space-y-0 leading-tight">
+        <div className="truncate text-[11px] font-semibold">{fmt(bucket.pnl)}</div>
+        <div className="truncate text-[9px] opacity-80">
+          {bucket.trades} trade{bucket.trades === 1 ? "" : "s"} · {winPct.toFixed(0)}%
         </div>
-        <div className="truncate text-[10px] opacity-70">{winPct.toFixed(1)}%</div>
       </div>
     </div>
   );
@@ -225,19 +224,19 @@ function WeekSummary({ index, usd, days }: { index: number; usd: number; days: n
   const { fmt } = useMoney();
   const positive = usd >= 0;
   return (
-    <div className="flex h-20 flex-col justify-center rounded-lg border border-line bg-bg-soft/60 px-2.5 py-1.5">
-      <div className="text-[10px] uppercase tracking-wide text-fg-subtle">
+    <div className="flex h-16 flex-col justify-center rounded-lg border border-line bg-bg-soft/60 px-2 py-1">
+      <div className="text-[9px] uppercase tracking-wide text-fg-subtle">
         Week {index}
       </div>
       <div
         className={cn(
-          "mt-0.5 text-sm font-semibold",
+          "mt-0.5 text-[12px] font-semibold leading-tight",
           days === 0 ? "text-fg-muted" : positive ? "text-success" : "text-danger"
         )}
       >
         {days === 0 ? fmt(0) : fmt(usd)}
       </div>
-      <div className="text-[10px] text-fg-subtle">
+      <div className="text-[9px] text-fg-subtle">
         {days} day{days === 1 ? "" : "s"}
       </div>
     </div>

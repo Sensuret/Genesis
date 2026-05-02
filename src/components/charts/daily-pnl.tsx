@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from "recharts";
 import { useMoney } from "@/lib/filters/store";
-import { formatMoney } from "@/lib/fx";
+import { formatMoney, formatMoneyCompact } from "@/lib/fx";
 
 /**
  * Daily P&L bar chart with glossy green/red gradient bars — bright
@@ -20,7 +20,7 @@ export function DailyPnlChart({ data }: { data: Array<{ date: string; pnl: numbe
   return (
     <div className="h-64 w-full">
       <ResponsiveContainer>
-        <BarChart data={converted}>
+        <BarChart data={converted} margin={{ top: 8, right: 8, left: -10, bottom: 0 }}>
           <defs>
             {/* Emerald + coral palette matching the equity curve. */}
             <linearGradient id="bar-up" x1="0" y1="0" x2="0" y2="1">
@@ -38,10 +38,12 @@ export function DailyPnlChart({ data }: { data: Array<{ date: string; pnl: numbe
           <XAxis dataKey="date" stroke="rgb(130 130 150)" fontSize={11} tickLine={false} axisLine={false} />
           <YAxis
             stroke="rgb(130 130 150)"
-            fontSize={11}
+            fontSize={10}
             tickLine={false}
             axisLine={false}
-            tickFormatter={(v: number) => formatMoney(v, currency)}
+            width={48}
+            tickMargin={2}
+            tickFormatter={(v: number) => formatMoneyCompact(v, currency)}
           />
           <Tooltip formatter={(v: number) => formatMoney(v, currency)} />
           <Bar dataKey="pnl" radius={[6, 6, 0, 0]}>

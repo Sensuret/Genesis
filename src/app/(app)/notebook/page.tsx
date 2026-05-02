@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ExternalLink, Plus, Save, Trash2 } from "lucide-react";
+import { ExternalLink, Plus, Save, StickyNote, Trash2, X } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
-import type { NotebookEmbed, UserSettingsData } from "@/lib/supabase/types";
+import type { NotebookEmbed, NotebookNote, UserSettingsData } from "@/lib/supabase/types";
 
 function newId(): string {
   if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
@@ -37,6 +37,16 @@ function readSettings(data: unknown): UserSettingsData {
   if (typeof data.notebook_scratchpad === "string") {
     out.notebook_scratchpad = data.notebook_scratchpad;
   }
+  if (Array.isArray(data.notebook_notes)) {
+    out.notebook_notes = data.notebook_notes.filter(
+      (x): x is NotebookNote =>
+        isJsonObject(x) &&
+        typeof x.id === "string" &&
+        typeof x.name === "string" &&
+        typeof x.body === "string" &&
+        typeof x.created_at === "string"
+    );
+  }
   return out;
 }
 
@@ -45,8 +55,11 @@ export default function NotebookPage() {
   const [embeds, setEmbeds] = useState<NotebookEmbed[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [scratch, setScratch] = useState("");
-  const [scratchDirty, setScratchDirty] = useState(false);
+  const [notes, setNotes] = useState<NotebookNote[]>([]);
   const [savingScratch, setSavingScratch] = useState(false);
+  const [namePromptOpen, setNamePromptOpen] = useState(false);
+  const [pendingName, setPendingName] = useState("");
+  const [openNote, setOpenNote] = useState<NotebookNote | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [adderOpen, setAdderOpen] = useState(false);
@@ -73,6 +86,7 @@ export default function NotebookPage() {
       setEmbeds(parsed.notebook_embeds ?? []);
       setActiveId(parsed.notebook_active_id ?? parsed.notebook_embeds?.[0]?.id ?? null);
       setScratch(parsed.notebook_scratchpad ?? "");
+      setNotes(parsed.notebook_notes ?? []);
       setLoading(false);
     })();
   }, []);
@@ -125,18 +139,44 @@ export default function NotebookPage() {
     await persist({ notebook_active_id: id });
   }
 
-  async function saveScratch() {
+  function openSavePrompt() {
+    if (!scratch.trim()) return;
+    setPendingName(`Note · ${new Date().toLocaleDateString()}`);
+    setNamePromptOpen(true);
+  }
+
+  async function confirmSaveNote() {
+    const name = pendingName.trim();
+    if (!name || !scratch.trim()) return;
     setSavingScratch(true);
-    await persist({ notebook_scratchpad: scratch });
+    const note: NotebookNote = {
+      id: newId(),
+      name,
+      body: scratch,
+      created_at: new Date().toISOString()
+    };
+    const nextNotes = [note, ...notes];
+    setNotes(nextNotes);
+    setScratch("");
+    setNamePromptOpen(false);
+    setPendingName("");
+    await persist({ notebook_notes: nextNotes, notebook_scratchpad: "" });
     setSavingScratch(false);
-    setScratchDirty(false);
+  }
+
+  async function deleteNote(id: string) {
+    if (!confirm("Delete this note?")) return;
+    const nextNotes = notes.filter((n) => n.id !== id);
+    setNotes(nextNotes);
+    if (openNote?.id === id) setOpenNote(null);
+    await persist({ notebook_notes: nextNotes });
   }
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Notebook"
-        description="Embed any Notion / Coda / Google Doc / Docs URL and keep a quick scratchpad for in-session notes."
+        description="Embed any Notion / Coda / Google Doc URL, jot quick scratchpad notes, and save them to your personal Notes library."
         actions={
           active ? (
             <a href={active.url} target="_blank" rel="noreferrer">
@@ -189,7 +229,7 @@ export default function NotebookPage() {
           {!loading && embeds.length === 0 && !adderOpen && (
             <Empty
               title="No embeds yet"
-              description="Click 'Add embed' and paste any shareable URL (Notion, Coda, Google Doc, etc.). Your embeds and scratchpad live in your account, so they follow you across devices."
+              description="Click 'Add embed' and paste any shareable URL (Notion, Coda, Google Doc, etc.). Your embeds, scratchpad and notes live in your account, so they follow you across devices."
             />
           )}
 
@@ -240,24 +280,164 @@ export default function NotebookPage() {
           <CardTitle>Scratchpad</CardTitle>
           <Button
             variant="secondary"
-            onClick={saveScratch}
-            disabled={!scratchDirty || savingScratch}
+            onClick={openSavePrompt}
+            disabled={!scratch.trim() || savingScratch}
           >
-            <Save className="h-4 w-4" /> {savingScratch ? "Saving…" : scratchDirty ? "Save" : "Saved"}
+            <Save className="h-4 w-4" /> {savingScratch ? "Saving…" : "Save as note"}
           </Button>
         </CardHeader>
         <CardBody>
           <Textarea
             rows={10}
             value={scratch}
-            onChange={(e) => {
-              setScratch(e.target.value);
-              setScratchDirty(true);
-            }}
-            placeholder="Quick notes, plays for the day, post-session thoughts…"
+            onChange={(e) => setScratch(e.target.value)}
+            placeholder="Quick notes, plays for the day, post-session thoughts…  Click 'Save as note' and give it a name to file it in your Notes below."
           />
         </CardBody>
       </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Notes</CardTitle>
+          <span className="text-xs text-fg-subtle">
+            {notes.length} saved {notes.length === 1 ? "note" : "notes"}
+          </span>
+        </CardHeader>
+        <CardBody>
+          {notes.length === 0 ? (
+            <div className="text-sm text-fg-muted">
+              Notes you save from the scratchpad will appear here. Click any to open it
+              full-screen.
+            </div>
+          ) : (
+            <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
+              {notes.map((n) => (
+                <div
+                  key={n.id}
+                  className="group flex flex-col rounded-xl border border-line bg-bg-soft/40 p-3 transition hover:border-brand-400 hover:bg-bg-soft/70"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setOpenNote(n)}
+                    className="flex flex-1 flex-col items-start text-left"
+                  >
+                    <div className="flex w-full items-center gap-2">
+                      <StickyNote className="h-3.5 w-3.5 shrink-0 text-brand-300" />
+                      <span className="truncate text-sm font-medium text-fg">{n.name}</span>
+                    </div>
+                    <div className="mt-1 line-clamp-2 text-xs text-fg-muted">
+                      {n.body || <em className="text-fg-subtle">empty</em>}
+                    </div>
+                  </button>
+                  <div className="mt-2 flex items-center justify-between text-[10px] text-fg-subtle">
+                    <span>{formatNoteTimestamp(n.created_at)}</span>
+                    <button
+                      type="button"
+                      onClick={() => deleteNote(n.id)}
+                      className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-fg-subtle hover:bg-danger/10 hover:text-danger"
+                      aria-label="Delete note"
+                    >
+                      <Trash2 className="h-3 w-3" /> Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardBody>
+      </Card>
+
+      {namePromptOpen && (
+        <div
+          className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/60 p-4"
+          onClick={() => !savingScratch && setNamePromptOpen(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-line bg-bg-elevated p-5 shadow-card"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-semibold">Name this note</h3>
+              <button
+                type="button"
+                onClick={() => !savingScratch && setNamePromptOpen(false)}
+                className="text-fg-subtle hover:text-fg"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <Label>Note name</Label>
+            <Input
+              autoFocus
+              value={pendingName}
+              onChange={(e) => setPendingName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") confirmSaveNote();
+              }}
+              placeholder="e.g. Pre-NFP plan"
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => setNamePromptOpen(false)}
+                disabled={savingScratch}
+              >
+                Cancel
+              </Button>
+              <Button onClick={confirmSaveNote} disabled={!pendingName.trim() || savingScratch}>
+                {savingScratch ? "Saving…" : "Save note"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {openNote && (
+        <div
+          className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setOpenNote(null)}
+        >
+          <div
+            className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl border border-line bg-bg-elevated p-5 shadow-card"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="truncate text-base font-semibold">{openNote.name}</h3>
+                <div className="mt-0.5 text-[11px] text-fg-subtle">
+                  Saved {formatNoteTimestamp(openNote.created_at)}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => deleteNote(openNote.id)}
+                  className="inline-flex items-center gap-1 rounded-lg border border-line px-2 py-1 text-xs text-fg-muted hover:border-danger hover:text-danger"
+                >
+                  <Trash2 className="h-3.5 w-3.5" /> Delete
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOpenNote(null)}
+                  className="text-fg-subtle hover:text-fg"
+                  aria-label="Close note"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            <div className="overflow-y-auto whitespace-pre-wrap rounded-xl border border-line bg-bg-soft/40 p-4 text-sm text-fg">
+              {openNote.body || <em className="text-fg-subtle">This note is empty.</em>}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+function formatNoteTimestamp(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return `${d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })} · ${d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`;
 }

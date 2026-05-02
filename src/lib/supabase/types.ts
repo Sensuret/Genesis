@@ -112,6 +112,14 @@ export type UserSettingsRow = {
   updated_at: string;
 };
 
+export type NotebookNote = {
+  id: string;
+  name: string;
+  body: string;
+  /** ISO timestamp of when the note was first saved. */
+  created_at: string;
+};
+
 export type NotebookEmbed = {
   id: string;
   label: string;
@@ -122,6 +130,7 @@ export type UserSettingsData = {
   notebook_embeds?: NotebookEmbed[];
   notebook_active_id?: string | null;
   notebook_scratchpad?: string;
+  notebook_notes?: NotebookNote[];
 };
 
 type Insertable<T extends { id: string; created_at: string }> = Omit<

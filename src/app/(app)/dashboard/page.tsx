@@ -273,15 +273,13 @@ function MiniStat({
 }
 
 function DailyPnlCard({ data }: { data: ReturnType<typeof equityCurve> }) {
-  const ref = useRef<HTMLDivElement>(null);
   return (
-    <Card ref={ref} className="flex flex-1 flex-col">
-      <CardHeader>
+    <Card className="flex flex-1 flex-col">
+      <CardHeader className="px-4 py-3">
         <CardTitle>Daily net cumulative P&L</CardTitle>
-        <ScreenshotButton targetRef={ref} filename="daily-net-cumulative-pnl" />
       </CardHeader>
-      <CardBody className="flex-1">
-        <div className="h-full min-h-[240px]">
+      <CardBody className="flex-1 px-3 pb-3">
+        <div className="h-full min-h-[180px]">
           <EquityCurveChart data={data} height="h-full" />
         </div>
       </CardBody>
@@ -290,15 +288,13 @@ function DailyPnlCard({ data }: { data: ReturnType<typeof equityCurve> }) {
 }
 
 function GsScoreCard({ parts, score }: { parts: Parameters<typeof gsScore>[0]; score: number }) {
-  const ref = useRef<HTMLDivElement>(null);
   return (
-    <Card ref={ref} className="flex flex-1 flex-col">
-      <CardHeader>
+    <Card className="flex flex-1 flex-col">
+      <CardHeader className="px-4 py-3">
         <CardTitle>GS Score</CardTitle>
-        <ScreenshotButton targetRef={ref} filename="gs-score" />
       </CardHeader>
-      <CardBody className="flex-1">
-        <GsScoreRadar parts={parts} score={score} radarHeight="h-44" />
+      <CardBody className="flex-1 px-4 pb-4">
+        <GsScoreRadar parts={parts} score={score} radarHeight="h-36" />
       </CardBody>
     </Card>
   );
@@ -308,10 +304,10 @@ function CalendarCard({ trades }: { trades: import("@/lib/supabase/types").Trade
   const ref = useRef<HTMLDivElement>(null);
   return (
     <Card ref={ref} className="lg:col-span-8">
-      <CardHeader>
+      <CardHeader className="px-4 py-3">
         <CardTitle>Trade calendar</CardTitle>
       </CardHeader>
-      <CardBody>
+      <CardBody className="px-4 pb-4">
         <TradeCalendar
           trades={trades}
           headerActions={<ScreenshotButton targetRef={ref} filename="trade-calendar" className="h-7 w-7" />}

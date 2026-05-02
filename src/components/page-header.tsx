@@ -16,7 +16,7 @@ export function PageHeader({
   className?: string;
 }) {
   return (
-    <header className={cn("mb-6 flex items-end justify-between gap-4", className)}>
+    <header className={cn("mb-4 flex items-end justify-between gap-4", className)}>
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
