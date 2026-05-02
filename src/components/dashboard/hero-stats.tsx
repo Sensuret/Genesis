@@ -217,38 +217,42 @@ function ProfitFactorRing({ fill, color }: { fill: number; color: string }) {
 
 export function CurrentStreakCard({
   daysCurrent,
-  daysBest,
   daysType,
+  daysBestWin,
+  daysBestLoss,
   tradesCurrent,
-  tradesBest,
-  tradesType
+  tradesType,
+  tradesBestWin,
+  tradesBestLoss
 }: {
   daysCurrent: number;
-  daysBest: number;
   daysType: "win" | "loss" | null;
+  daysBestWin: number;
+  daysBestLoss: number;
   tradesCurrent: number;
-  tradesBest: number;
   tradesType: "win" | "loss" | null;
+  tradesBestWin: number;
+  tradesBestLoss: number;
 }) {
   return (
-    <Card className="flex min-h-[7.25rem] flex-col overflow-hidden p-3">
-      <div className="mb-1">
-        <HeroStatLabel label="Current streak" />
-      </div>
+    <Card className="flex h-24 flex-col justify-between p-3.5">
+      <HeroStatLabel label="Current streak" />
       <div className="grid min-w-0 grid-cols-2 gap-2">
         <StreakColumn
           title="DAYS"
           value={daysCurrent}
-          best={daysBest}
           type={daysType}
-          unit="day"
+          bestWin={daysBestWin}
+          bestLoss={daysBestLoss}
+          unit="d"
         />
         <StreakColumn
           title="TRADES"
           value={tradesCurrent}
-          best={tradesBest}
           type={tradesType}
-          unit="trade"
+          bestWin={tradesBestWin}
+          bestLoss={tradesBestLoss}
+          unit="t"
         />
       </div>
     </Card>
@@ -258,68 +262,61 @@ export function CurrentStreakCard({
 function StreakColumn({
   title,
   value,
-  best,
   type,
+  bestWin,
+  bestLoss,
   unit
 }: {
   title: string;
   value: number;
-  best: number;
   type: "win" | "loss" | null;
-  unit: "day" | "trade";
+  bestWin: number;
+  bestLoss: number;
+  unit: "d" | "t";
 }) {
-  const positive = type === "win";
-  const ringColor = type === null
-    ? "rgb(160 160 175)"
-    : positive
+  const ringColor =
+    type === "win"
       ? "rgb(34 197 94)"
-      : "rgb(239 68 68)";
-  const radius = 11;
+      : type === "loss"
+        ? "rgb(239 68 68)"
+        : "rgb(160 160 175)";
+  const radius = 9;
   const circumference = 2 * Math.PI * radius;
-  // Fill the ring proportional to current vs best — falls back to full if best===0.
-  const fill = best > 0 ? Math.min(value / best, 1) : value > 0 ? 1 : 0;
+  const ringMax = Math.max(bestWin, bestLoss, value, 1);
+  const fill = Math.min(value / ringMax, 1);
   return (
-    <div className="flex min-w-0 flex-col gap-1">
-      <div className="flex min-w-0 items-center gap-1.5">
-        <svg viewBox="0 0 28 28" className="h-7 w-7 shrink-0" aria-hidden>
-          <circle cx="14" cy="14" r={radius} fill="none" stroke="rgba(127,127,150,0.18)" strokeWidth="3" />
-          <circle
-            cx="14"
-            cy="14"
-            r={radius}
-            fill="none"
-            stroke={ringColor}
-            strokeWidth="3"
-            strokeLinecap="round"
-            strokeDasharray={`${fill * circumference} ${circumference}`}
-            transform="rotate(-90 14 14)"
-          />
-          <text x="14" y="18" textAnchor="middle" fontSize="10" fontWeight="600" fill="currentColor" className="text-fg">
-            {value}
-          </text>
-        </svg>
-        <span className="truncate text-[10px] font-semibold uppercase tracking-wide text-fg-subtle">
+    <div className="flex min-w-0 items-center gap-1.5">
+      <svg viewBox="0 0 24 24" className="h-6 w-6 shrink-0" aria-hidden>
+        <circle cx="12" cy="12" r={radius} fill="none" stroke="rgba(127,127,150,0.18)" strokeWidth="2.5" />
+        <circle
+          cx="12"
+          cy="12"
+          r={radius}
+          fill="none"
+          stroke={ringColor}
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeDasharray={`${fill * circumference} ${circumference}`}
+          transform="rotate(-90 12 12)"
+        />
+        <text x="12" y="15.5" textAnchor="middle" fontSize="9" fontWeight="700" fill="currentColor" className="fill-fg">
+          {value}
+        </text>
+      </svg>
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="truncate text-[9px] font-semibold uppercase tracking-wide text-fg-subtle">
           {title}
         </span>
-      </div>
-      <div className="flex min-w-0 flex-wrap items-center gap-1 text-[10px] leading-tight">
-        <span
-          className={cn(
-            "whitespace-nowrap rounded-md px-1.5 py-0.5 font-medium",
-            type === null
-              ? "bg-fg-muted/15 text-fg-muted"
-              : positive
-                ? "bg-success/15 text-success"
-                : "bg-danger/15 text-danger"
-          )}
-        >
-          {value} {unit}{value === 1 ? "" : "s"}
-        </span>
-        {best > 0 && (
-          <span className="whitespace-nowrap rounded-md bg-bg-soft px-1.5 py-0.5 font-medium text-fg-muted">
-            {best} {unit}{best === 1 ? "" : "s"}
+        <div className="flex min-w-0 items-center gap-1 text-[9px] leading-tight">
+          <span className="whitespace-nowrap rounded bg-success/15 px-1 py-0.5 font-semibold text-success">
+            {bestWin}
+            {unit}
           </span>
-        )}
+          <span className="whitespace-nowrap rounded bg-danger/15 px-1 py-0.5 font-semibold text-danger">
+            {bestLoss}
+            {unit}
+          </span>
+        </div>
       </div>
     </div>
   );

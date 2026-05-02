@@ -25,6 +25,7 @@ import {
 import { detectSession } from "@/lib/parser";
 import { PerfBar } from "@/components/charts/perf-bar";
 import { DailyPnlChart } from "@/components/charts/daily-pnl";
+import { DayViewModal } from "@/components/day-view-modal";
 import { Empty } from "@/components/ui/empty";
 import { formatNumber, formatPercent } from "@/lib/utils";
 import type { TradeRow } from "@/lib/supabase/types";
@@ -365,6 +366,7 @@ function Compare({ trades, fmt }: { trades: TradeRow[]; fmt: Fmt }) {
 
 function CalendarView({ trades, fmt }: { trades: TradeRow[]; fmt: Fmt }) {
   const days = useMemo(() => dailyPnl(trades), [trades]);
+  const [openDate, setOpenDate] = useState<string | null>(null);
   // Available years in the data; default cursor to most recent.
   const years = useMemo(() => {
     const set = new Set<number>();
@@ -452,10 +454,18 @@ function CalendarView({ trades, fmt }: { trades: TradeRow[]; fmt: Fmt }) {
               maxAbs={maxAbs}
               total={monthlyTotals[m]}
               fmt={fmt}
+              onDayClick={(iso) => setOpenDate(iso)}
             />
           ))}
         </div>
       </CardBody>
+      {openDate && (
+        <DayViewModal
+          date={openDate}
+          trades={trades}
+          onClose={() => setOpenDate(null)}
+        />
+      )}
     </Card>
   );
 }
@@ -472,7 +482,8 @@ function MiniMonth({
   byDay,
   maxAbs,
   total,
-  fmt
+  fmt,
+  onDayClick
 }: {
   year: number;
   month: number;
@@ -480,6 +491,7 @@ function MiniMonth({
   maxAbs: number;
   total: { pnl: number; trades: number };
   fmt: Fmt;
+  onDayClick?: (iso: string) => void;
 }) {
   const first = new Date(year, month, 1);
   const last = new Date(year, month + 1, 0);
@@ -517,7 +529,8 @@ function MiniMonth({
           if (!d) {
             return <span key={`empty-${i}`} className="aspect-square" />;
           }
-          const iso = d.toISOString().slice(0, 10);
+          // Build ISO key in local time (avoid UTC drift swallowing a day).
+          const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
           const cell = byDay.get(iso);
           const intensity = cell && maxAbs ? Math.min(Math.abs(cell.pnl) / maxAbs, 1) : 0;
           const tone = !cell
@@ -532,10 +545,29 @@ function MiniMonth({
               ? `rgba(34,197,94,${0.18 + intensity * 0.55})`
               : `rgba(239,68,68,${0.18 + intensity * 0.55})`
             : undefined;
+          const clickable = !!cell && !!onDayClick;
+          const className = `flex aspect-square items-center justify-center rounded text-[10px] font-medium transition ${tone}${
+            clickable ? " cursor-pointer hover:scale-[1.08] hover:shadow" : ""
+          }`;
+          if (clickable) {
+            return (
+              <button
+                type="button"
+                key={iso}
+                onClick={() => onDayClick(iso)}
+                className={className}
+                style={bg ? { backgroundColor: bg } : undefined}
+                title={`${iso} · ${cell!.trades} trade${cell!.trades === 1 ? "" : "s"} · ${fmt(cell!.pnl)}`}
+                aria-label={`Open day view for ${iso}`}
+              >
+                {d.getDate()}
+              </button>
+            );
+          }
           return (
             <span
               key={iso}
-              className={`flex aspect-square items-center justify-center rounded text-[10px] font-medium ${tone}`}
+              className={className}
               style={bg ? { backgroundColor: bg } : undefined}
               title={cell ? `${iso} · ${cell.trades} trade${cell.trades === 1 ? "" : "s"} · ${fmt(cell.pnl)}` : iso}
             >

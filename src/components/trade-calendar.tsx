@@ -20,11 +20,14 @@ const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export function TradeCalendar({
   trades,
-  headerActions
+  headerActions,
+  onDayClick
 }: {
   trades: TradeRow[];
   /** Optional buttons rendered to the right of the monthly stats pill. */
   headerActions?: React.ReactNode;
+  /** When provided, day cells with trades become clickable and emit the ISO date. */
+  onDayClick?: (isoDate: string) => void;
 }) {
   const [cursor, setCursor] = useState<Date>(() => new Date());
   const { fmt } = useMoney();
@@ -171,6 +174,7 @@ export function TradeCalendar({
                 key={`${rowIdx}-${dayIdx}`}
                 date={cell}
                 bucket={cell ? byDay.get(isoKey(cell)) ?? null : null}
+                onClick={onDayClick}
               />
             ))}
             <WeekSummary index={rowIdx + 1} usd={week.totalUsd} days={week.days} />
@@ -181,7 +185,15 @@ export function TradeCalendar({
   );
 }
 
-function CalendarCell({ date, bucket }: { date: Date | null; bucket: DayBucket | null }) {
+function CalendarCell({
+  date,
+  bucket,
+  onClick
+}: {
+  date: Date | null;
+  bucket: DayBucket | null;
+  onClick?: (isoDate: string) => void;
+}) {
   const { fmt } = useMoney();
   if (!date) return <div className="h-16 rounded-lg" />;
   const isToday = sameDay(date, new Date());
@@ -201,16 +213,17 @@ function CalendarCell({ date, bucket }: { date: Date | null; bucket: DayBucket |
   // Win rate matches the global formula: wins / (wins + losses), BE excluded.
   const decided = bucket.wins + bucket.losses;
   const winPct = decided ? (bucket.wins / decided) * 100 : 0;
-  return (
-    <div
-      className={cn(
-        "flex h-16 flex-col justify-between rounded-lg border px-1.5 py-1 text-[10px]",
-        positive
-          ? "border-success/40 bg-success/15 text-success"
-          : "border-danger/40 bg-danger/15 text-danger",
-        isToday && "ring-1 ring-brand-500/60"
-      )}
-    >
+  const cellClasses = cn(
+    "flex h-16 flex-col justify-between rounded-lg border px-1.5 py-1 text-[10px] transition",
+    positive
+      ? "border-success/40 bg-success/15 text-success"
+      : "border-danger/40 bg-danger/15 text-danger",
+    isToday && "ring-1 ring-brand-500/60",
+    onClick &&
+      "cursor-pointer hover:-translate-y-px hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60"
+  );
+  const inner = (
+    <>
       <div className="flex items-center justify-end">
         <span className="text-[9px] font-medium opacity-70">{date.getDate()}</span>
       </div>
@@ -220,8 +233,21 @@ function CalendarCell({ date, bucket }: { date: Date | null; bucket: DayBucket |
           {bucket.trades} trade{bucket.trades === 1 ? "" : "s"} · {winPct.toFixed(0)}%
         </div>
       </div>
-    </div>
+    </>
   );
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={() => onClick(isoKey(date))}
+        className={cn(cellClasses, "text-left")}
+        aria-label={`Open day view for ${isoKey(date)}`}
+      >
+        {inner}
+      </button>
+    );
+  }
+  return <div className={cellClasses}>{inner}</div>;
 }
 
 function WeekSummary({ index, usd, days }: { index: number; usd: number; days: number }) {

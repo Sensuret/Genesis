@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { ScreenshotButton } from "@/components/ui/screenshot-button";
+import { DayViewModal } from "@/components/day-view-modal";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
 import { useTrades } from "@/lib/hooks/use-trades";
@@ -129,21 +130,6 @@ export default function DashboardPage() {
     );
   }
 
-  // Best-streak metrics for the secondary badge on the streak card —
-  // current streak's matching "best" sits next to it.
-  const dayBestForType =
-    dayStreakNow.type === "win"
-      ? dayStreakBest.winDays
-      : dayStreakNow.type === "loss"
-        ? dayStreakBest.lossDays
-        : Math.max(dayStreakBest.winDays, dayStreakBest.lossDays);
-  const tradeBestForType =
-    tradeStreakNow.type === "win"
-      ? tradeStreakBest.winTrades
-      : tradeStreakNow.type === "loss"
-        ? tradeStreakBest.lossTrades
-        : Math.max(tradeStreakBest.winTrades, tradeStreakBest.lossTrades);
-
   return (
     <div className="space-y-3">
       <PageHeader
@@ -173,11 +159,13 @@ export default function DashboardPage() {
         <ProfitFactorCard value={stats.pf} />
         <CurrentStreakCard
           daysCurrent={dayStreakNow.days}
-          daysBest={dayBestForType}
           daysType={dayStreakNow.type}
+          daysBestWin={dayStreakBest.winDays}
+          daysBestLoss={dayStreakBest.lossDays}
           tradesCurrent={tradeStreakNow.trades}
-          tradesBest={tradeBestForType}
           tradesType={tradeStreakNow.type}
+          tradesBestWin={tradeStreakBest.winTrades}
+          tradesBestLoss={tradeStreakBest.lossTrades}
         />
       </div>
 
@@ -302,6 +290,7 @@ function GsScoreCard({ parts, score }: { parts: Parameters<typeof gsScore>[0]; s
 
 function CalendarCard({ trades }: { trades: import("@/lib/supabase/types").TradeRow[] }) {
   const ref = useRef<HTMLDivElement>(null);
+  const [openDate, setOpenDate] = useState<string | null>(null);
   return (
     <Card ref={ref} className="lg:col-span-8">
       <CardHeader className="px-4 py-3">
@@ -311,8 +300,16 @@ function CalendarCard({ trades }: { trades: import("@/lib/supabase/types").Trade
         <TradeCalendar
           trades={trades}
           headerActions={<ScreenshotButton targetRef={ref} filename="trade-calendar" className="h-7 w-7" />}
+          onDayClick={(iso) => setOpenDate(iso)}
         />
       </CardBody>
+      {openDate && (
+        <DayViewModal
+          date={openDate}
+          trades={trades}
+          onClose={() => setOpenDate(null)}
+        />
+      )}
     </Card>
   );
 }
