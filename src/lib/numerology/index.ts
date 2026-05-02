@@ -450,6 +450,151 @@ export function yearOutlookFor(personalSign: ChineseSign, yearSign: ChineseSign)
   return "average";
 }
 
+/**
+ * Human-readable reason for the outlook — explains the trine / enemy /
+ * indirect-clash logic so the rating doesn't look arbitrary. Used on the
+ * Year Cycle page next to each sign's outlook chip.
+ */
+export function yearOutlookReason(personalSign: ChineseSign, yearSign: ChineseSign): string {
+  if (CHINESE_ENEMY[personalSign] === yearSign) {
+    return `${yearSign} sits opposite ${personalSign} on the 12-year wheel — direct clash year. Expect resistance, big lessons, slower compounding.`;
+  }
+  if (personalSign === yearSign) {
+    return `Your own year (Ben Ming Nian). Energy mirrors you — the spotlight is on, but so are your own shadows. Run leaner, stay disciplined.`;
+  }
+  if (CHINESE_TRINE[personalSign]?.includes(yearSign)) {
+    return `${yearSign} sits in your trine triangle (${[personalSign, ...CHINESE_TRINE[personalSign]].join(" – ")}). Energies cooperate — alliances, momentum and lucky breaks all amplified.`;
+  }
+  if (CHINESE_TRINE[CHINESE_ENEMY[personalSign]]?.includes(yearSign)) {
+    const enemy = CHINESE_ENEMY[personalSign];
+    return `${yearSign} is in the trine of your opposing sign (${enemy}). The year's energy backs your opposition rather than you — friendlier than a direct clash, but expect indirect headwinds.`;
+  }
+  return `Neutral relationship between ${personalSign} and ${yearSign}. Average year — you make it whatever you put in.`;
+}
+
+// ---------------------------------------------------------------------
+// Personal Year (1–9) cycle — numerology, distinct from the 12-year
+// Chinese animal cycle. Each calendar year you sit on a different
+// number from 1 to 9, then the cycle repeats.
+// ---------------------------------------------------------------------
+export type PersonalYearTheme = {
+  number: number;
+  title: string;
+  vibration: string;
+  focus: string;
+  trade: string;
+  caution: string;
+};
+
+const PERSONAL_YEAR_THEMES: Record<number, PersonalYearTheme> = {
+  1: {
+    number: 1,
+    title: "New Beginnings",
+    vibration: "Genesis. Plant the seed for the next 9-year arc.",
+    focus: "Start things, take initiative, don't be afraid to begin again.",
+    trade: "Open new accounts, try new strategies, pioneer setups — but small size while you learn.",
+    caution: "Impatience. Don't burn capital trying to force the year to peak too early."
+  },
+  2: {
+    number: 2,
+    title: "Patience & Partnership",
+    vibration: "Slow build. Relationships and quiet progress matter.",
+    focus: "Strengthen alliances, find a mentor, refine — don't push for the spotlight.",
+    trade: "Pair-trades, mentorship rooms, joint ventures. Volume modest, edge sharp.",
+    caution: "Sensitivity overload — protect your nervous system from market noise."
+  },
+  3: {
+    number: 3,
+    title: "Expansion & Expression",
+    vibration: "Joy, creativity, communication.",
+    focus: "Share your edge — content, journaling, voice notes, recap videos.",
+    trade: "Multiple themes okay; let curiosity drive research, then narrow.",
+    caution: "Distraction. Cap shots-per-day so creativity doesn't become over-trading."
+  },
+  4: {
+    number: 4,
+    title: "Foundation & Discipline",
+    vibration: "Build the structure. Boring becomes beautiful.",
+    focus: "Systems, rules, backtests, journaling, infrastructure.",
+    trade: "Best year for rule-based execution — automate or write checklists.",
+    caution: "Rigidity — don't refuse to adapt to a new regime when data says so."
+  },
+  5: {
+    number: 5,
+    title: "Change & Freedom",
+    vibration: "Movement, travel, sensory intelligence.",
+    focus: "Expand horizons, change environments, explore new asset classes.",
+    trade: "News-driven and momentum trades fit; size up around catalysts.",
+    caution: "Restlessness. Anchor with a daily ritual or you'll over-trade."
+  },
+  6: {
+    number: 6,
+    title: "Responsibility & Service",
+    vibration: "Family, community, healing.",
+    focus: "Give back — teach, mentor, support, and tighten home/work life.",
+    trade: "Stable, low-volatility plays; treat capital as something you steward.",
+    caution: "Over-helping. Protect your own capital before saving someone else's."
+  },
+  7: {
+    number: 7,
+    title: "Reflection & Mastery",
+    vibration: "Solitude, study, deep analysis.",
+    focus: "Research, reading, retreat — let inner work compound.",
+    trade: "Quant, pattern research, backtests. A great year to specialise.",
+    caution: "Paralysis-by-analysis. Set a 'good enough' shipping bar so trades still ship."
+  },
+  8: {
+    number: 8,
+    title: "Power & Abundance",
+    vibration: "Manifestation, scale, executive energy.",
+    focus: "Push for breakthroughs in income and reputation. Money flows now.",
+    trade: "Scale prop firm passes, take bigger A+ setups, build the funnel.",
+    caution: "Greed. Define your stop-out and walk-away rule before you start."
+  },
+  9: {
+    number: 9,
+    title: "Closure & Release",
+    vibration: "Endings, completion, letting go.",
+    focus: "Finish chapters. Prune accounts, retire bad habits, redistribute gains.",
+    trade: "Cut losing strategies, harvest gains, journal what worked over the 9 years.",
+    caution: "Holding losers for the story. Cut sharper — the year wants endings."
+  },
+  11: {
+    number: 11,
+    title: "Illumination (master)",
+    vibration: "11/2 — visionary intuition. Trust early signals.",
+    focus: "Macro patterns, themes that span months. Inspire and lead.",
+    trade: "Trend-following, theme bets, narrative-driven plays.",
+    caution: "Nervous-system overload. Ground daily — breathwork before market open."
+  },
+  22: {
+    number: 22,
+    title: "Master Builder",
+    vibration: "22/4 — large-scale construction; turning vision into structure.",
+    focus: "Funds, multi-account scaling, infrastructure, hiring.",
+    trade: "Build systems for size; institutional discipline.",
+    caution: "Scope creep. Partition the year into 90-day milestones."
+  },
+  33: {
+    number: 33,
+    title: "Master Teacher",
+    vibration: "33/6 — service through wisdom; trade as a curriculum.",
+    focus: "Teach the system; your portfolio benefits from articulation.",
+    trade: "Educational content alongside trading; mentorship at scale.",
+    caution: "Burnout from helping others. Protect deep-work blocks."
+  }
+};
+
+/** Look up a Personal Year theme by reduced number (1–9 plus master 11/22/33). */
+export function personalYearTheme(py: number): PersonalYearTheme {
+  return PERSONAL_YEAR_THEMES[py] ?? PERSONAL_YEAR_THEMES[1];
+}
+
+/** All 9 themes (no masters) — used to render the full 1–9 cycle wheel. */
+export const PERSONAL_YEAR_CYCLE: PersonalYearTheme[] = [1, 2, 3, 4, 5, 6, 7, 8, 9].map(
+  (n) => PERSONAL_YEAR_THEMES[n]
+);
+
 const CHINESE_PERSONALITY: Record<ChineseSign, string> = {
   Rat: "Resourceful, fast learner, social opportunist; thrives in info-rich markets.",
   Ox: "Patient, methodical, dependable; loves a system, hates impulsive size.",
@@ -621,3 +766,188 @@ export function femaleCycleReading(
     energy: energyNotes[phase]
   };
 }
+
+// ---------------------------------------------------------------------
+// Laws of the Universe + Maritime Laws (general-purpose, not trading-
+// specific). Used in Numerology → Laws tab as a reference reading.
+// ---------------------------------------------------------------------
+export type LawEntry = {
+  name: string;
+  oneLiner: string;
+  meaning: string;
+  use: string;
+};
+
+export const UNIVERSAL_LAWS: LawEntry[] = [
+  {
+    name: "Law of Divine Oneness",
+    oneLiner: "Everything is connected.",
+    meaning:
+      "Every thought, word, action and reaction is woven into the same fabric. Your inner state ripples outward — others, markets, environment all respond.",
+    use: "Before any big decision, check the inner state first. A clean inner = clean outer outcomes."
+  },
+  {
+    name: "Law of Vibration",
+    oneLiner: "Everything moves and vibrates.",
+    meaning:
+      "All matter and thought has a frequency. You attract people, opportunities and outcomes that match your dominant vibration.",
+    use: "Track your daily 'state' the way you track P&L. Raise it deliberately (movement, music, gratitude, sleep)."
+  },
+  {
+    name: "Law of Correspondence",
+    oneLiner: "As above, so below. As within, so without.",
+    meaning:
+      "The patterns in your inner world mirror the patterns in your outer world. If chaos is showing up outside, look inside.",
+    use: "When the day spirals (revenge trades, conflict at home), pause and audit the internal pattern instead of fighting the external."
+  },
+  {
+    name: "Law of Attraction",
+    oneLiner: "Like attracts like.",
+    meaning:
+      "Energy of a similar frequency clusters. What you focus on, you amplify. Worry attracts more reasons to worry; gratitude attracts more reasons to be grateful.",
+    use: "Curate your inputs ruthlessly — feeds, conversations, accounts you follow. They set your default frequency."
+  },
+  {
+    name: "Law of Inspired Action",
+    oneLiner: "Vision without action is hallucination.",
+    meaning:
+      "Manifestation requires aligned movement. The Universe meets you halfway, but only after you take the first concrete step.",
+    use: "Translate every goal into the smallest next physical action you can take today. Ship the smallest unit."
+  },
+  {
+    name: "Law of Perpetual Transmutation of Energy",
+    oneLiner: "Energy moves into form and back again.",
+    meaning:
+      "Higher vibrations dissolve and transform lower ones. You can convert fear into focus, anger into action, grief into wisdom.",
+    use: "Never suppress an emotion — channel it into productive movement (training, journaling, building, walking)."
+  },
+  {
+    name: "Law of Cause and Effect",
+    oneLiner: "Every cause has an effect; every effect has a cause.",
+    meaning:
+      "Karma in plain English. The seeds you plant — habits, thoughts, words, behaviour — determine the harvest. Nothing is random.",
+    use: "Audit causes weekly: which inputs produced which outputs? Plant differently if you want different fruit."
+  },
+  {
+    name: "Law of Compensation",
+    oneLiner: "You are paid in proportion to the value you bring.",
+    meaning:
+      "Reward follows contribution. Money, opportunities, friendships — all compensation for the value you've already given.",
+    use: "Stop asking 'how do I earn more?' and start asking 'how do I serve more deeply?' The money is downstream."
+  },
+  {
+    name: "Law of Relativity",
+    oneLiner: "Nothing is good or bad until compared.",
+    meaning:
+      "Every situation is neutral until your mind assigns meaning. Your problem looks different next to someone else's; your win does too.",
+    use: "When stuck, zoom out. Compare your hardest day to someone else's hardest year. Perspective resets the nervous system."
+  },
+  {
+    name: "Law of Polarity",
+    oneLiner: "Everything has an opposite.",
+    meaning:
+      "Hot ↔ cold, love ↔ fear, win ↔ loss. The two ends are the same scale. You can dial up the opposite instead of fighting the current state.",
+    use: "Stuck in fear? Don't fight it — turn the dial toward courage. Same axis, different end."
+  },
+  {
+    name: "Law of Rhythm",
+    oneLiner: "Everything moves in cycles.",
+    meaning:
+      "Markets, moods, seasons, relationships — nothing is linear. Highs are followed by lows; lows are followed by highs.",
+    use: "Trade smaller in your low cycles. Press in the high ones. Stop expecting linear progress."
+  },
+  {
+    name: "Law of Gender",
+    oneLiner: "Masculine and feminine energies exist in everything.",
+    meaning:
+      "Action / receptivity, strategy / intuition, structure / flow. Both are required to create — neither alone is enough.",
+    use: "Match the energy to the task — strategy work needs masculine; insight work needs feminine. Balance both daily."
+  }
+];
+
+export const MARITIME_LAWS: LawEntry[] = [
+  {
+    name: "Right of Navigation",
+    oneLiner: "The freedom to move through international waters.",
+    meaning:
+      "Vessels (and by analogy, capital) have a fundamental right to move through the high seas. No single power owns them. In life: nobody owns your direction.",
+    use: "Defend your right to navigate your own path — financially, geographically, mentally. Keep optionality open."
+  },
+  {
+    name: "Flag State Jurisdiction",
+    oneLiner: "A ship is governed by the laws of its flag.",
+    meaning:
+      "Wherever your ship sails, the laws of the country whose flag it flies still apply. Your origins, your principles, your inner code follow you everywhere.",
+    use: "Decide which 'flag' you sail under (your values), and apply it consistently in every harbour."
+  },
+  {
+    name: "Innocent Passage",
+    oneLiner: "You may pass through another's waters peacefully.",
+    meaning:
+      "Other vessels can transit a coastal state's territorial sea as long as they do not threaten its peace, order or security.",
+    use: "Move through other people's territory — workplaces, communities, relationships — with respect, and you'll be granted free passage."
+  },
+  {
+    name: "Right of Hot Pursuit",
+    oneLiner: "A breach of law on shore can be chased onto open sea.",
+    meaning:
+      "A coastal state may pursue a foreign ship that broke its laws into international waters — unbroken pursuit. Consequences follow you across borders.",
+    use: "Don't assume distance erases an obligation. Close loops cleanly — debts, apologies, promises — before they catch up."
+  },
+  {
+    name: "Duty to Render Assistance",
+    oneLiner: "Every captain must aid those in distress at sea.",
+    meaning:
+      "If another vessel is in distress, you are legally and morally obliged to help. The sea binds everyone to a shared duty of care.",
+    use: "Help the people around you when their boat is taking on water. The same currents will carry you one day."
+  },
+  {
+    name: "Salvage Rights",
+    oneLiner: "Rescuers earn a share of what they save.",
+    meaning:
+      "If you risk your vessel to save another's cargo or crew, you have a legal claim to a portion of the value rescued.",
+    use: "When you genuinely rescue a project, person or position, you've earned an honest share. Negotiate it openly."
+  },
+  {
+    name: "General Average",
+    oneLiner: "Sacrifices made for the common safety are shared by all.",
+    meaning:
+      "If cargo must be jettisoned to save the ship, the loss is shared proportionally by everyone whose cargo survived. Group survival, group cost.",
+    use: "When the team cuts something to save the whole, share the cost. Don't let one person carry the loss alone."
+  },
+  {
+    name: "Law of Wreck",
+    oneLiner: "Abandoned property at sea is recoverable.",
+    meaning:
+      "What is truly abandoned can be claimed. But there is a difference between abandoned and merely unattended.",
+    use: "Pick up dropped opportunities — but verify they are truly abandoned and not just resting. Steal nothing; claim freely."
+  },
+  {
+    name: "Charter Party",
+    oneLiner: "A written contract for the use of a vessel.",
+    meaning:
+      "A charter party defines who pays, who carries the risk, who owns what during the voyage. Clear terms before departure prevent storms in court later.",
+    use: "Put expectations in writing before any joint venture, partnership or capital pool. Seal it before you sail."
+  },
+  {
+    name: "Bill of Lading",
+    oneLiner: "Receipt + title + contract — all in one document.",
+    meaning:
+      "The bill of lading records what was loaded, who owns it, and the terms of carriage. It is the single source of truth for the voyage's cargo.",
+    use: "In every transaction, create a single source of truth (a contract, an email confirmation, a signed doc) so nothing is later 'remembered differently'."
+  },
+  {
+    name: "Limitation of Liability",
+    oneLiner: "A shipowner's liability is capped to the value of the ship.",
+    meaning:
+      "An owner's exposure is bounded — they cannot lose more than the vessel and its freight. Predictable risk, capped downside.",
+    use: "Structure every venture so a single failure cannot sink your entire fleet. Cap downside per voyage."
+  },
+  {
+    name: "Maritime Lien",
+    oneLiner: "An unpaid debt sticks to the ship itself.",
+    meaning:
+      "Some claims (wages, salvage, supplies) attach to the vessel — they follow it across owners and oceans until paid.",
+    use: "Some debts attach to the asset, not the person. Settle them before you sell, transfer or move on."
+  }
+];

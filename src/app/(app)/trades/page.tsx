@@ -113,7 +113,7 @@ export default function TradesPage() {
             <table className="w-full text-left text-sm">
               <thead className="border-b border-line text-xs text-fg-subtle">
                 <tr>
-                  {["Date", "Pair", "Side", "Session", "Entry", "Exit", "Lot", "RR", "P&L", "Setup", "Mistake"].map((h) => (
+                  {["Date", "Added", "Pair", "Side", "Session", "Entry", "Exit", "Lot", "RR", "P&L", "Setup", "Mistake"].map((h) => (
                     <th key={h} className="px-4 py-3 font-medium">{h}</th>
                   ))}
                 </tr>
@@ -125,6 +125,9 @@ export default function TradesPage() {
                   return (
                     <tr key={t.id} className="border-b border-line/50 last:border-0">
                       <td className="px-4 py-2.5 text-fg-muted">{shortDate(t.trade_date)}</td>
+                      <td className="px-4 py-2.5 text-[11px] text-fg-subtle" title={t.created_at}>
+                        {formatTimestamp(t.created_at)}
+                      </td>
                       <td className="px-4 py-2.5 font-medium">{t.pair ?? "—"}</td>
                       <td className="px-4 py-2.5">
                         {t.side ? (
@@ -149,4 +152,11 @@ export default function TradesPage() {
       )}
     </div>
   );
+}
+
+function formatTimestamp(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return `${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })} · ${d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`;
 }

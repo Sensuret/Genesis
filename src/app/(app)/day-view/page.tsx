@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { DatePicker } from "@/components/ui/date-picker";
+import { ScreenshotButton } from "@/components/ui/screenshot-button";
 import { Stat } from "@/components/ui/stat";
 import { Badge } from "@/components/ui/badge";
 import { useTrades } from "@/lib/hooks/use-trades";
@@ -19,6 +20,7 @@ export default function DayViewPage() {
   const { filters } = useFilters();
   const { fmt } = useMoney();
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const pageRef = useRef<HTMLDivElement>(null);
 
   const filtered = useMemo(() => applyAllFilters(trades, filters), [trades, filters]);
   const today = useMemo(() => filtered.filter((t) => t.trade_date === date), [filtered, date]);
@@ -34,10 +36,15 @@ export default function DayViewPage() {
   }, [today]);
 
   return (
-    <div className="space-y-6">
+    <div ref={pageRef} className="space-y-6">
       <PageHeader
         title="Day View"
-        actions={<DatePicker value={date} onChange={(next) => next && setDate(next)} max={new Date().toISOString().slice(0, 10)} />}
+        actions={
+          <div className="flex items-center gap-2">
+            <ScreenshotButton targetRef={pageRef} filename={`day-view-${date}`} label="Save day snapshot as PNG" />
+            <DatePicker value={date} onChange={(next) => next && setDate(next)} max={new Date().toISOString().slice(0, 10)} />
+          </div>
+        }
       />
 
       {loading ? (

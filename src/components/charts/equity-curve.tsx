@@ -7,7 +7,7 @@ import { useMemo } from "react";
 import type { EquityPoint } from "@/lib/analytics";
 import { Empty } from "@/components/ui/empty";
 import { useMoney } from "@/lib/filters/store";
-import { formatMoney } from "@/lib/fx";
+import { formatMoney, formatMoneyCompact } from "@/lib/fx";
 
 /**
  * Cumulative equity area chart with a glossy split-coloured fill —
@@ -46,7 +46,7 @@ export function EquityCurveChart({
   return (
     <div className={`${height} w-full`}>
       <ResponsiveContainer>
-        <AreaChart data={converted} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+        <AreaChart data={converted} margin={{ top: 8, right: 8, left: -10, bottom: 0 }}>
           <defs>
             {variant === "purple" ? (
               <>
@@ -83,12 +83,12 @@ export function EquityCurveChart({
           <XAxis dataKey="date" stroke="rgb(130 130 150)" fontSize={11} tickLine={false} axisLine={false} />
           <YAxis
             stroke="rgb(130 130 150)"
-            fontSize={11}
+            fontSize={10}
             tickLine={false}
             axisLine={false}
-            width={64}
-            tickMargin={4}
-            tickFormatter={(v: number) => formatMoney(v, currency)}
+            width={48}
+            tickMargin={2}
+            tickFormatter={(v: number) => formatMoneyCompact(v, currency)}
           />
           <Tooltip
             formatter={(v: number) => formatMoney(v, currency)}

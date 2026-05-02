@@ -57,6 +57,30 @@ export function formatMoney(amount: number | null | undefined, currency: string)
   }).format(amount);
 }
 
+/**
+ * Compact money formatter for chart axes — uses Intl `notation: "compact"`
+ * so $1,200,000 becomes "$1.2M" and KES 12,900,000 becomes "KES 13M".
+ * Keeps axis label widths tight so the chart's plotting region isn't
+ * squeezed by long currency strings.
+ */
+export function formatMoneyCompact(amount: number | null | undefined, currency: string): string {
+  if (amount === null || amount === undefined || Number.isNaN(amount)) return "—";
+  if (amount === 0) {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 0
+    }).format(0);
+  }
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
+    notation: "compact",
+    compactDisplay: "short",
+    maximumFractionDigits: 1
+  }).format(amount);
+}
+
 export async function loadRates(signal?: AbortSignal): Promise<Rates | null> {
   try {
     const res = await fetch("https://open.er-api.com/v6/latest/USD", {

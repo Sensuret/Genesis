@@ -6,7 +6,7 @@ import {
 import { useMemo } from "react";
 import type { TradeRow } from "@/lib/supabase/types";
 import { useMoney } from "@/lib/filters/store";
-import { formatMoney } from "@/lib/fx";
+import { formatMoney, formatMoneyCompact } from "@/lib/fx";
 
 /**
  * Intraday equity curve for a single day — plots cumulative P&L across
@@ -88,8 +88,9 @@ export function IntradayEquityChart({ trades }: { trades: TradeRow[] }) {
             fontSize={10}
             tickLine={false}
             axisLine={false}
-            width={56}
-            tickFormatter={(v: number) => formatMoney(v, currency)}
+            width={44}
+            tickMargin={2}
+            tickFormatter={(v: number) => formatMoneyCompact(v, currency)}
           />
           <Tooltip
             formatter={(v: number) => formatMoney(v, currency)}
