@@ -21,11 +21,31 @@ export function TopBar() {
   }, []);
 
   useEffect(() => {
+    const supabase = createClient();
+    let userId: string | null = null;
+    let unsubFiles: (() => void) | null = null;
+    let unsubPlaybooks: (() => void) | null = null;
+
+    async function refreshFiles() {
+      const { data } = await supabase
+        .from("trade_files")
+        .select("*")
+        .order("created_at", { ascending: false });
+      setAccounts(data ?? []);
+    }
+    async function refreshPlaybooks() {
+      const { data } = await supabase
+        .from("playbooks")
+        .select("*")
+        .order("name", { ascending: true });
+      setPlaybooks((data ?? []) as PlaybookRow[]);
+    }
+
     (async () => {
-      const supabase = createClient();
       const { data: userData } = await supabase.auth.getUser();
       const user = userData.user;
       if (!user) return;
+      userId = user.id;
       const [{ data: prof }, { data: files }, { data: pbs }] = await Promise.all([
         supabase
           .from("profiles")
@@ -38,12 +58,56 @@ export function TopBar() {
       setProfile(prof ?? { email: user.email });
       setAccounts(files ?? []);
       setPlaybooks((pbs ?? []) as PlaybookRow[]);
-      // If user has a default currency in their profile and the filter is the
-      // initial default, prefer the profile currency.
       if (prof?.default_currency && filters.currency === "USD") {
         setFilters({ currency: prof.default_currency });
       }
+
+      // Live-refresh the Accounts and Playbooks pickers when the user
+      // imports a new CSV / creates / deletes / renames a row, so they
+      // never have to refresh the page.
+      const filesChannel = supabase
+        .channel(`topbar-trade_files-${userId}`)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "trade_files", filter: `user_id=eq.${userId}` },
+          () => {
+            refreshFiles();
+          }
+        )
+        .subscribe();
+      unsubFiles = () => {
+        supabase.removeChannel(filesChannel);
+      };
+
+      const playbooksChannel = supabase
+        .channel(`topbar-playbooks-${userId}`)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "playbooks", filter: `user_id=eq.${userId}` },
+          () => {
+            refreshPlaybooks();
+          }
+        )
+        .subscribe();
+      unsubPlaybooks = () => {
+        supabase.removeChannel(playbooksChannel);
+      };
     })();
+
+    // Belt-and-braces: also refresh when the tab regains focus, in case
+    // the realtime channel missed an event (network blip, etc.).
+    function onFocus() {
+      if (!userId) return;
+      refreshFiles();
+      refreshPlaybooks();
+    }
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      unsubFiles?.();
+      unsubPlaybooks?.();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

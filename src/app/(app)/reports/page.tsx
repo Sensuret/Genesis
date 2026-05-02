@@ -364,39 +364,187 @@ function Compare({ trades, fmt }: { trades: TradeRow[]; fmt: Fmt }) {
 }
 
 function CalendarView({ trades, fmt }: { trades: TradeRow[]; fmt: Fmt }) {
-  const days = dailyPnl(trades);
-  const totalsByMonth = days.reduce<Record<string, { trades: number; pnl: number }>>((acc, d) => {
-    const m = d.date.slice(0, 7);
-    if (!acc[m]) acc[m] = { trades: 0, pnl: 0 };
-    acc[m].trades += d.trades;
-    acc[m].pnl += d.pnl;
-    return acc;
-  }, {});
-  const months = Object.entries(totalsByMonth).sort((a, b) => (a[0] < b[0] ? 1 : -1));
+  const days = useMemo(() => dailyPnl(trades), [trades]);
+  // Available years in the data; default cursor to most recent.
+  const years = useMemo(() => {
+    const set = new Set<number>();
+    for (const d of days) {
+      const y = Number(d.date.slice(0, 4));
+      if (Number.isFinite(y)) set.add(y);
+    }
+    if (set.size === 0) set.add(new Date().getFullYear());
+    return Array.from(set).sort((a, b) => a - b);
+  }, [days]);
+  const [year, setYear] = useState<number>(() => years[years.length - 1] ?? new Date().getFullYear());
+
+  // Year-scoped daily map and max abs P&L for colour intensity.
+  const { byDay, maxAbs } = useMemo(() => {
+    const map = new Map<string, { pnl: number; trades: number }>();
+    let max = 0;
+    for (const d of days) {
+      const y = Number(d.date.slice(0, 4));
+      if (y !== year) continue;
+      map.set(d.date, { pnl: d.pnl, trades: d.trades });
+      const abs = Math.abs(d.pnl);
+      if (abs > max) max = abs;
+    }
+    return { byDay: map, maxAbs: max };
+  }, [days, year]);
+
+  const monthlyTotals = useMemo(() => {
+    const arr = Array.from({ length: 12 }, () => ({ pnl: 0, trades: 0 }));
+    for (const [iso, v] of byDay.entries()) {
+      const m = Number(iso.slice(5, 7)) - 1;
+      if (m < 0 || m > 11) continue;
+      arr[m].pnl += v.pnl;
+      arr[m].trades += v.trades;
+    }
+    return arr;
+  }, [byDay]);
+
+  const yearTotal = monthlyTotals.reduce((s, m) => s + m.pnl, 0);
+  const yearTrades = monthlyTotals.reduce((s, m) => s + m.trades, 0);
+
+  const calRef = useRef<HTMLDivElement>(null);
+
   return (
     <Card>
-      <CardHeader><CardTitle>By month</CardTitle></CardHeader>
-      <CardBody className="overflow-x-auto">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-line text-xs text-fg-subtle">
-            <tr>
-              <th className="px-3 py-2 font-medium">Month</th>
-              <th className="px-3 py-2 font-medium">Trades</th>
-              <th className="px-3 py-2 font-medium">Net P&L</th>
-            </tr>
-          </thead>
-          <tbody>
-            {months.map(([m, v]) => (
-              <tr key={m} className="border-b border-line/50 last:border-0">
-                <td className="px-3 py-2 font-medium">{m}</td>
-                <td className="px-3 py-2">{v.trades}</td>
-                <td className={`px-3 py-2 font-medium ${v.pnl >= 0 ? "text-success" : "text-danger"}`}>{fmt(v.pnl)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <CardHeader className="flex items-center justify-between gap-3">
+        <CardTitle>Calendar — {year}</CardTitle>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setYear((y) => Math.max(years[0] ?? y, y - 1))}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-line text-fg-muted hover:border-brand-400 hover:text-fg"
+            aria-label="Previous year"
+          >
+            ‹
+          </button>
+          <span className="rounded-md bg-bg-soft px-2 py-0.5 text-xs text-fg-muted">
+            {yearTrades} trade{yearTrades === 1 ? "" : "s"}
+          </span>
+          <span
+            className={`rounded-md px-2 py-0.5 text-xs font-medium ${
+              yearTotal >= 0 ? "bg-success/15 text-success" : "bg-danger/15 text-danger"
+            }`}
+          >
+            {fmt(yearTotal)}
+          </span>
+          <button
+            type="button"
+            onClick={() => setYear((y) => Math.min(years[years.length - 1] ?? y, y + 1))}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-line text-fg-muted hover:border-brand-400 hover:text-fg"
+            aria-label="Next year"
+          >
+            ›
+          </button>
+          <ScreenshotButton targetRef={calRef} filename={`reports-calendar-${year}`} />
+        </div>
+      </CardHeader>
+      <CardBody>
+        <div ref={calRef} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {Array.from({ length: 12 }).map((_, m) => (
+            <MiniMonth
+              key={m}
+              year={year}
+              month={m}
+              byDay={byDay}
+              maxAbs={maxAbs}
+              total={monthlyTotals[m]}
+              fmt={fmt}
+            />
+          ))}
+        </div>
       </CardBody>
     </Card>
+  );
+}
+
+const MINI_WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"
+];
+
+function MiniMonth({
+  year,
+  month,
+  byDay,
+  maxAbs,
+  total,
+  fmt
+}: {
+  year: number;
+  month: number;
+  byDay: Map<string, { pnl: number; trades: number }>;
+  maxAbs: number;
+  total: { pnl: number; trades: number };
+  fmt: Fmt;
+}) {
+  const first = new Date(year, month, 1);
+  const last = new Date(year, month + 1, 0);
+  const lead = first.getDay();
+  const cells: (Date | null)[] = Array.from({ length: lead }, () => null);
+  for (let d = 1; d <= last.getDate(); d += 1) {
+    cells.push(new Date(year, month, d));
+  }
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  return (
+    <div className="rounded-xl border border-line bg-bg-soft/40 p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="text-sm font-medium text-fg">{MONTH_NAMES[month]}</span>
+        <span
+          className={`rounded-md px-1.5 py-0.5 text-[10px] font-medium ${
+            total.pnl > 0
+              ? "bg-success/15 text-success"
+              : total.pnl < 0
+                ? "bg-danger/15 text-danger"
+                : "bg-fg-muted/15 text-fg-muted"
+          }`}
+          title={`${total.trades} trade${total.trades === 1 ? "" : "s"} · ${fmt(total.pnl)}`}
+        >
+          {fmt(total.pnl)}
+        </span>
+      </div>
+      <div className="grid grid-cols-7 gap-0.5 text-center">
+        {MINI_WEEKDAYS.map((w, i) => (
+          <span key={`${w}-${i}`} className="text-[9px] uppercase tracking-wide text-fg-subtle">
+            {w}
+          </span>
+        ))}
+        {cells.map((d, i) => {
+          if (!d) {
+            return <span key={`empty-${i}`} className="aspect-square" />;
+          }
+          const iso = d.toISOString().slice(0, 10);
+          const cell = byDay.get(iso);
+          const intensity = cell && maxAbs ? Math.min(Math.abs(cell.pnl) / maxAbs, 1) : 0;
+          const tone = !cell
+            ? "bg-bg-elevated text-fg-subtle"
+            : cell.pnl > 0
+              ? "text-success"
+              : cell.pnl < 0
+                ? "text-danger"
+                : "bg-fg-muted/15 text-fg-muted";
+          const bg = cell && cell.pnl !== 0
+            ? cell.pnl > 0
+              ? `rgba(34,197,94,${0.18 + intensity * 0.55})`
+              : `rgba(239,68,68,${0.18 + intensity * 0.55})`
+            : undefined;
+          return (
+            <span
+              key={iso}
+              className={`flex aspect-square items-center justify-center rounded text-[10px] font-medium ${tone}`}
+              style={bg ? { backgroundColor: bg } : undefined}
+              title={cell ? `${iso} · ${cell.trades} trade${cell.trades === 1 ? "" : "s"} · ${fmt(cell.pnl)}` : iso}
+            >
+              {d.getDate()}
+            </span>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

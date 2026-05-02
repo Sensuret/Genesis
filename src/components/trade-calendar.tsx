@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 // card on the right (matches TradeZella's reference).
 // ---------------------------------------------------------------------
 
-type DayBucket = { pnl: number; trades: number; wins: number };
+type DayBucket = { pnl: number; trades: number; wins: number; losses: number };
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -46,10 +46,12 @@ export function TradeCalendar({
       if (Number.isNaN(d.getTime())) continue;
       if (d.getFullYear() !== cursor.getFullYear() || d.getMonth() !== cursor.getMonth()) continue;
       const key = isoKey(d);
-      const prev = out.get(key) ?? { pnl: 0, trades: 0, wins: 0 };
+      const prev = out.get(key) ?? { pnl: 0, trades: 0, wins: 0, losses: 0 };
       prev.pnl += t.pnl ?? 0;
       prev.trades += 1;
-      if ((t.pnl ?? 0) > 0) prev.wins += 1;
+      const p = t.pnl ?? null;
+      if (p != null && p > 0) prev.wins += 1;
+      else if (p != null && p < 0) prev.losses += 1;
       out.set(key, prev);
     }
     return out;
@@ -196,7 +198,9 @@ function CalendarCell({ date, bucket }: { date: Date | null; bucket: DayBucket |
     );
   }
   const positive = bucket.pnl >= 0;
-  const winPct = bucket.trades ? (bucket.wins / bucket.trades) * 100 : 0;
+  // Win rate matches the global formula: wins / (wins + losses), BE excluded.
+  const decided = bucket.wins + bucket.losses;
+  const winPct = decided ? (bucket.wins / decided) * 100 : 0;
   return (
     <div
       className={cn(
