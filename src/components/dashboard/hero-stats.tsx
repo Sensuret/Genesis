@@ -231,11 +231,11 @@ export function CurrentStreakCard({
   tradesType: "win" | "loss" | null;
 }) {
   return (
-    <Card className="flex h-24 flex-col p-3">
+    <Card className="flex min-h-24 flex-col overflow-hidden p-3">
       <div className="mb-1">
         <HeroStatLabel label="Current streak" />
       </div>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid min-w-0 grid-cols-2 gap-2">
         <StreakColumn
           title="DAYS"
           value={daysCurrent}
@@ -278,9 +278,10 @@ function StreakColumn({
   const circumference = 2 * Math.PI * radius;
   // Fill the ring proportional to current vs best — falls back to full if best===0.
   const fill = best > 0 ? Math.min(value / best, 1) : value > 0 ? 1 : 0;
+  const unitShort = unit === "day" ? "d" : "t";
   return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center gap-1.5">
+    <div className="flex min-w-0 flex-col gap-1">
+      <div className="flex min-w-0 items-center gap-1.5">
         <svg viewBox="0 0 28 28" className="h-7 w-7 shrink-0" aria-hidden>
           <circle cx="14" cy="14" r={radius} fill="none" stroke="rgba(127,127,150,0.18)" strokeWidth="3" />
           <circle
@@ -298,11 +299,11 @@ function StreakColumn({
             {value}
           </text>
         </svg>
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-fg-subtle">
+        <span className="truncate text-[10px] font-semibold uppercase tracking-wide text-fg-subtle">
           {title}
         </span>
       </div>
-      <div className="flex flex-wrap items-center gap-1 text-[10px]">
+      <div className="flex min-w-0 flex-wrap items-center gap-1 text-[10px]">
         <span
           className={cn(
             "rounded-md px-1.5 py-0.5 font-medium",
@@ -312,12 +313,16 @@ function StreakColumn({
                 ? "bg-success/15 text-success"
                 : "bg-danger/15 text-danger"
           )}
+          title={`Current: ${value} ${unit}${value === 1 ? "" : "s"}`}
         >
-          {value} {unit}{value === 1 ? "" : "s"}
+          {value}{unitShort}
         </span>
         {best > 0 && (
-          <span className="rounded-md bg-bg-soft px-1.5 py-0.5 font-medium text-fg-muted">
-            {best} {unit}{best === 1 ? "" : "s"}
+          <span
+            className="rounded-md bg-bg-soft px-1.5 py-0.5 font-medium text-fg-muted"
+            title={`Best: ${best} ${unit}${best === 1 ? "" : "s"}`}
+          >
+            best {best}{unitShort}
           </span>
         )}
       </div>

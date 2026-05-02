@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, User, X } from "lucide-react";
+import { ChevronDown, RotateCcw, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { useFilters, CURRENCIES, DATE_RANGES, type AppFilters } from "@/lib/filters/store";
@@ -92,9 +92,12 @@ export function TopBar() {
       <button
         type="button"
         onClick={reset}
-        className="hidden h-9 items-center gap-1 rounded-xl border border-line px-3 text-xs text-fg-muted hover:border-brand-400 hover:text-fg sm:inline-flex"
+        title="Reset filters"
+        aria-label="Reset filters"
+        className="hidden h-9 items-center gap-1.5 rounded-xl border border-line bg-bg-elevated pl-2 pr-2.5 text-fg-muted hover:border-brand-400 hover:text-fg sm:inline-flex"
       >
-        <X className="h-3.5 w-3.5" /> Reset
+        <RotateCcw className="h-4 w-4" />
+        <span className="text-[10px] font-medium uppercase tracking-wide">Reset</span>
       </button>
 
       <Link
@@ -171,33 +174,81 @@ function Pop({
   );
 }
 
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: "$",
+  EUR: "€",
+  GBP: "£",
+  JPY: "¥",
+  AUD: "A$",
+  CAD: "C$",
+  CHF: "₣",
+  NZD: "NZ$",
+  ZAR: "R",
+  KES: "KSh"
+};
+
+function currencySymbol(code: string): string {
+  return CURRENCY_SYMBOLS[code] ?? code;
+}
+
 function CurrencyPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    function onClick(e: MouseEvent) {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    }
+    window.addEventListener("mousedown", onClick);
+    return () => window.removeEventListener("mousedown", onClick);
+  }, [open]);
+
+  const sym = currencySymbol(value);
   return (
-    <Pop
-      label={<>Currency · <span className="text-fg">{value}</span></>}
-      open={open}
-      onToggle={() => setOpen((o) => !o)}
-      onClose={() => setOpen(false)}
-      width="w-40"
-    >
-      {CURRENCIES.map((c) => (
-        <button
-          key={c}
-          type="button"
-          onClick={() => {
-            onChange(c);
-            setOpen(false);
-          }}
-          className={cn(
-            "block w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-brand-500/10",
-            c === value ? "text-brand-300" : "text-fg-muted"
-          )}
-        >
-          {c}
-        </button>
-      ))}
-    </Pop>
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        title={`Display currency · ${value}`}
+        aria-label={`Display currency, currently ${value}`}
+        className={cn(
+          "inline-flex h-9 w-9 items-center justify-center rounded-full border border-line bg-bg-elevated text-fg transition hover:border-brand-400 hover:text-brand-300",
+          open && "border-brand-400 text-brand-200",
+          // Compact symbols (1 char) get larger type than multi-char ones (KSh, NZ$).
+          sym.length <= 1 ? "text-[15px] font-semibold" : "text-[10px] font-bold leading-none"
+        )}
+      >
+        {sym}
+      </button>
+      {open && (
+        <div className="absolute right-0 top-11 z-40 max-h-80 w-44 overflow-y-auto rounded-xl border border-line bg-bg-elevated p-2 shadow-card">
+          {CURRENCIES.map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => {
+                onChange(c);
+                setOpen(false);
+              }}
+              className={cn(
+                "flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs hover:bg-brand-500/10",
+                c === value ? "text-brand-300" : "text-fg-muted"
+              )}
+            >
+              <span
+                className={cn(
+                  "inline-flex h-6 min-w-[1.5rem] items-center justify-center rounded-full border border-line bg-bg px-1 text-[11px] font-semibold text-fg",
+                  c === value && "border-brand-400 text-brand-200"
+                )}
+              >
+                {currencySymbol(c)}
+              </span>
+              <span className="font-medium">{c}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

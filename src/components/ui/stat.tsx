@@ -6,7 +6,7 @@ import { formatMoney, convertFromUSD } from "@/lib/fx";
 import { Card } from "./card";
 
 type StatProps = {
-  label: string;
+  label: React.ReactNode;
   value: number | string | null | undefined;
   format?: "currency" | "number" | "percent" | "text";
   hint?: React.ReactNode;
@@ -14,9 +14,11 @@ type StatProps = {
   className?: string;
   /** Override the currency for currency-formatted stats (defaults to the active filter currency). */
   currency?: string;
+  /** Optional explicit colour for the value text (overrides positive/pnlColor). */
+  valueClassName?: string;
 };
 
-export function Stat({ label, value, format = "number", hint, positive, className, currency }: StatProps) {
+export function Stat({ label, value, format = "number", hint, positive, className, currency, valueClassName }: StatProps) {
   const { currency: activeCurrency, rates } = useMoney();
   const cur = currency ?? activeCurrency;
   const display =
@@ -31,13 +33,15 @@ export function Stat({ label, value, format = "number", hint, positive, classNam
             : formatNumber(value);
 
   const colorClass =
-    positive === undefined
-      ? "text-fg"
-      : positive
-        ? "text-success"
-        : typeof value === "number"
-          ? pnlColor(value)
-          : "text-fg";
+    valueClassName
+      ? valueClassName
+      : positive === undefined
+        ? "text-fg"
+        : positive
+          ? "text-success"
+          : typeof value === "number"
+            ? pnlColor(value)
+            : "text-fg";
 
   return (
     <Card className={cn("p-5", className)}>

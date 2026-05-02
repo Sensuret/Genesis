@@ -490,7 +490,7 @@ const PERSONAL_YEAR_THEMES: Record<number, PersonalYearTheme> = {
   1: {
     number: 1,
     title: "New Beginnings",
-    vibration: "Genesis. Plant the seed for the next 9-year arc.",
+    vibration: "New beginnings, action, independence, planting seeds — Genesis of the next 9-year arc.",
     focus: "Start things, take initiative, don't be afraid to begin again.",
     trade: "Open new accounts, try new strategies, pioneer setups — but small size while you learn.",
     caution: "Impatience. Don't burn capital trying to force the year to peak too early."
@@ -498,7 +498,7 @@ const PERSONAL_YEAR_THEMES: Record<number, PersonalYearTheme> = {
   2: {
     number: 2,
     title: "Patience & Partnership",
-    vibration: "Slow build. Relationships and quiet progress matter.",
+    vibration: "Patience, partnerships, emotions, slow growth — quiet progress over the spotlight.",
     focus: "Strengthen alliances, find a mentor, refine — don't push for the spotlight.",
     trade: "Pair-trades, mentorship rooms, joint ventures. Volume modest, edge sharp.",
     caution: "Sensitivity overload — protect your nervous system from market noise."
@@ -506,7 +506,7 @@ const PERSONAL_YEAR_THEMES: Record<number, PersonalYearTheme> = {
   3: {
     number: 3,
     title: "Expansion & Expression",
-    vibration: "Joy, creativity, communication.",
+    vibration: "Communication, creativity, visibility, expression — your voice carries this year.",
     focus: "Share your edge — content, journaling, voice notes, recap videos.",
     trade: "Multiple themes okay; let curiosity drive research, then narrow.",
     caution: "Distraction. Cap shots-per-day so creativity doesn't become over-trading."
@@ -514,7 +514,7 @@ const PERSONAL_YEAR_THEMES: Record<number, PersonalYearTheme> = {
   4: {
     number: 4,
     title: "Foundation & Discipline",
-    vibration: "Build the structure. Boring becomes beautiful.",
+    vibration: "Structure, discipline, foundations, hard work — boring becomes beautiful.",
     focus: "Systems, rules, backtests, journaling, infrastructure.",
     trade: "Best year for rule-based execution — automate or write checklists.",
     caution: "Rigidity — don't refuse to adapt to a new regime when data says so."
@@ -522,7 +522,7 @@ const PERSONAL_YEAR_THEMES: Record<number, PersonalYearTheme> = {
   5: {
     number: 5,
     title: "Change & Freedom",
-    vibration: "Movement, travel, sensory intelligence.",
+    vibration: "Change, freedom, movement, unpredictability — adaptability is the edge.",
     focus: "Expand horizons, change environments, explore new asset classes.",
     trade: "News-driven and momentum trades fit; size up around catalysts.",
     caution: "Restlessness. Anchor with a daily ritual or you'll over-trade."
@@ -530,7 +530,7 @@ const PERSONAL_YEAR_THEMES: Record<number, PersonalYearTheme> = {
   6: {
     number: 6,
     title: "Responsibility & Service",
-    vibration: "Family, community, healing.",
+    vibration: "Home, family, love, responsibility — your circle gets prioritised.",
     focus: "Give back — teach, mentor, support, and tighten home/work life.",
     trade: "Stable, low-volatility plays; treat capital as something you steward.",
     caution: "Over-helping. Protect your own capital before saving someone else's."
@@ -538,7 +538,7 @@ const PERSONAL_YEAR_THEMES: Record<number, PersonalYearTheme> = {
   7: {
     number: 7,
     title: "Reflection & Mastery",
-    vibration: "Solitude, study, deep analysis.",
+    vibration: "Reflection, study, inner work, solitude — depth over breadth.",
     focus: "Research, reading, retreat — let inner work compound.",
     trade: "Quant, pattern research, backtests. A great year to specialise.",
     caution: "Paralysis-by-analysis. Set a 'good enough' shipping bar so trades still ship."
@@ -546,7 +546,7 @@ const PERSONAL_YEAR_THEMES: Record<number, PersonalYearTheme> = {
   8: {
     number: 8,
     title: "Power & Abundance",
-    vibration: "Manifestation, scale, executive energy.",
+    vibration: "Money, power, career results, authority — the harvest year.",
     focus: "Push for breakthroughs in income and reputation. Money flows now.",
     trade: "Scale prop firm passes, take bigger A+ setups, build the funnel.",
     caution: "Greed. Define your stop-out and walk-away rule before you start."
@@ -554,7 +554,7 @@ const PERSONAL_YEAR_THEMES: Record<number, PersonalYearTheme> = {
   9: {
     number: 9,
     title: "Closure & Release",
-    vibration: "Endings, completion, letting go.",
+    vibration: "Endings, release, completion, forgiveness — close chapters and forgive.",
     focus: "Finish chapters. Prune accounts, retire bad habits, redistribute gains.",
     trade: "Cut losing strategies, harvest gains, journal what worked over the 9 years.",
     caution: "Holding losers for the story. Cut sharper — the year wants endings."
@@ -562,7 +562,7 @@ const PERSONAL_YEAR_THEMES: Record<number, PersonalYearTheme> = {
   11: {
     number: 11,
     title: "Illumination (master)",
-    vibration: "11/2 — visionary intuition. Trust early signals.",
+    vibration: "11/2 — heightened emotions, intuition, relationship tests; trust early signals.",
     focus: "Macro patterns, themes that span months. Inspire and lead.",
     trade: "Trend-following, theme bets, narrative-driven plays.",
     caution: "Nervous-system overload. Ground daily — breathwork before market open."
@@ -570,7 +570,7 @@ const PERSONAL_YEAR_THEMES: Record<number, PersonalYearTheme> = {
   22: {
     number: 22,
     title: "Master Builder",
-    vibration: "22/4 — large-scale construction; turning vision into structure.",
+    vibration: "22/4 — heavy responsibility, building something big, pressure to achieve.",
     focus: "Funds, multi-account scaling, infrastructure, hiring.",
     trade: "Build systems for size; institutional discipline.",
     caution: "Scope creep. Partition the year into 90-day milestones."
@@ -578,7 +578,7 @@ const PERSONAL_YEAR_THEMES: Record<number, PersonalYearTheme> = {
   33: {
     number: 33,
     title: "Master Teacher",
-    vibration: "33/6 — service through wisdom; trade as a curriculum.",
+    vibration: "33/6 — deep care for others, service, family / community focus.",
     focus: "Teach the system; your portfolio benefits from articulation.",
     trade: "Educational content alongside trading; mentorship at scale.",
     caution: "Burnout from helping others. Protect deep-work blocks."
