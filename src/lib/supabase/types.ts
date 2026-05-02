@@ -134,11 +134,49 @@ export type NotebookEmbed = {
   url: string;
 };
 
+/** A single bullet inside a sub-section of a Yearly Resolution. */
+export type ResolutionItem = {
+  id: string;
+  text: string;
+  /** Optional — quarterly checkboxes that flag what's already been hit. */
+  checked?: boolean;
+};
+
+/** A focused area inside a Resolution section (e.g. "Personal account"). */
+export type ResolutionSubsection = {
+  id: string;
+  label: string;
+  /** Headline target / overall goal for this sub-section. */
+  target?: string;
+  items: ResolutionItem[];
+};
+
+/** Top-level Resolution section (e.g. "Trading Plan", "Personal Health"). */
+export type ResolutionSection = {
+  id: string;
+  label: string;
+  /** Tailwind tone used for this section's eyebrow header. */
+  color: "orange" | "pink" | "green" | "purple" | "blue" | "amber";
+  subsections: ResolutionSubsection[];
+};
+
+/** Saved yearly Resolution (a year's worth of goals & sub-goals). */
+export type Resolution = {
+  id: string;
+  /** Gregorian year this resolution applies to. */
+  year: number;
+  /** Optional title — defaults to "<YEAR> Resolutions". */
+  title?: string;
+  created_at: string;
+  sections: ResolutionSection[];
+};
+
 export type UserSettingsData = {
   notebook_embeds?: NotebookEmbed[];
   notebook_active_id?: string | null;
   notebook_scratchpad?: string;
   notebook_notes?: NotebookNote[];
+  notebook_resolutions?: Resolution[];
 };
 
 type Insertable<T extends { id: string; created_at: string }> = Omit<

@@ -867,87 +867,87 @@ export const UNIVERSAL_LAWS: LawEntry[] = [
 
 export const MARITIME_LAWS: LawEntry[] = [
   {
-    name: "Right of Navigation",
-    oneLiner: "The freedom to move through international waters.",
+    name: "Law of Vibration",
+    oneLiner: "Everything in the universe is energy in motion at a unique frequency.",
     meaning:
-      "Vessels (and by analogy, capital) have a fundamental right to move through the high seas. No single power owns them. In life: nobody owns your direction.",
-    use: "Defend your right to navigate your own path — financially, geographically, mentally. Keep optionality open."
+      "Nothing rests. Every thought, emotion, person, object and outcome is vibrating at some rate. The body — being roughly 60% water — is exquisitely sensitive to these vibrations: water reorganises around sound, intention and emotion. Match a frequency long enough and it becomes your reality.",
+    use: "Audit your daily inputs (music, conversations, scrolls, foods). Cut what vibrates low; deliberately tune in to what vibrates at the level you want to live at."
   },
   {
-    name: "Flag State Jurisdiction",
-    oneLiner: "A ship is governed by the laws of its flag.",
+    name: "Law of Resonance",
+    oneLiner: "Like attracts like — frequencies that match amplify each other.",
     meaning:
-      "Wherever your ship sails, the laws of the country whose flag it flies still apply. Your origins, your principles, your inner code follow you everywhere.",
-    use: "Decide which 'flag' you sail under (your values), and apply it consistently in every harbour."
+      "Two systems vibrating at the same frequency reinforce each other; two opposing frequencies cancel out. The body's water acts as a tuning fork: it picks up the dominant frequency in a room and starts to copy it. Spend time in low rooms, you become low; spend time in high rooms, you become high.",
+    use: "Choose your environments and circles surgically. Resonance is not optional — you will sync to the dominant signal whether you like it or not."
   },
   {
-    name: "Innocent Passage",
-    oneLiner: "You may pass through another's waters peacefully.",
+    name: "Mirror Principle",
+    oneLiner: "What you witness with intent, you imprint into your own water.",
     meaning:
-      "Other vessels can transit a coastal state's territorial sea as long as they do not threaten its peace, order or security.",
-    use: "Move through other people's territory — workplaces, communities, relationships — with respect, and you'll be granted free passage."
+      "The internal water of the body mirrors what it observes — Masaru Emoto-style. Sustained exposure to images, words and emotions changes the cellular structure of what holds you together. Your body is literally a copy of the things you keep watching.",
+    use: "Curate your gaze. Before sleep, replace doom-scroll with images of the life you want. The body will rehearse what you keep showing it."
   },
   {
-    name: "Right of Hot Pursuit",
-    oneLiner: "A breach of law on shore can be chased onto open sea.",
+    name: "Frequency Matching",
+    oneLiner: "You don't get what you ask for — you get what you match.",
     meaning:
-      "A coastal state may pursue a foreign ship that broke its laws into international waters — unbroken pursuit. Consequences follow you across borders.",
-    use: "Don't assume distance erases an obligation. Close loops cleanly — debts, apologies, promises — before they catch up."
+      "Manifestation is not a wish; it is a vibrational match. The universe responds to the frequency you are emitting, not the words you are saying. Asking for abundance from a fear frequency will return more fear, because that is the frequency the body actually broadcasts.",
+    use: "Before you ask, embody. Get into the *feeling* of already having the thing — gratitude, peace, satisfaction. Stay there. The match brings the form."
   },
   {
-    name: "Duty to Render Assistance",
-    oneLiner: "Every captain must aid those in distress at sea.",
+    name: "Law of Coherence",
+    oneLiner: "Aligned thought, feeling and action create unstoppable signal.",
     meaning:
-      "If another vessel is in distress, you are legally and morally obliged to help. The sea binds everyone to a shared duty of care.",
-    use: "Help the people around you when their boat is taking on water. The same currents will carry you one day."
+      "Coherence is when mind, heart and body all vibrate in the same direction — no leaks, no contradictions. Incoherence (think one thing, feel another, do a third) produces noise that the universe cannot route. The body's water aligns and broadcasts cleanly only when all three agree.",
+    use: "Before any major action: check your thought, feeling and behaviour are pointing the same way. If one disagrees, fix that first — don't push through with mixed signal."
   },
   {
-    name: "Salvage Rights",
-    oneLiner: "Rescuers earn a share of what they save.",
+    name: "Law of Intention",
+    oneLiner: "Direction precedes manifestation — water remembers the instruction.",
     meaning:
-      "If you risk your vessel to save another's cargo or crew, you have a legal claim to a portion of the value rescued.",
-    use: "When you genuinely rescue a project, person or position, you've earned an honest share. Negotiate it openly."
+      "Intention is the seed-frequency you plant before any work begins. Even basic experiments show water structures itself differently around love-words vs hate-words. The body's water carries that imprint into every cell, shaping the actions that follow.",
+    use: "Begin every meaningful act — meals, training, work blocks, conversations — with a one-line intention spoken or written. The cells will organise around it."
   },
   {
-    name: "General Average",
-    oneLiner: "Sacrifices made for the common safety are shared by all.",
+    name: "Law of Sound & Word",
+    oneLiner: "Spoken and sung frequencies physically reshape the water in you.",
     meaning:
-      "If cargo must be jettisoned to save the ship, the loss is shared proportionally by everyone whose cargo survived. Group survival, group cost.",
-    use: "When the team cuts something to save the whole, share the cost. Don't let one person carry the loss alone."
+      "Sound is vibration made audible. Mantras, prayer, music in 432 / 528 Hz, even your own voice — these bathe the body's water in a chosen pattern. Negative speech does the opposite: it crystallises tension, anger and fatigue into the same water that carries your nutrients.",
+    use: "Listen to and speak words aligned with the version of you that's coming. Treat your speech as a cellular tuning instrument, not idle chatter."
   },
   {
-    name: "Law of Wreck",
-    oneLiner: "Abandoned property at sea is recoverable.",
+    name: "Law of Emotion (Heart Frequency)",
+    oneLiner: "The heart's electromagnetic field is the strongest signal you broadcast.",
     meaning:
-      "What is truly abandoned can be claimed. But there is a difference between abandoned and merely unattended.",
-    use: "Pick up dropped opportunities — but verify they are truly abandoned and not just resting. Steal nothing; claim freely."
+      "The heart generates a measurable field that extends several feet beyond the body. Emotions like gratitude, love and reverence raise that field's coherence; fear, resentment and envy collapse it. The water in every cell tunes to this field first, before anything mental.",
+    use: "Practice 60–90 seconds of heart-centred gratitude when entering any important room (a trade, a meeting, a date). You bring the room with you."
   },
   {
-    name: "Charter Party",
-    oneLiner: "A written contract for the use of a vessel.",
+    name: "Law of Allowing",
+    oneLiner: "Resistance lowers your frequency; allowing raises it.",
     meaning:
-      "A charter party defines who pays, who carries the risk, who owns what during the voyage. Clear terms before departure prevent storms in court later.",
-    use: "Put expectations in writing before any joint venture, partnership or capital pool. Seal it before you sail."
+      "Forcing, gripping, complaining and worrying are all forms of resistance — they introduce friction in the water and drop the broadcast frequency. Allowing is the opposite: you trust, you soften, you let the wave move through you. Calm water carries a clean signal.",
+    use: "When you catch yourself white-knuckling, exhale, drop the shoulders, and say 'I allow this'. Then act from the calmer water that follows."
   },
   {
-    name: "Bill of Lading",
-    oneLiner: "Receipt + title + contract — all in one document.",
+    name: "Law of Hydration & Embodiment",
+    oneLiner: "A dehydrated body cannot hold a high frequency.",
     meaning:
-      "The bill of lading records what was loaded, who owns it, and the terms of carriage. It is the single source of truth for the voyage's cargo.",
-    use: "In every transaction, create a single source of truth (a contract, an email confirmation, a signed doc) so nothing is later 'remembered differently'."
+      "Manifestation is a physical event happening through a physical body. If the body's water is depleted, it can't structure itself around your intention. Sleep, water, sun, breath and movement are not lifestyle — they are the literal medium your frequency travels through.",
+    use: "Treat hydration, sleep and breath like prayer. Each glass and each deep breath restores the medium your goals have to travel through."
   },
   {
-    name: "Limitation of Liability",
-    oneLiner: "A shipowner's liability is capped to the value of the ship.",
+    name: "Law of Repetition",
+    oneLiner: "A frequency held long enough becomes your default state.",
     meaning:
-      "An owner's exposure is bounded — they cannot lose more than the vessel and its freight. Predictable risk, capped downside.",
-    use: "Structure every venture so a single failure cannot sink your entire fleet. Cap downside per voyage."
+      "One peak emotion is a spike. The same emotion repeated daily is a *frequency*, and the water in the body crystallises around it. This is why affirmations, rituals and consistent practice work — repetition is what teaches the body to hold the new vibration on its own.",
+    use: "Pick one frequency (calm confidence, grateful abundance, sharp focus) and rehearse it at the same time every day for 30 days. Your default will change."
   },
   {
-    name: "Maritime Lien",
-    oneLiner: "An unpaid debt sticks to the ship itself.",
+    name: "Law of Transmutation",
+    oneLiner: "Lower energies can be lifted, not destroyed.",
     meaning:
-      "Some claims (wages, salvage, supplies) attach to the vessel — they follow it across owners and oceans until paid.",
-    use: "Some debts attach to the asset, not the person. Settle them before you sell, transfer or move on."
+      "Anger, fear, jealousy and grief are not enemies — they are dense forms of energy. Through breath, movement, art, sound and intention, dense water can be raised into clarity, focus and creative drive. Energy never leaves; it only changes frequency.",
+    use: "When a heavy emotion hits, don't suppress it. Move it (run, write, sing, breathe). Watch it come out the other side as power."
   }
 ];

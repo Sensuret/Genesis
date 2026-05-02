@@ -1,14 +1,22 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ExternalLink, Plus, Save, StickyNote, Trash2, X } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/input";
+import { ScreenshotButton } from "@/components/ui/screenshot-button";
+import { ResolutionsTab } from "@/components/notebook/resolutions-tab";
 import { createClient } from "@/lib/supabase/client";
-import type { NotebookEmbed, NotebookNote, UserSettingsData } from "@/lib/supabase/types";
+import { cn } from "@/lib/utils";
+import type {
+  NotebookEmbed,
+  NotebookNote,
+  Resolution,
+  UserSettingsData
+} from "@/lib/supabase/types";
 
 function newId(): string {
   if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
@@ -47,8 +55,20 @@ function readSettings(data: unknown): UserSettingsData {
         typeof x.created_at === "string"
     );
   }
+  if (Array.isArray(data.notebook_resolutions)) {
+    out.notebook_resolutions = data.notebook_resolutions.filter(
+      (x): x is Resolution =>
+        isJsonObject(x) &&
+        typeof x.id === "string" &&
+        typeof x.year === "number" &&
+        typeof x.created_at === "string" &&
+        Array.isArray((x as Record<string, unknown>).sections)
+    );
+  }
   return out;
 }
+
+type TopTab = "general" | "resolutions";
 
 export default function NotebookPage() {
   const [userId, setUserId] = useState<string | null>(null);
@@ -56,6 +76,7 @@ export default function NotebookPage() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [scratch, setScratch] = useState("");
   const [notes, setNotes] = useState<NotebookNote[]>([]);
+  const [resolutions, setResolutions] = useState<Resolution[]>([]);
   const [savingScratch, setSavingScratch] = useState(false);
   const [namePromptOpen, setNamePromptOpen] = useState(false);
   const [pendingName, setPendingName] = useState("");
@@ -65,6 +86,7 @@ export default function NotebookPage() {
   const [adderOpen, setAdderOpen] = useState(false);
   const [newLabel, setNewLabel] = useState("");
   const [newUrl, setNewUrl] = useState("");
+  const [tab, setTab] = useState<TopTab>("general");
 
   useEffect(() => {
     (async () => {
@@ -87,6 +109,7 @@ export default function NotebookPage() {
       setActiveId(parsed.notebook_active_id ?? parsed.notebook_embeds?.[0]?.id ?? null);
       setScratch(parsed.notebook_scratchpad ?? "");
       setNotes(parsed.notebook_notes ?? []);
+      setResolutions(parsed.notebook_resolutions ?? []);
       setLoading(false);
     })();
   }, []);
@@ -172,13 +195,22 @@ export default function NotebookPage() {
     await persist({ notebook_notes: nextNotes });
   }
 
+  async function persistResolutions(next: Resolution[]) {
+    setResolutions(next);
+    await persist({ notebook_resolutions: next });
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Notebook"
-        description="Embed any Notion / Coda / Google Doc URL, jot quick scratchpad notes, and save them to your personal Notes library."
+        description={
+          tab === "general"
+            ? "Embed any Notion / Coda / Google Doc URL, jot quick scratchpad notes, and save them to your personal Notes library."
+            : "Define yearly resolutions in the Genesis template — section headers, sub-sections and bullets render as a printable card with the year's Chinese-zodiac figure."
+        }
         actions={
-          active ? (
+          tab === "general" && active ? (
             <a href={active.url} target="_blank" rel="noreferrer">
               <Button variant="secondary">
                 <ExternalLink className="h-4 w-4" /> Open in new tab
@@ -188,6 +220,44 @@ export default function NotebookPage() {
         }
       />
 
+      <div className="rounded-xl border border-line bg-bg-soft p-1 inline-flex">
+        <button
+          type="button"
+          onClick={() => setTab("general")}
+          className={cn(
+            "rounded-lg px-3 py-1.5 text-xs font-medium transition",
+            tab === "general"
+              ? "bg-bg-elevated text-fg shadow-sm"
+              : "text-fg-muted hover:text-fg"
+          )}
+        >
+          General
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("resolutions")}
+          className={cn(
+            "rounded-lg px-3 py-1.5 text-xs font-medium transition",
+            tab === "resolutions"
+              ? "bg-bg-elevated text-fg shadow-sm"
+              : "text-fg-muted hover:text-fg"
+          )}
+        >
+          Resolutions
+          {resolutions.length > 0 && (
+            <span className="ml-1.5 rounded-full bg-brand-500/20 px-1.5 py-0.5 text-[10px] text-brand-200">
+              {resolutions.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {tab === "resolutions" && (
+        <ResolutionsTab resolutions={resolutions} onChange={persistResolutions} />
+      )}
+
+      {tab === "general" && (
+        <>
       {error && (
         <div className="rounded-xl border border-danger/40 bg-danger/10 p-3 text-sm text-danger">
           {error}
@@ -393,45 +463,81 @@ export default function NotebookPage() {
       )}
 
       {openNote && (
-        <div
-          className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/60 p-4"
-          onClick={() => setOpenNote(null)}
-        >
-          <div
-            className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl border border-line bg-bg-elevated p-5 shadow-card"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mb-3 flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <h3 className="truncate text-base font-semibold">{openNote.name}</h3>
-                <div className="mt-0.5 text-[11px] text-fg-subtle">
-                  Saved {formatNoteTimestamp(openNote.created_at)}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => deleteNote(openNote.id)}
-                  className="inline-flex items-center gap-1 rounded-lg border border-line px-2 py-1 text-xs text-fg-muted hover:border-danger hover:text-danger"
-                >
-                  <Trash2 className="h-3.5 w-3.5" /> Delete
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setOpenNote(null)}
-                  className="text-fg-subtle hover:text-fg"
-                  aria-label="Close note"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-            <div className="overflow-y-auto whitespace-pre-wrap rounded-xl border border-line bg-bg-soft/40 p-4 text-sm text-fg">
-              {openNote.body || <em className="text-fg-subtle">This note is empty.</em>}
+        <NoteModal
+          note={openNote}
+          onClose={() => setOpenNote(null)}
+          onDelete={() => deleteNote(openNote.id)}
+        />
+      )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function NoteModal({
+  note,
+  onClose,
+  onDelete
+}: {
+  note: NotebookNote;
+  onClose: () => void;
+  onDelete: () => void;
+}) {
+  const captureRef = useRef<HTMLDivElement>(null);
+  const safeName = note.name.replace(/[^a-z0-9-_ ]/gi, "").trim() || "note";
+  return (
+    <div
+      className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/60 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl border border-line bg-bg-elevated p-5 shadow-card"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="truncate text-base font-semibold">{note.name}</h3>
+            <div className="mt-0.5 text-[11px] text-fg-subtle">
+              Saved {formatNoteTimestamp(note.created_at)}
             </div>
           </div>
+          <div className="flex items-center gap-2" data-screenshot-ignore="true">
+            <button
+              type="button"
+              onClick={onDelete}
+              className="inline-flex items-center gap-1 rounded-lg border border-line px-2 py-1 text-xs text-fg-muted hover:border-danger hover:text-danger"
+            >
+              <Trash2 className="h-3.5 w-3.5" /> Delete
+            </button>
+            <ScreenshotButton
+              targetRef={captureRef}
+              filename={`note-${safeName}`}
+              label="Save note as PNG"
+            />
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-line bg-bg text-fg-muted transition hover:border-danger hover:text-danger"
+              aria-label="Close note"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
-      )}
+        <div
+          ref={captureRef}
+          className="overflow-y-auto whitespace-pre-wrap rounded-xl border border-line bg-bg-soft/40 p-4 text-sm text-fg"
+        >
+          <div className="mb-3 border-b border-line pb-2 text-xs text-fg-muted">
+            <div className="font-semibold text-fg">{note.name}</div>
+            <div className="text-[11px] text-fg-subtle">
+              {formatNoteTimestamp(note.created_at)}
+            </div>
+          </div>
+          {note.body || <em className="text-fg-subtle">This note is empty.</em>}
+        </div>
+      </div>
     </div>
   );
 }
