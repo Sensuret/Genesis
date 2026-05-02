@@ -35,7 +35,7 @@ import { detectSession } from "@/lib/parser";
 import { cn } from "@/lib/utils";
 import type { TradeRow } from "@/lib/supabase/types";
 
-const GROUPS = ["Daily", "Weekly", "Monthly", "Quarterly"] as const;
+const GROUPS = ["Daily", "Weekly", "Monthly", "Quarterly", "Yearly"] as const;
 type GroupBy = (typeof GROUPS)[number];
 
 type Insight = { tone: "good" | "warn" | "bad"; title: string; detail: string };
@@ -142,6 +142,7 @@ function bucketKey(date: string, group: GroupBy): string {
   if (Number.isNaN(d.getTime())) return date;
 
   if (group === "Monthly") return date.slice(0, 7);
+  if (group === "Yearly") return String(d.getUTCFullYear());
   if (group === "Quarterly") {
     const q = Math.floor(d.getUTCMonth() / 3) + 1;
     return `${d.getUTCFullYear()}-Q${q}`;
@@ -171,7 +172,33 @@ function bucketLabel(key: string, group: GroupBy): string {
     const d = new Date(Number(y), Number(m) - 1, 1);
     return d.toLocaleDateString(undefined, { month: "short", year: "2-digit" });
   }
+  if (group === "Yearly") return key;
   return key; // Quarterly already reads "2025-Q3"
+}
+
+/** Human-readable description of which period the triangle is showing. */
+function focusBucketLabel(key: string, group: GroupBy): string {
+  if (group === "Daily") {
+    const d = new Date(`${key}T12:00:00Z`);
+    if (Number.isNaN(d.getTime())) return key;
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  }
+  if (group === "Weekly") {
+    const start = new Date(`${key}T12:00:00Z`);
+    if (Number.isNaN(start.getTime())) return `Week of ${key}`;
+    const end = new Date(start);
+    end.setUTCDate(start.getUTCDate() + 6);
+    const fmt = (d: Date) =>
+      d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    return `${fmt(start)} – ${fmt(end)}`;
+  }
+  if (group === "Monthly") {
+    const [y, m] = key.split("-");
+    if (!m) return key;
+    const d = new Date(Number(y), Number(m) - 1, 1);
+    return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  }
+  return key; // Quarterly + Yearly already self-describing
 }
 
 type Bucket = {
@@ -209,10 +236,22 @@ export default function GsInsightsPage() {
   const screenshotRef = useRef<HTMLDivElement>(null);
 
   const filtered = useMemo(() => applyAllFilters(trades, filters), [trades, filters]);
-  const parts = useMemo(() => computeGsScoreParts(filtered), [filtered]);
-  const score = useMemo(() => gsScore(parts), [parts]);
   const insights = useMemo(() => buildInsights(filtered, fmt), [filtered, fmt]);
   const buckets = useMemo(() => buildBuckets(filtered, group), [filtered, group]);
+
+  // Triangle radar tracks the *most recent* bucket of the chosen grouping,
+  // so toggling Daily / Weekly / Monthly / Quarterly / Yearly visibly redraws
+  // it (matches the behaviour of the curves underneath).
+  const focusBucket = buckets.length ? buckets[buckets.length - 1] : null;
+  const focusTrades = useMemo(() => {
+    if (!focusBucket) return filtered;
+    return filtered.filter(
+      (t) => t.trade_date && bucketKey(t.trade_date, group) === focusBucket.key
+    );
+  }, [filtered, focusBucket, group]);
+  const parts = useMemo(() => computeGsScoreParts(focusTrades), [focusTrades]);
+  const score = useMemo(() => gsScore(parts), [parts]);
+  const focusLabel = focusBucket ? focusBucketLabel(focusBucket.key, group) : null;
 
   // Best / worst session breakdown for the right-side coaching column.
   const sessionBreakdown = useMemo(() => {
@@ -250,7 +289,11 @@ export default function GsInsightsPage() {
         <Card>
           <CardHeader className="flex items-center justify-between">
             <CardTitle>GS Score</CardTitle>
-            <span className="text-[11px] text-fg-subtle">Triangle</span>
+            {focusLabel && (
+              <span className="rounded-full bg-brand-500/15 px-2 py-0.5 text-[10px] font-medium text-brand-300">
+                {focusLabel}
+              </span>
+            )}
           </CardHeader>
           <CardBody>
             <GsScoreTriangle parts={parts} score={score} radarHeight="h-52" />

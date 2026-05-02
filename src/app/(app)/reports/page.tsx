@@ -367,6 +367,13 @@ function Compare({ trades, fmt }: { trades: TradeRow[]; fmt: Fmt }) {
 function CalendarView({ trades, fmt }: { trades: TradeRow[]; fmt: Fmt }) {
   const days = useMemo(() => dailyPnl(trades), [trades]);
   const [openDate, setOpenDate] = useState<string | null>(null);
+  const balanceFallback = useMemo<number | null>(() => {
+    for (let i = trades.length - 1; i >= 0; i -= 1) {
+      const b = trades[i].account_balance;
+      if (typeof b === "number" && b > 0) return b;
+    }
+    return null;
+  }, [trades]);
   // Available years in the data; default cursor to most recent.
   const years = useMemo(() => {
     const set = new Set<number>();
@@ -463,6 +470,7 @@ function CalendarView({ trades, fmt }: { trades: TradeRow[]; fmt: Fmt }) {
         <DayViewModal
           date={openDate}
           trades={trades}
+          balanceFallback={balanceFallback}
           onClose={() => setOpenDate(null)}
         />
       )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { TradeRow, TradeFileRow } from "@/lib/supabase/types";
 
@@ -29,7 +29,23 @@ async function fetchAllTrades() {
   return out;
 }
 
-export function useTrades() {
+type TradesContextValue = {
+  trades: TradeRow[];
+  files: TradeFileRow[];
+  loading: boolean;
+  error: string | null;
+  refresh: () => Promise<void>;
+};
+
+const TradesContext = createContext<TradesContextValue | null>(null);
+
+/**
+ * Session-level trades cache. Mounted once in the (app) layout so trades + the
+ * file list are fetched a single time per signed-in session and reused across
+ * page navigations — eliminates the multi-second reload that used to happen
+ * on every route change.
+ */
+export function TradesProvider({ children }: { children: ReactNode }) {
   const [trades, setTrades] = useState<TradeRow[]>([]);
   const [files, setFiles] = useState<TradeFileRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -39,13 +55,13 @@ export function useTrades() {
     const supabase = createClient();
     setLoading(true);
     try {
-      const [allTrades, { data: files, error: filesErr }] = await Promise.all([
+      const [allTrades, { data: filesData, error: filesErr }] = await Promise.all([
         fetchAllTrades(),
         supabase.from("trade_files").select("*").order("created_at", { ascending: false })
       ]);
       if (filesErr) throw filesErr;
       setTrades(allTrades);
-      setFiles(files ?? []);
+      setFiles((filesData ?? []) as TradeFileRow[]);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load trades.");
@@ -58,5 +74,24 @@ export function useTrades() {
     refresh();
   }, [refresh]);
 
-  return { trades, files, loading, error, refresh };
+  const value = useMemo<TradesContextValue>(
+    () => ({ trades, files, loading, error, refresh }),
+    [trades, files, loading, error, refresh]
+  );
+
+  return createElement(TradesContext.Provider, { value }, children);
+}
+
+/**
+ * Read the session-cached trades + files. The `(app)` layout mounts a
+ * `<TradesProvider>` once per signed-in session, so every page using this
+ * hook reads the same in-memory copy — no Supabase round trip on each route
+ * change.
+ */
+export function useTrades(): TradesContextValue {
+  const ctx = useContext(TradesContext);
+  if (!ctx) {
+    throw new Error("useTrades() must be used inside a <TradesProvider>");
+  }
+  return ctx;
 }

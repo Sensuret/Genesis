@@ -1503,36 +1503,88 @@ function GeneralKnowledge() {
 
 function LawsView() {
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader><CardTitle>Laws of the Universe</CardTitle></CardHeader>
-        <CardBody className="space-y-2 text-sm text-fg-muted">
-          <p>
-            Twelve <span className="text-fg">universal laws</span> distilled from hermetic and
-            wisdom traditions. Treat them as lenses for self-awareness — not financial or
-            medical advice. They apply to <em>all</em> of life, not just trading.
-          </p>
-        </CardBody>
-      </Card>
-
+    <div className="space-y-8">
+      <SectionBanner
+        accent="brand"
+        eyebrow="Section · 01"
+        title="Laws of the Universe"
+        count={UNIVERSAL_LAWS.length}
+        body="Twelve universal laws distilled from hermetic and wisdom traditions. Treat them as lenses for self-awareness — not financial or medical advice. They apply to all of life, not just trading."
+      />
       <div className="grid gap-3 lg:grid-cols-2">
         {UNIVERSAL_LAWS.map((law) => <LawCard key={law.name} law={law} accent="brand" />)}
       </div>
 
-      <Card>
-        <CardHeader><CardTitle>Laws of the Sea (Maritime Laws)</CardTitle></CardHeader>
-        <CardBody className="space-y-2 text-sm text-fg-muted">
-          <p>
-            Selected principles from international maritime law. Genesis treats them as
-            metaphors for navigating life — capital, relationships, ventures and reputation are
-            all "vessels" you sail. Each entry includes the law's literal meaning and a way to
-            apply it in everyday living.
-          </p>
-        </CardBody>
-      </Card>
-
+      <SectionBanner
+        accent="warn"
+        eyebrow="Section · 02"
+        title="Laws of the Sea (Maritime Laws)"
+        count={MARITIME_LAWS.length}
+        body={'Selected principles from international maritime law. Genesis treats them as metaphors for navigating life — capital, relationships, ventures and reputation are all "vessels" you sail. Each entry includes the law\u2019s literal meaning and a way to apply it in everyday living.'}
+      />
       <div className="grid gap-3 lg:grid-cols-2">
         {MARITIME_LAWS.map((law) => <LawCard key={law.name} law={law} accent="warn" />)}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Visually distinct section header used at the top of each Laws group, so the
+ * heading reads as a divider rather than a dim card floating among the law
+ * cards beneath it.
+ */
+function SectionBanner({
+  accent,
+  eyebrow,
+  title,
+  body,
+  count
+}: {
+  accent: "brand" | "warn";
+  eyebrow: string;
+  title: string;
+  body: string;
+  count: number;
+}) {
+  const palette =
+    accent === "brand"
+      ? {
+          ring: "border-brand-500/40",
+          glow: "from-brand-500/30 via-brand-500/15 to-bg",
+          chipText: "text-brand-200",
+          chipBorder: "border-brand-400/40",
+          chipBg: "bg-brand-500/10",
+          accentBar: "bg-gradient-to-b from-brand-300 via-brand-500 to-brand-700"
+        }
+      : {
+          ring: "border-warn/40",
+          glow: "from-warn/30 via-warn/15 to-bg",
+          chipText: "text-warn",
+          chipBorder: "border-warn/40",
+          chipBg: "bg-warn/10",
+          accentBar: "bg-gradient-to-b from-warn via-warn/80 to-warn/50"
+        };
+  return (
+    <div
+      className={`relative overflow-hidden rounded-2xl border ${palette.ring} bg-gradient-to-br ${palette.glow} px-5 py-5 sm:px-6 sm:py-6`}
+    >
+      <div className={`absolute inset-y-3 left-0 w-1 rounded-r-full ${palette.accentBar}`} aria-hidden />
+      <div className="relative flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1 pl-3">
+          <div className={`text-[10px] font-semibold uppercase tracking-[0.18em] ${palette.chipText}`}>
+            {eyebrow}
+          </div>
+          <h2 className="mt-1 text-2xl font-semibold tracking-tight text-fg sm:text-[26px]">
+            {title}
+          </h2>
+          <p className="mt-2 max-w-3xl text-sm text-fg-muted">{body}</p>
+        </div>
+        <div
+          className={`shrink-0 rounded-full border ${palette.chipBorder} ${palette.chipBg} px-3 py-1 text-xs font-medium ${palette.chipText}`}
+        >
+          {count} law{count === 1 ? "" : "s"}
+        </div>
       </div>
     </div>
   );
