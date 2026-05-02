@@ -167,7 +167,7 @@ export default function RecapsPage() {
     <div ref={screenshotRef} className="space-y-6">
       <PageHeader
         title="Recaps"
-        description="Score-board view of your trading performance, plus drill-downs into Weekly / Monthly / Quarterly / Annual recaps."
+        description="Review your performance by Day, Week, Month, Quarter or Year, then open the full Weekly, Monthly, Quarterly or Annual recap for any period."
         actions={
           <>
             <ScreenshotButton targetRef={screenshotRef} filename="recaps" />
