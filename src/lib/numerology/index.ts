@@ -421,7 +421,7 @@ export function chineseEmoji(sign: ChineseSign): string {
   return CHINESE_EMOJI[sign];
 }
 
-const CHINESE_TRINE: Record<ChineseSign, ChineseSign[]> = {
+export const CHINESE_TRINE: Record<ChineseSign, ChineseSign[]> = {
   Rat: ["Dragon", "Monkey"],
   Ox: ["Snake", "Rooster"],
   Tiger: ["Horse", "Dog"],
