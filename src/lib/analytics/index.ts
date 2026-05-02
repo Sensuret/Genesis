@@ -137,13 +137,27 @@ export function winners(trades: TradeRow[]) { return trades.filter((t) => (t.pnl
 export function losers(trades: TradeRow[]) { return trades.filter((t) => (t.pnl ?? 0) < 0); }
 
 /**
- * Win rate = winning trades / total trades (BE counted in denominator).
- * Matches the per-day percentage shown in the Dashboard calendar cells
- * so the two never disagree for the same set of trades.
+ * Win rate = wins / (wins + losses).
+ *
+ * Matches the industry-standard TradeZella convention: break-even (pnl === 0)
+ * trades are excluded from BOTH numerator and denominator, and unsettled
+ * (pnl === null) trades are also excluded. So with 14 wins, 4 BE, 17 losses
+ * the win rate is `14 / (14 + 17) = 45.16%` — not `14 / 35`.
+ *
+ * Used by every win-rate display in the app (Dashboard hero stats + calendar
+ * cells, Day View, Reports overview, GS Insights, Recaps) so they all agree
+ * on the same number for the same set of trades.
  */
 export function winRate(trades: TradeRow[]): number {
-  if (!trades.length) return 0;
-  return (winners(trades).length / trades.length) * 100;
+  let w = 0;
+  let l = 0;
+  for (const t of trades) {
+    if (t.pnl == null) continue;
+    if (t.pnl > 0) w += 1;
+    else if (t.pnl < 0) l += 1;
+  }
+  const decided = w + l;
+  return decided ? (w / decided) * 100 : 0;
 }
 
 export function profitFactor(trades: TradeRow[]): number {
@@ -207,6 +221,7 @@ export type GsScoreInputs = {
   recoveryFactor: number;
   maxDrawdown: number;
   consistency: number;
+  netPnl: number;
 };
 
 export function computeGsScoreParts(trades: TradeRow[]): GsScoreInputs {
@@ -216,19 +231,40 @@ export function computeGsScoreParts(trades: TradeRow[]): GsScoreInputs {
     avgWinLoss: avgWinLoss(trades),
     recoveryFactor: recoveryFactor(trades),
     maxDrawdown: maxDrawdown(trades),
-    consistency: consistencyScore(trades)
+    consistency: consistencyScore(trades),
+    netPnl: netPnl(trades)
   };
 }
 
-/** GS Score 0–100 — six components blended on a fintech curve. */
+/**
+ * GS Score 0–100 — weighted blend of six components.
+ *
+ * Weights (sum = 100):
+ *   - Win % .................. 25 (curve: 70% wins → full credit)
+ *   - Profit factor .......... 20 (curve: PF 3.0 → full credit)
+ *   - Avg win/loss ........... 15 (curve: ratio 3.0 → full credit)
+ *   - Recovery factor ........ 10 (curve: RF 3.0 → full credit)
+ *   - Drawdown discipline .... 15 (max DD relative to net P&L)
+ *   - Consistency ............ 15 (already 0–100 scale)
+ *
+ * Win-rate is given the heaviest single weight, so a low win % cannot be
+ * masked by an extremely high profit factor — the score reflects the
+ * combined quality of the system rather than letting one metric dominate.
+ */
 export function gsScore(parts: GsScoreInputs): number {
   const winC = clamp01(parts.winPct / 70) * 100;
   const pfC = clamp01((parts.profitFactor - 1) / 2) * 100;
-  const wlC = clamp01(parts.avgWinLoss / 2.5) * 100;
-  const rfC = clamp01(parts.recoveryFactor / 5) * 100;
-  const ddC = (1 - clamp01(parts.maxDrawdown ? parts.maxDrawdown / Math.max(parts.maxDrawdown * 4, 1) : 0)) * 100;
+  const wlC = clamp01((parts.avgWinLoss - 1) / 2) * 100;
+  const rfC = clamp01(parts.recoveryFactor / 3) * 100;
+  // Drawdown discipline: max-DD compared to absolute net P&L.
+  //   ratio = maxDD / max(|netPnl|, $1) — capped at 1.
+  //   Small DD vs big net → high score; DD ≥ net → score crashes to 0.
+  const ddDenom = Math.max(Math.abs(parts.netPnl), 1);
+  const ddRatio = parts.maxDrawdown > 0 ? Math.min(parts.maxDrawdown / ddDenom, 1) : 0;
+  const ddC = (1 - ddRatio) * 100;
   const cnsC = clamp01(parts.consistency / 100) * 100;
-  return Math.round((winC + pfC + wlC + rfC + ddC + cnsC) / 6);
+  const weighted = winC * 0.25 + pfC * 0.20 + wlC * 0.15 + rfC * 0.10 + ddC * 0.15 + cnsC * 0.15;
+  return Math.round(weighted);
 }
 
 function clamp01(n: number) {

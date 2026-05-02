@@ -231,7 +231,7 @@ export function CurrentStreakCard({
   tradesType: "win" | "loss" | null;
 }) {
   return (
-    <Card className="flex min-h-24 flex-col overflow-hidden p-3">
+    <Card className="flex min-h-[7.25rem] flex-col overflow-hidden p-3">
       <div className="mb-1">
         <HeroStatLabel label="Current streak" />
       </div>
@@ -278,7 +278,6 @@ function StreakColumn({
   const circumference = 2 * Math.PI * radius;
   // Fill the ring proportional to current vs best — falls back to full if best===0.
   const fill = best > 0 ? Math.min(value / best, 1) : value > 0 ? 1 : 0;
-  const unitShort = unit === "day" ? "d" : "t";
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <div className="flex min-w-0 items-center gap-1.5">
@@ -303,26 +302,22 @@ function StreakColumn({
           {title}
         </span>
       </div>
-      <div className="flex min-w-0 flex-wrap items-center gap-1 text-[10px]">
+      <div className="flex min-w-0 flex-wrap items-center gap-1 text-[10px] leading-tight">
         <span
           className={cn(
-            "rounded-md px-1.5 py-0.5 font-medium",
+            "whitespace-nowrap rounded-md px-1.5 py-0.5 font-medium",
             type === null
               ? "bg-fg-muted/15 text-fg-muted"
               : positive
                 ? "bg-success/15 text-success"
                 : "bg-danger/15 text-danger"
           )}
-          title={`Current: ${value} ${unit}${value === 1 ? "" : "s"}`}
         >
-          {value}{unitShort}
+          {value} {unit}{value === 1 ? "" : "s"}
         </span>
         {best > 0 && (
-          <span
-            className="rounded-md bg-bg-soft px-1.5 py-0.5 font-medium text-fg-muted"
-            title={`Best: ${best} ${unit}${best === 1 ? "" : "s"}`}
-          >
-            best {best}{unitShort}
+          <span className="whitespace-nowrap rounded-md bg-bg-soft px-1.5 py-0.5 font-medium text-fg-muted">
+            {best} {unit}{best === 1 ? "" : "s"}
           </span>
         )}
       </div>
