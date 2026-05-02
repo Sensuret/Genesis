@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
+import { ScreenshotButton } from "@/components/ui/screenshot-button";
 import { Stat } from "@/components/ui/stat";
 import { useTrades } from "@/lib/hooks/use-trades";
 import {
@@ -41,6 +42,7 @@ export default function ReportsPage() {
   const [tab, setTab] = useState<Tab>("Overview");
 
   const filtered = useMemo(() => applyAllFilters(trades, filters), [trades, filters]);
+  const screenshotRef = useRef<HTMLDivElement>(null);
 
   if (loading) return <div className="text-sm text-fg-muted">Loading reports…</div>;
   if (!filtered.length)
@@ -56,10 +58,11 @@ export default function ReportsPage() {
     );
 
   return (
-    <div className="space-y-6">
+    <div ref={screenshotRef} className="space-y-6">
       <PageHeader
         title="Reports"
         description="Tradezella-depth insights — overview, detailed cuts, risk, wins vs losses, comparisons and calendar."
+        actions={<ScreenshotButton targetRef={screenshotRef} filename={`reports-${tab.toLowerCase().replace(/\s+/g, "-")}`} />}
       />
 
       <div className="flex flex-wrap gap-2">

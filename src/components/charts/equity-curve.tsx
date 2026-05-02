@@ -15,7 +15,16 @@ import { formatMoney } from "@/lib/fx";
  * The split point is computed from where 0 lives inside the visible
  * y-domain so the colour transition snaps to the zero line.
  */
-export function EquityCurveChart({ data, variant = "default" }: { data: EquityPoint[]; variant?: "default" | "purple" }) {
+export function EquityCurveChart({
+  data,
+  variant = "default",
+  height = "h-72"
+}: {
+  data: EquityPoint[];
+  variant?: "default" | "purple";
+  /** Tailwind height class. Pass `h-full` to fill a flex parent. */
+  height?: string;
+}) {
   const { convert, currency } = useMoney();
   const converted = useMemo(
     () => data.map((d) => ({ ...d, equity: convert(d.equity), pnl: convert(d.pnl) })),
@@ -35,9 +44,9 @@ export function EquityCurveChart({ data, variant = "default" }: { data: EquityPo
     return <Empty title="No trades yet" description="Equity curve will populate as you log or import trades." />;
 
   return (
-    <div className="h-72 w-full">
+    <div className={`${height} w-full`}>
       <ResponsiveContainer>
-        <AreaChart data={converted}>
+        <AreaChart data={converted} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
           <defs>
             {variant === "purple" ? (
               <>
@@ -77,6 +86,8 @@ export function EquityCurveChart({ data, variant = "default" }: { data: EquityPo
             fontSize={11}
             tickLine={false}
             axisLine={false}
+            width={64}
+            tickMargin={4}
             tickFormatter={(v: number) => formatMoney(v, currency)}
           />
           <Tooltip
