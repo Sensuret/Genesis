@@ -20,6 +20,14 @@ import * as XLSX from "xlsx";
 export type ParsedTrade = {
   pair: string | null;
   trade_date: string | null;
+  /** ISO timestamp of when the trade opened. */
+  open_time: string | null;
+  /** ISO timestamp of when the trade closed. */
+  close_time: string | null;
+  /** Trade duration in seconds. */
+  duration_seconds: number | null;
+  /** Net pips moved (signed). */
+  pips: number | null;
   session: string | null;
   side: "long" | "short" | null;
   entry: number | null;
@@ -53,6 +61,10 @@ const SYNONYMS: Record<FieldKey, string[]> = {
     "date",
     "time"
   ],
+  open_time: ["open time", "open date", "opened", "entry time", "entry date"],
+  close_time: ["close time", "close date", "closed", "exit time", "exit date"],
+  duration_seconds: ["duration", "trade duration", "elapsed"],
+  pips: ["pips", "pip", "points"],
   session: ["session"],
   side: ["side", "direction", "type", "buy/sell", "long/short", "action"],
   entry: ["entry", "entry price", "open price", "buy price", "open"],
@@ -112,7 +124,9 @@ const NUMERIC_FIELDS: FieldKey[] = [
   "pnl",
   "commissions",
   "spread",
-  "account_balance"
+  "account_balance",
+  "duration_seconds",
+  "pips"
 ];
 
 function toNumber(value: unknown): number | null {
@@ -123,32 +137,93 @@ function toNumber(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function toDate(value: unknown): string | null {
+/**
+ * Parse a broker timestamp into a full ISO `Date`. Handles:
+ *   - MetaTrader's `2026.03.04 16:57:05` (dots between date parts)
+ *   - Excel serial numbers (date+time fractions)
+ *   - Standard ISO 8601 strings
+ */
+function toDateObject(value: unknown): Date | null {
   if (!value) return null;
   if (value instanceof Date) {
-    if (!Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
-    return null;
+    return Number.isNaN(value.getTime()) ? null : value;
   }
   const s = String(value).trim();
-  // MetaTrader writes "2026.03.04 16:57:05" — Date() chokes on the dots.
   const mt = s.match(/^(\d{4})[./-](\d{2})[./-](\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/);
   if (mt) {
     const [, y, mo, d, hh = "00", mm = "00", ss = "00"] = mt;
     const iso = new Date(Date.UTC(+y, +mo - 1, +d, +hh, +mm, +ss));
-    if (!Number.isNaN(iso.getTime())) return iso.toISOString().slice(0, 10);
+    return Number.isNaN(iso.getTime()) ? null : iso;
   }
-  // Excel serial number?
   if (/^\d+(\.\d+)?$/.test(s)) {
     const n = Number.parseFloat(s);
     if (n > 30000 && n < 60000) {
       const ms = (n - 25569) * 86_400_000;
       const d = new Date(ms);
-      if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+      return Number.isNaN(d.getTime()) ? null : d;
     }
   }
   const d = new Date(s);
-  if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function toDate(value: unknown): string | null {
+  const d = toDateObject(value);
+  return d ? d.toISOString().slice(0, 10) : null;
+}
+
+function toIsoTimestamp(value: unknown): string | null {
+  const d = toDateObject(value);
+  return d ? d.toISOString() : null;
+}
+
+/**
+ * Pip factor for a symbol. Convert price-units → pips.
+ *   - JPY pairs (USDJPY, EURJPY, GBPJPY…)        → 100
+ *   - Standard FX (EURUSD, GBPUSD, AUDCAD…)      → 10000
+ *   - Metals (XAUUSD, XAGUSD)                    → 10
+ *   - Indices (US30, NAS100, SPX500, GER40, etc.) → 10
+ *   - Crypto (BTCUSD, ETHUSD…)                   → 1
+ *   - Unknown / blank                            → null (don't guess)
+ */
+export function pipFactor(symbol: string | null | undefined): number | null {
+  if (!symbol) return null;
+  const s = symbol.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (!s) return null;
+  if (/JPY/.test(s)) return 100;
+  if (/^(BTC|ETH|XRP|SOL|LTC|ADA|DOGE|BNB|DOT|AVAX|LINK|MATIC|ATOM|TRX|XLM|XMR|UNI)/.test(s)) return 1;
+  if (/^XAU|^XAG|GOLD|SILVER/.test(s)) return 10;
+  if (/(US30|US100|US500|NAS|SPX|DJ30|GER|DAX|UK100|FTSE|JPN225|AUS200|HK50|NDX)/.test(s)) return 10;
+  // Default to standard FX (4-decimal) when we have a 6-letter ccy pair like
+  // EURUSD, AUDCAD…
+  if (/^[A-Z]{6}$/.test(s)) return 10000;
   return null;
+}
+
+/** Compute pips moved on a trade. Positive = trade went toward winner. */
+export function computePips(args: {
+  pair: string | null | undefined;
+  entry: number | null | undefined;
+  exit_price: number | null | undefined;
+  side: "long" | "short" | null | undefined;
+}): number | null {
+  const { pair, entry, exit_price, side } = args;
+  if (entry == null || exit_price == null) return null;
+  const factor = pipFactor(pair ?? null);
+  if (factor == null) return null;
+  const direction = side === "short" ? -1 : 1;
+  const moved = (exit_price - entry) * factor * direction;
+  return Number.isFinite(moved) ? Math.round(moved * 10) / 10 : null;
+}
+
+/** Compute trade duration (seconds) from open and close timestamps. */
+export function computeDurationSeconds(open: string | null, close: string | null): number | null {
+  if (!open || !close) return null;
+  const o = new Date(open).getTime();
+  const c = new Date(close).getTime();
+  if (!Number.isFinite(o) || !Number.isFinite(c)) return null;
+  const diff = Math.round((c - o) / 1000);
+  return diff >= 0 ? diff : null;
 }
 
 function toSide(value: unknown): "long" | "short" | null {
@@ -168,13 +243,14 @@ function toEmotions(value: unknown): string[] | null {
 }
 
 /**
- * Detect the trading session from a UTC open-time string. Hours are in UTC:
- *   - Sydney  : 22:00 – 06:00 UTC
- *   - Asian   : 00:00 – 08:00 UTC
- *   - London  : 07:00 – 16:00 UTC
- *   - New York: 12:00 – 21:00 UTC
- * Overlap windows favour the *later* opening session (e.g. London during
- * London/NY overlap, NY after 12:00).
+ * Detect the trading session from a broker open-time string. We treat broker
+ * timestamps as UTC. Standard FX session windows (UTC), with overlap rules
+ * picking the *primary* (highest-volume) session:
+ *
+ *   21:00 – 23:59  →  Sydney  (only Sydney is open)
+ *   00:00 – 06:59  →  Asia    (Sydney+Tokyo overlap; Tokyo dominates)
+ *   07:00 – 11:59  →  London  (Tokyo+London overlap; London opens drives)
+ *   12:00 – 20:59  →  New York (London+NY overlap up to 16:00; NY runs solo after)
  */
 export function detectSession(value: unknown): string | null {
   if (!value) return null;
@@ -188,10 +264,11 @@ export function detectSession(value: unknown): string | null {
     if (!Number.isNaN(d.getTime())) hour = d.getUTCHours();
   }
   if (hour === null) return null;
-  if (hour >= 12 && hour <= 20) return "New York";
-  if (hour >= 7 && hour < 12) return "London";
+  if (hour >= 21 && hour <= 23) return "Sydney";
   if (hour >= 0 && hour < 7) return "Asia";
-  return "Sydney";
+  if (hour >= 7 && hour < 12) return "London";
+  if (hour >= 12 && hour <= 20) return "New York";
+  return null;
 }
 
 /**
@@ -221,15 +298,26 @@ function metaTraderRowToTrade(row: unknown[]): ParsedTrade {
   // 6=S/L | 7=T/P | 8=close time | 9=close price | 10=commission | 11=swap |
   // 12=profit
   const openTime = row[0];
-  const out: ParsedTrade = {
-    pair: row[2] != null ? String(row[2]) : null,
+  const closeTime = row[8];
+  const open_time = toIsoTimestamp(openTime);
+  const close_time = toIsoTimestamp(closeTime);
+  const pair = row[2] != null ? String(row[2]) : null;
+  const side = toSide(row[3]);
+  const entry = toNumber(row[5]);
+  const exit_price = toNumber(row[9]);
+  return {
+    pair,
     trade_date: toDate(openTime),
+    open_time,
+    close_time,
+    duration_seconds: computeDurationSeconds(open_time, close_time),
+    pips: computePips({ pair, entry, exit_price, side }),
     session: detectSession(openTime),
-    side: toSide(row[3]),
-    entry: toNumber(row[5]),
+    side,
+    entry,
     stop_loss: toNumber(row[6]),
     take_profit: toNumber(row[7]),
-    exit_price: toNumber(row[9]),
+    exit_price,
     lot_size: toNumber(row[4]),
     result_r: null,
     pnl: toNumber(row[12]),
@@ -241,7 +329,6 @@ function metaTraderRowToTrade(row: unknown[]): ParsedTrade {
     emotions: null,
     notes: null
   };
-  return out;
 }
 
 export function rowToTrade(
@@ -253,10 +340,16 @@ export function rowToTrade(
     return col ? row[col] : undefined;
   };
 
+  const open_time = toIsoTimestamp(get("open_time") ?? get("trade_date"));
+  const close_time = toIsoTimestamp(get("close_time"));
   const out: ParsedTrade = {
     pair: get("pair") ? String(get("pair")) : null,
     trade_date: toDate(get("trade_date")),
-    session: get("session") ? String(get("session")) : detectSession(get("trade_date")),
+    open_time,
+    close_time,
+    duration_seconds: null,
+    pips: null,
+    session: get("session") ? String(get("session")) : detectSession(get("open_time") ?? get("trade_date")),
     side: toSide(get("side")),
     entry: null,
     stop_loss: null,
@@ -276,6 +369,20 @@ export function rowToTrade(
 
   for (const f of NUMERIC_FIELDS) {
     (out as Record<FieldKey, unknown>)[f] = toNumber(get(f));
+  }
+
+  // If duration / pips weren't in the source file, derive them from the
+  // timestamps and price columns we just populated.
+  if (out.duration_seconds == null) {
+    out.duration_seconds = computeDurationSeconds(out.open_time, out.close_time);
+  }
+  if (out.pips == null) {
+    out.pips = computePips({
+      pair: out.pair,
+      entry: out.entry,
+      exit_price: out.exit_price,
+      side: out.side
+    });
   }
 
   return out;
@@ -369,7 +476,7 @@ export async function parseFile(file: File): Promise<ParseResult> {
   const mapping = buildColumnMap(headers);
   const trades = rows.map((r) => {
     const t = rowToTrade(r, mapping);
-    if (!t.session) t.session = detectSession(t.trade_date);
+    if (!t.session) t.session = detectSession(t.open_time ?? t.trade_date);
     return t;
   });
   return { trades, headers, mapping, raw: rows, format: "generic" };

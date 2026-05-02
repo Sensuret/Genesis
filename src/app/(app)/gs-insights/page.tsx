@@ -154,6 +154,27 @@ function bucketKey(date: string, group: GroupBy): string {
   return monday.toISOString().slice(0, 10);
 }
 
+/**
+ * Bucket key for "right now" given a grouping. The page locks the radar +
+ * curves to this period, so toggling Group By always shows the user
+ * "today / this week / this month / this quarter / this year".
+ */
+function currentBucketKey(group: GroupBy): string {
+  const now = new Date();
+  const y = now.getUTCFullYear();
+  const m = now.getUTCMonth();
+  const d = now.getUTCDate();
+  const iso = `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  if (group === "Daily") return iso;
+  if (group === "Monthly") return iso.slice(0, 7);
+  if (group === "Yearly") return String(y);
+  if (group === "Quarterly") return `${y}-Q${Math.floor(m / 3) + 1}`;
+  // Weekly — Monday of the current ISO week.
+  const dow = (now.getUTCDay() + 6) % 7;
+  const monday = new Date(Date.UTC(y, m, d - dow));
+  return monday.toISOString().slice(0, 10);
+}
+
 /** Display label shown on the X axis for a given bucket key. */
 function bucketLabel(key: string, group: GroupBy): string {
   if (group === "Daily") {
@@ -174,6 +195,15 @@ function bucketLabel(key: string, group: GroupBy): string {
   }
   if (group === "Yearly") return key;
   return key; // Quarterly already reads "2025-Q3"
+}
+
+/** Casual label for the current period — used in copy + empty state. */
+function currentPeriodLabel(group: GroupBy): string {
+  if (group === "Daily") return "today";
+  if (group === "Weekly") return "this week";
+  if (group === "Monthly") return "this month";
+  if (group === "Quarterly") return "this quarter";
+  return "this year";
 }
 
 /** Human-readable description of which period the triangle is showing. */
@@ -236,46 +266,72 @@ export default function GsInsightsPage() {
   const screenshotRef = useRef<HTMLDivElement>(null);
 
   const filtered = useMemo(() => applyAllFilters(trades, filters), [trades, filters]);
-  const insights = useMemo(() => buildInsights(filtered, fmt), [filtered, fmt]);
-  const buckets = useMemo(() => buildBuckets(filtered, group), [filtered, group]);
 
-  // Triangle radar tracks the *most recent* bucket of the chosen grouping,
-  // so toggling Daily / Weekly / Monthly / Quarterly / Yearly visibly redraws
-  // it (matches the behaviour of the curves underneath).
-  const focusBucket = buckets.length ? buckets[buckets.length - 1] : null;
-  const focusTrades = useMemo(() => {
-    if (!focusBucket) return filtered;
-    return filtered.filter(
-      (t) => t.trade_date && bucketKey(t.trade_date, group) === focusBucket.key
-    );
-  }, [filtered, focusBucket, group]);
+  // Lock the page to the CURRENT period for the chosen Group By: today /
+  // this week / this month / this quarter / this year. No fallback to past
+  // periods — when there's no data yet for the current period, the page
+  // shows an empty state.
+  const currentKey = useMemo(() => currentBucketKey(group), [group]);
+  const focusTrades = useMemo(
+    () =>
+      filtered.filter(
+        (t) => t.trade_date && bucketKey(t.trade_date, group) === currentKey
+      ),
+    [filtered, group, currentKey]
+  );
+  // Curves trend at a finer granularity inside the current period (e.g. a
+  // Yearly view plots 12 monthly buckets across this year).
+  const subGroup: GroupBy =
+    group === "Daily"
+      ? "Daily"
+      : group === "Weekly" || group === "Monthly"
+        ? "Daily"
+        : group === "Quarterly"
+          ? "Weekly"
+          : "Monthly";
+  const buckets = useMemo(() => buildBuckets(focusTrades, subGroup), [focusTrades, subGroup]);
+  const insights = useMemo(() => buildInsights(focusTrades, fmt), [focusTrades, fmt]);
   const parts = useMemo(() => computeGsScoreParts(focusTrades), [focusTrades]);
   const score = useMemo(() => gsScore(parts), [parts]);
-  const focusLabel = focusBucket ? focusBucketLabel(focusBucket.key, group) : null;
+  const focusLabel = focusBucketLabel(currentKey, group);
 
-  // Best / worst session breakdown for the right-side coaching column.
+  // Best / worst session breakdown for the right-side coaching column —
+  // scoped to the current period the rest of the page is showing.
   const sessionBreakdown = useMemo(() => {
-    const withSession = filtered.map((t) => ({
+    const withSession = focusTrades.map((t) => ({
       ...t,
-      session: t.session ?? detectSession(t.trade_date)
+      session: t.session ?? detectSession(t.open_time ?? t.trade_date)
     }));
     return performanceBy(withSession, "session").filter((s) => s.key && s.key !== "—");
-  }, [filtered]);
+  }, [focusTrades]);
 
   if (loading) return <div className="text-sm text-fg-muted">Loading insights…</div>;
-  if (!filtered.length)
+  if (!focusTrades.length) {
+    const periodLabel = currentPeriodLabel(group);
     return (
-      <Empty
-        title={trades.length ? "No trades match filters" : "No data yet"}
-        description={trades.length ? "Adjust filters in the top bar." : "Add trades to unlock GS Insights."}
-      />
+      <div className="space-y-4">
+        <PageHeader
+          title="GS Insights"
+          description="Snapshot of how you're trading right now — Win %, Profit Factor and Avg Win/Loss for the current period."
+          actions={<GroupBySwitch value={group} onChange={setGroup} />}
+        />
+        <Empty
+          title={`No trades for ${periodLabel}`}
+          description={
+            trades.length
+              ? `You haven't logged any trades for ${periodLabel} yet. Switch the Group By or come back once you've taken trades.`
+              : "Add trades to unlock GS Insights."
+          }
+        />
+      </div>
     );
+  }
 
   return (
     <div ref={screenshotRef} className="space-y-4">
       <PageHeader
         title="GS Insights"
-        description="Your triangular GS Score across Win %, Profit Factor and Avg Win/Loss — tracked over time, with auto-generated coaching notes."
+        description="Snapshot of how you're trading right now — Win %, Profit Factor and Avg Win/Loss for the current period."
         actions={
           <div className="flex items-center gap-2">
             <ScreenshotButton targetRef={screenshotRef} filename="gs-insights" />
@@ -440,7 +496,7 @@ export default function GsInsightsPage() {
               ))}
             </div>
             <p className="mt-3 text-[11px] text-fg-subtle">
-              Sessions are bucketed using the trade open time ({"Asia"} = 00:00–07:00 UTC, {"London"} = 07:00–13:00 UTC, {"New York"} = 13:00–21:00 UTC).
+              Sessions are bucketed from the trade open time. Sydney 21:00–24:00 UTC · Asia 00:00–07:00 UTC · London 07:00–12:00 UTC · New York 12:00–21:00 UTC. Brokers report in their own time-zone — assumed UTC here.
             </p>
           </CardBody>
         </Card>

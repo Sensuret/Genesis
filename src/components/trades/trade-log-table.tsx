@@ -3,9 +3,24 @@
 import { Badge } from "@/components/ui/badge";
 import { useMoney } from "@/lib/filters/store";
 import { realisedRR } from "@/lib/analytics";
-import { detectSession } from "@/lib/parser";
+import { computePips, detectSession } from "@/lib/parser";
 import { cn, formatNumber, pnlColor, shortDate } from "@/lib/utils";
 import type { TradeRow } from "@/lib/supabase/types";
+
+/** Format trade duration (seconds) compactly: 12s · 4m · 1h 12m · 1d 4h. */
+function formatDuration(secs: number | null | undefined): string {
+  if (secs == null || !Number.isFinite(secs) || secs < 0) return "—";
+  if (secs < 60) return `${Math.round(secs)}s`;
+  if (secs < 3600) return `${Math.round(secs / 60)}m`;
+  if (secs < 86_400) {
+    const h = Math.floor(secs / 3600);
+    const m = Math.round((secs - h * 3600) / 60);
+    return m === 0 ? `${h}h` : `${h}h ${m}m`;
+  }
+  const d = Math.floor(secs / 86_400);
+  const h = Math.round((secs - d * 86_400) / 3600);
+  return h === 0 ? `${d}d` : `${d}d ${h}h`;
+}
 
 type Status = "WIN" | "LOSS" | "BE";
 
@@ -83,6 +98,8 @@ export function TradeLogTable({
             <th className="px-3 py-3 font-medium text-right">Exit</th>
             <th className="px-3 py-3 font-medium text-right">Lot</th>
             <th className="px-3 py-3 font-medium text-right">R:R</th>
+            <th className="px-3 py-3 font-medium text-right">Pips</th>
+            <th className="px-3 py-3 font-medium text-right">Duration</th>
             <th className="px-3 py-3 font-medium text-right">Net P&amp;L</th>
             <th className="px-3 py-3 font-medium text-right">Net ROI</th>
             <th className="px-3 py-3 font-medium">Setup</th>
@@ -92,9 +109,12 @@ export function TradeLogTable({
         <tbody>
           {trades.map((t) => {
             const rr = realisedRR(t);
-            const session = t.session ?? detectSession(t.trade_date);
+            const session = t.session ?? detectSession(t.open_time ?? t.trade_date);
             const status = rowStatus(t);
             const roi = tradeRoi(t, balanceFallback);
+            const pips =
+              t.pips ??
+              computePips({ pair: t.pair, entry: t.entry, exit_price: t.exit_price, side: t.side });
             return (
               <tr
                 key={t.id}
@@ -128,6 +148,25 @@ export function TradeLogTable({
                 </td>
                 <td className="px-3 py-2.5 text-right tabular-nums">
                   {rr === null ? <span className="text-fg-muted">—</span> : `1:${rr.toFixed(2)}`}
+                </td>
+                <td
+                  className={cn(
+                    "px-3 py-2.5 text-right tabular-nums",
+                    pips == null
+                      ? "text-fg-muted"
+                      : pips > 0
+                        ? "text-success"
+                        : pips < 0
+                          ? "text-danger"
+                          : "text-fg-muted"
+                  )}
+                >
+                  {pips == null
+                    ? "—"
+                    : `${pips > 0 ? "+" : ""}${pips.toFixed(1)}`}
+                </td>
+                <td className="px-3 py-2.5 text-right tabular-nums text-fg-muted">
+                  {formatDuration(t.duration_seconds)}
                 </td>
                 <td className={`px-3 py-2.5 text-right font-medium tabular-nums ${pnlColor(t.pnl)}`}>
                   {fmt(t.pnl)}

@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { parseFile, type ParsedTrade } from "@/lib/parser";
+import { computePips, parseFile, type ParsedTrade } from "@/lib/parser";
 import { createClient } from "@/lib/supabase/client";
 import { CheckCircle2, Upload } from "lucide-react";
 import Link from "next/link";
@@ -220,22 +220,27 @@ function ManualForm({ onDone }: { onDone: () => void }) {
     }
 
     const num = (s: string) => (s === "" ? null : Number(s));
+    const entry = num(form.entry);
+    const exit_price = num(form.exit_price);
+    const side = form.side as "long" | "short";
+    const pair = form.pair || null;
     const { error } = await supabase.from("trades").insert({
       user_id: user.id,
-      pair: form.pair || null,
+      pair,
       trade_date: form.trade_date || null,
       session: form.session,
-      side: form.side as "long" | "short",
-      entry: num(form.entry),
+      side,
+      entry,
       stop_loss: num(form.stop_loss),
       take_profit: num(form.take_profit),
-      exit_price: num(form.exit_price),
+      exit_price,
       lot_size: num(form.lot_size),
       result_r: num(form.result_r),
       pnl: num(form.pnl),
       commissions: num(form.commissions),
       spread: num(form.spread),
       account_balance: num(form.account_balance),
+      pips: computePips({ pair, entry, exit_price, side }),
       setup_tag: form.setup_tag || null,
       mistake_tag: form.mistake_tag || null,
       emotions: form.emotions ? form.emotions.split(",").map((s) => s.trim()).filter(Boolean) : null,
