@@ -18,6 +18,7 @@ import {
   NUMBER_VIBRATIONS, femaleCycleReading,
   personalYearTheme, PERSONAL_YEAR_CYCLE,
   UNIVERSAL_LAWS, MARITIME_LAWS,
+  destinyNumber, soulUrge, personality,
   type NumerologySnapshot, type ChineseSign, type YearCycleOutlook,
   type LawEntry
 } from "@/lib/numerology";
@@ -52,6 +53,114 @@ function cycleLengthFromData(data: unknown): number {
   if (!data || typeof data !== "object") return 28;
   const v = (data as { cycleLength?: unknown }).cycleLength;
   return typeof v === "number" && v >= 20 && v <= 40 ? v : 28;
+}
+
+const MAX_NICKNAMES = 3;
+
+function nicknamesFromData(data: unknown): string[] {
+  if (!data || typeof data !== "object") return [];
+  const v = (data as { nicknames?: unknown }).nicknames;
+  if (!Array.isArray(v)) return [];
+  return v
+    .filter((x): x is string => typeof x === "string")
+    .slice(0, MAX_NICKNAMES);
+}
+
+function padNicknames(arr: string[]): string[] {
+  const out = [...arr];
+  while (out.length < MAX_NICKNAMES) out.push("");
+  return out.slice(0, MAX_NICKNAMES);
+}
+
+/**
+ * Inputs (up to 3) for an optional set of nicknames. Used in My Profile
+ * and Calculate For Others — sits directly under "Full name".
+ */
+function NicknameInputs({
+  values,
+  onChange,
+  compact = false
+}: {
+  values: string[];
+  onChange: (next: string[]) => void;
+  compact?: boolean;
+}) {
+  const padded = padNicknames(values);
+  return (
+    <div className="space-y-1.5">
+      <Label>Nicknames (up to 3 — optional)</Label>
+      <div className={compact ? "grid gap-2 md:grid-cols-3" : "grid gap-2 sm:grid-cols-3"}>
+        {padded.map((v, i) => (
+          <Input
+            key={i}
+            value={v}
+            placeholder={`Nickname ${i + 1}`}
+            onChange={(e) => {
+              const next = [...padded];
+              next[i] = e.target.value;
+              onChange(next);
+            }}
+          />
+        ))}
+      </div>
+      <div className="text-[11px] text-fg-subtle">
+        Each filled nickname gets its own bonus reading (Expression / Soul Urge / Personality) shown alongside the legal-name numbers.
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Computes Expression / Soul Urge / Personality numbers for each non-empty
+ * nickname and renders them as bonus readings.
+ */
+function NicknameReadings({ nicknames }: { nicknames: string[] }) {
+  const filled = nicknames.map((s) => s.trim()).filter(Boolean);
+  if (!filled.length) return null;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Nickname readings (bonus)</CardTitle>
+      </CardHeader>
+      <CardBody className="space-y-3">
+        <p className="text-xs text-fg-muted">
+          Numerology readings derived from each nickname. The legal-name numbers above remain the primary signal — these are an additional layer of how the world responds to the name they actually call you.
+        </p>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {filled.map((nick) => {
+            const dn = destinyNumber(nick);
+            const su = soulUrge(nick);
+            const pn = personality(nick);
+            return (
+              <div
+                key={nick}
+                className="rounded-xl border border-line bg-bg-soft/40 p-3"
+              >
+                <div className="text-xs uppercase tracking-wide text-fg-subtle">
+                  Nickname
+                </div>
+                <div className="text-sm font-semibold text-fg">{nick}</div>
+                <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+                  <div>
+                    <div className="text-[10px] text-fg-subtle">Expression</div>
+                    <div className="text-base font-semibold text-brand-200">{dn}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-fg-subtle">Soul Urge</div>
+                    <div className="text-base font-semibold text-brand-200">{su}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-fg-subtle">Personality</div>
+                    <div className="text-base font-semibold text-brand-200">{pn}</div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </CardBody>
+    </Card>
+  );
 }
 
 const OUTLOOK_BADGE: Record<YearCycleOutlook, { label: string; cls: string }> = {
@@ -191,6 +300,9 @@ function MyProfile({
   const [gender, setGender] = useState<Gender | "">(genderFromData(profile?.data) || "");
   const [lastPeriod, setLastPeriod] = useState<string>(lastPeriodFromData(profile?.data));
   const [cycleLength, setCycleLength] = useState<number>(cycleLengthFromData(profile?.data));
+  const [nicknames, setNicknames] = useState<string[]>(() =>
+    padNicknames(nicknamesFromData(profile?.data))
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const snapshot = useMemo(
@@ -212,11 +324,13 @@ function MyProfile({
     const { data: userData } = await supabase.auth.getUser();
     const user = userData.user;
     if (!user) { setError("Not signed in"); setBusy(false); return; }
+    const cleanNicknames = nicknames.map((n) => n.trim()).filter(Boolean);
     const dataPayload = {
       ...snapshot,
       gender: gender || undefined,
       lastPeriod: gender === "female" ? lastPeriod : undefined,
-      cycleLength: gender === "female" ? cycleLength : undefined
+      cycleLength: gender === "female" ? cycleLength : undefined,
+      nicknames: cleanNicknames
     };
     const { data, error } = await supabase
       .from("numerology_profiles")
@@ -246,6 +360,7 @@ function MyProfile({
                 <Label>Full name (as on birth certificate)</Label>
                 <Input value={name} onChange={(e) => setName(e.target.value)} />
               </div>
+              <NicknameInputs values={nicknames} onChange={setNicknames} />
               <div className="flex flex-wrap gap-3">
                 <div className="w-44">
                   <Label>Date of birth</Label>
@@ -337,6 +452,8 @@ function MyProfile({
             <Stat label="Birthday" value={snapshot.birthday} />
           </div>
 
+          <NicknameReadings nicknames={nicknames} />
+
           <div className="grid gap-4 md:grid-cols-3">
             <Card>
               <CardHeader><CardTitle>Western zodiac</CardTitle></CardHeader>
@@ -421,7 +538,7 @@ function Others({
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState<{
     full_name: string;
-    nickname: string;
+    nicknames: string[];
     dob: string;
     relationship: string;
     gender: Gender | "";
@@ -429,7 +546,7 @@ function Others({
     cycleLength: number;
   }>({
     full_name: "",
-    nickname: "",
+    nicknames: padNicknames([]),
     dob: "",
     relationship: "Friend",
     gender: "",
@@ -447,18 +564,20 @@ function Others({
     const user = userData.user;
     if (!user || !form.full_name || !form.dob) return;
     const snap = buildNumerologySnapshot(form.full_name, form.dob);
+    const cleanNicks = form.nicknames.map((n) => n.trim()).filter(Boolean);
     const dataPayload = {
       ...snap,
       gender: form.gender || undefined,
       lastPeriod: form.gender === "female" ? form.lastPeriod : undefined,
-      cycleLength: form.gender === "female" ? form.cycleLength : undefined
+      cycleLength: form.gender === "female" ? form.cycleLength : undefined,
+      nicknames: cleanNicks
     };
     const { data, error } = await supabase
       .from("numerology_others")
       .insert({
         user_id: user.id,
         full_name: form.full_name,
-        nickname: form.nickname,
+        nickname: cleanNicks[0] ?? "",
         dob: form.dob,
         relationship: form.relationship,
         data: dataPayload
@@ -469,7 +588,7 @@ function Others({
     onChange([data, ...rows]);
     setForm({
       full_name: "",
-      nickname: "",
+      nicknames: padNicknames([]),
       dob: "",
       relationship: "Friend",
       gender: "",
@@ -493,16 +612,26 @@ function Others({
           <Button onClick={() => setAdding((s) => !s)} variant="secondary"><Plus className="h-4 w-4" /> Add</Button>
         </CardHeader>
         {adding && (
-          <CardBody className="grid gap-3 md:grid-cols-4 border-t border-line pt-5">
-            <div><Label>Full name</Label><Input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} /></div>
-            <div><Label>Nickname</Label><Input value={form.nickname} onChange={(e) => setForm({ ...form, nickname: e.target.value })} /></div>
-            <div><Label>DOB</Label><DatePicker value={form.dob} onChange={(next) => setForm({ ...form, dob: next })} max={new Date().toISOString().slice(0, 10)} className="w-full" inputClassName="flex-1" /></div>
-            <div>
-              <Label>Relationship</Label>
-              <Select value={form.relationship} onChange={(e) => setForm({ ...form, relationship: e.target.value })}>
-                {RELATIONSHIPS.map((r) => <option key={r}>{r}</option>)}
-              </Select>
+          <CardBody className="border-t border-line pt-5 space-y-4">
+            <div className="grid gap-3 md:grid-cols-4">
+              <div className="md:col-span-2">
+                <Label>Full name (as on birth certificate)</Label>
+                <Input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} />
+              </div>
+              <div><Label>DOB</Label><DatePicker value={form.dob} onChange={(next) => setForm({ ...form, dob: next })} max={new Date().toISOString().slice(0, 10)} className="w-full" inputClassName="flex-1" /></div>
+              <div>
+                <Label>Relationship</Label>
+                <Select value={form.relationship} onChange={(e) => setForm({ ...form, relationship: e.target.value })}>
+                  {RELATIONSHIPS.map((r) => <option key={r}>{r}</option>)}
+                </Select>
+              </div>
             </div>
+            <NicknameInputs
+              values={form.nicknames}
+              onChange={(next) => setForm({ ...form, nicknames: next })}
+              compact
+            />
+            <div className="grid gap-3 md:grid-cols-4">
             <div>
               <Label>Gender</Label>
               <Select
@@ -546,6 +675,7 @@ function Others({
             )}
             <div className="md:col-span-4 flex justify-end">
               <Button onClick={add}>Save person</Button>
+            </div>
             </div>
           </CardBody>
         )}
@@ -763,6 +893,10 @@ function OtherDetailModalContent({
               <div><div className="text-fg-subtle text-[10px]">PY</div><div className="font-semibold">{snap.personalYear}</div></div>
             </div>
           </div>
+        </div>
+
+        <div className="mt-4">
+          <NicknameReadings nicknames={nicknamesFromData(row.data)} />
         </div>
 
         <div className="mt-4 grid gap-4 md:grid-cols-2">
@@ -1518,9 +1652,9 @@ function LawsView() {
       <SectionBanner
         accent="warn"
         eyebrow="Section · 02"
-        title="Laws of the Sea (Maritime Laws)"
+        title="Laws of the Sea (Vibration & Manifestation)"
         count={MARITIME_LAWS.length}
-        body={'Selected principles from international maritime law. Genesis treats them as metaphors for navigating life — capital, relationships, ventures and reputation are all "vessels" you sail. Each entry includes the law\u2019s literal meaning and a way to apply it in everyday living.'}
+        body={"The body is roughly 60% water, and water reorganises around sound, emotion and intention. These are the laws that govern how that water — and therefore *you* — vibrates, resonates and ultimately manifests reality. Treat them as the operating manual for the version of you that's still coming."}
       />
       <div className="grid gap-3 lg:grid-cols-2">
         {MARITIME_LAWS.map((law) => <LawCard key={law.name} law={law} accent="warn" />)}
