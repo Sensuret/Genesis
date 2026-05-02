@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { CalendarRange, ArrowRight } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
+import { ScreenshotButton } from "@/components/ui/screenshot-button";
+import { DatePicker } from "@/components/ui/date-picker";
 import { useTrades } from "@/lib/hooks/use-trades";
 import { useFilters, useMoney } from "@/lib/filters/store";
 import { applyAllFilters, tpBeSl, type TpBeSlBreakdown } from "@/lib/analytics";
@@ -24,40 +26,62 @@ const PERIODS: { id: ScorePeriod; label: string }[] = [
 
 const SESSIONS = ["New York", "London", "Asia", "Sydney"];
 
-function periodBounds(period: ScorePeriod, now = new Date()): { from: Date; label: string } {
-  const d = new Date(now);
+function periodBounds(period: ScorePeriod, ref: Date): { from: Date; to: Date; label: string } {
+  const d = new Date(ref);
   switch (period) {
-    case "day":
-      d.setHours(0, 0, 0, 0);
-      return { from: d, label: now.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" }) };
+    case "day": {
+      const from = new Date(d);
+      from.setHours(0, 0, 0, 0);
+      const to = new Date(d);
+      to.setHours(23, 59, 59, 999);
+      return {
+        from,
+        to,
+        label: ref.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", year: "numeric" })
+      };
+    }
     case "week": {
       const day = d.getDay();
       const diff = day === 0 ? 6 : day - 1;
-      d.setDate(d.getDate() - diff);
-      d.setHours(0, 0, 0, 0);
-      return { from: d, label: `Week of ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}` };
-    }
-    case "month":
+      const from = new Date(d);
+      from.setDate(d.getDate() - diff);
+      from.setHours(0, 0, 0, 0);
+      const to = new Date(from);
+      to.setDate(from.getDate() + 6);
+      to.setHours(23, 59, 59, 999);
       return {
-        from: new Date(now.getFullYear(), now.getMonth(), 1),
-        label: now.toLocaleDateString("en-US", { month: "long", year: "numeric" })
+        from,
+        to,
+        label: `Week of ${from.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
       };
+    }
+    case "month": {
+      const from = new Date(d.getFullYear(), d.getMonth(), 1);
+      const to = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
+      return {
+        from,
+        to,
+        label: ref.toLocaleDateString("en-US", { month: "long", year: "numeric" })
+      };
+    }
     case "quarter": {
-      const q = Math.floor(now.getMonth() / 3);
-      return {
-        from: new Date(now.getFullYear(), q * 3, 1),
-        label: `Q${q + 1} ${now.getFullYear()}`
-      };
+      const q = Math.floor(d.getMonth() / 3);
+      const from = new Date(d.getFullYear(), q * 3, 1);
+      const to = new Date(d.getFullYear(), q * 3 + 3, 0, 23, 59, 59, 999);
+      return { from, to, label: `Q${q + 1} ${d.getFullYear()}` };
     }
-    case "year":
-      return { from: new Date(now.getFullYear(), 0, 1), label: `${now.getFullYear()}` };
+    case "year": {
+      const from = new Date(d.getFullYear(), 0, 1);
+      const to = new Date(d.getFullYear(), 11, 31, 23, 59, 59, 999);
+      return { from, to, label: `${d.getFullYear()}` };
+    }
   }
 }
 
-function inWindow(t: TradeRow, from: Date): boolean {
+function inWindow(t: TradeRow, from: Date, to: Date): boolean {
   if (!t.trade_date) return false;
   const d = new Date(t.trade_date);
-  return !Number.isNaN(d.getTime()) && d >= from;
+  return !Number.isNaN(d.getTime()) && d >= from && d <= to;
 }
 
 function tradeSession(t: TradeRow): string | null {
@@ -98,15 +122,27 @@ function SessionRow({ session, b, pnl, fmt }: { session: string; b: TpBeSlBreakd
   );
 }
 
+function isoToday(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 export default function RecapsPage() {
   const { trades, loading } = useTrades();
   const { filters } = useFilters();
   const { fmt } = useMoney();
   const [period, setPeriod] = useState<ScorePeriod>("week");
+  const [refDateIso, setRefDateIso] = useState<string>(isoToday());
+  const screenshotRef = useRef<HTMLDivElement>(null);
+
+  const refDate = useMemo(() => {
+    const [y, m, d] = refDateIso.split("-").map(Number);
+    return new Date(y, (m ?? 1) - 1, d ?? 1, 12, 0, 0);
+  }, [refDateIso]);
 
   const filtered = useMemo(() => applyAllFilters(trades, filters), [trades, filters]);
-  const { from, label } = useMemo(() => periodBounds(period), [period]);
-  const windowed = useMemo(() => filtered.filter((t) => inWindow(t, from)), [filtered, from]);
+  const { from, to, label } = useMemo(() => periodBounds(period, refDate), [period, refDate]);
+  const windowed = useMemo(() => filtered.filter((t) => inWindow(t, from, to)), [filtered, from, to]);
 
   const overall = useMemo(() => tpBeSl(windowed), [windowed]);
   const overallPnl = useMemo(
@@ -128,10 +164,21 @@ export default function RecapsPage() {
   }, [windowed]);
 
   return (
-    <div className="space-y-6">
+    <div ref={screenshotRef} className="space-y-6">
       <PageHeader
         title="Recaps"
         description="Score-board view of your trading performance, plus drill-downs into Weekly / Monthly / Quarterly / Annual recaps."
+        actions={
+          <>
+            <ScreenshotButton targetRef={screenshotRef} filename="recaps" />
+            <DatePicker
+              value={refDateIso}
+              onChange={(next) => next && setRefDateIso(next)}
+              max={isoToday()}
+              iconOnly
+            />
+          </>
+        }
       />
 
       <Card>

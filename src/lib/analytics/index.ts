@@ -136,10 +136,14 @@ export function netPnl(trades: TradeRow[]): number {
 export function winners(trades: TradeRow[]) { return trades.filter((t) => (t.pnl ?? 0) > 0); }
 export function losers(trades: TradeRow[]) { return trades.filter((t) => (t.pnl ?? 0) < 0); }
 
+/**
+ * Win rate = winning trades / total trades (BE counted in denominator).
+ * Matches the per-day percentage shown in the Dashboard calendar cells
+ * so the two never disagree for the same set of trades.
+ */
 export function winRate(trades: TradeRow[]): number {
-  const decided = trades.filter((t) => (t.pnl ?? 0) !== 0);
-  if (!decided.length) return 0;
-  return (winners(decided).length / decided.length) * 100;
+  if (!trades.length) return 0;
+  return (winners(trades).length / trades.length) * 100;
 }
 
 export function profitFactor(trades: TradeRow[]): number {

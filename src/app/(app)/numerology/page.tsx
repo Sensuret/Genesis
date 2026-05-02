@@ -12,7 +12,9 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { createClient } from "@/lib/supabase/client";
 import {
   buildNumerologySnapshot, compatibility, advancedInsights,
-  type NumerologySnapshot
+  chineseZodiacForYear, chineseEmoji, yearOutlookFor, chinesePersonalityNote,
+  NUMBER_VIBRATIONS, femaleCycleReading,
+  type NumerologySnapshot, type ChineseSign, type YearCycleOutlook
 } from "@/lib/numerology";
 import {
   getSignProfile,
@@ -25,13 +27,47 @@ import {
 } from "@/lib/astrology";
 import { westernZodiac, type WesternSign } from "@/lib/numerology";
 import type { NumerologyOtherRow, NumerologyProfileRow } from "@/lib/supabase/types";
-import { Plus, Sparkles, Trash2 } from "lucide-react";
+import { Plus, Sparkles, Trash2, X } from "lucide-react";
+
+type Gender = "male" | "female" | "prefer_not_to_say";
+
+function genderFromData(data: unknown): Gender | "" {
+  if (!data || typeof data !== "object") return "";
+  const g = (data as { gender?: unknown }).gender;
+  return g === "male" || g === "female" || g === "prefer_not_to_say" ? g : "";
+}
+
+function lastPeriodFromData(data: unknown): string {
+  if (!data || typeof data !== "object") return "";
+  const v = (data as { lastPeriod?: unknown }).lastPeriod;
+  return typeof v === "string" ? v : "";
+}
+
+function cycleLengthFromData(data: unknown): number {
+  if (!data || typeof data !== "object") return 28;
+  const v = (data as { cycleLength?: unknown }).cycleLength;
+  return typeof v === "number" && v >= 20 && v <= 40 ? v : 28;
+}
+
+const OUTLOOK_BADGE: Record<YearCycleOutlook, { label: string; cls: string }> = {
+  great: { label: "Great year", cls: "bg-success/15 text-success border-success/40" },
+  good: { label: "Good year", cls: "bg-success/10 text-success border-success/30" },
+  average: { label: "Average", cls: "bg-bg-soft text-fg-muted border-line" },
+  tough: { label: "Tough year", cls: "bg-warn/15 text-warn border-warn/40" },
+  challenging: { label: "Challenging", cls: "bg-danger/15 text-danger border-danger/40" }
+};
+
+const ALL_CHINESE: ChineseSign[] = [
+  "Rat", "Ox", "Tiger", "Rabbit", "Dragon", "Snake",
+  "Horse", "Goat", "Monkey", "Rooster", "Dog", "Pig"
+];
 
 const TABS = [
   "My Profile",
   "Calculate For Others",
   "Combined",
   "Lunar Cycle",
+  "Year Cycle",
   "Horoscope",
   "Education Insights",
   "General Knowledge",
@@ -66,10 +102,29 @@ export default function NumerologyPage() {
     })();
   }, []);
 
+  const currentYear = new Date().getUTCFullYear();
+  const yearSign = chineseZodiacForYear(currentYear);
+  const yearOutlook = my ? yearOutlookFor(buildNumerologySnapshot(my.full_name, my.dob).chinese, yearSign) : null;
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Numerology & Astrology"
+        extra={
+          <button
+            type="button"
+            onClick={() => setTab("Year Cycle")}
+            className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition hover:brightness-110 ${
+              yearOutlook ? OUTLOOK_BADGE[yearOutlook].cls : "border-line bg-bg-soft text-fg-muted"
+            }`}
+            title="Open the Year Cycle tab"
+          >
+            <span className="text-base leading-none">{chineseEmoji(yearSign)}</span>
+            <span>Year of the {yearSign}</span>
+            <span className="text-fg-subtle">· {currentYear}</span>
+            {yearOutlook ? <span className="font-semibold">· {OUTLOOK_BADGE[yearOutlook].label}</span> : null}
+          </button>
+        }
         description={
           <>
             <em>“Numbers are the universal language offered by the deity to humans as confirmation of the truth.”</em> — St. Augustine
@@ -101,6 +156,8 @@ export default function NumerologyPage() {
         <Combined profile={my} others={others} />
       ) : tab === "Lunar Cycle" ? (
         <Lunar />
+      ) : tab === "Year Cycle" ? (
+        <YearCycle profile={my} />
       ) : tab === "Horoscope" ? (
         <HoroscopeView profile={my} />
       ) : tab === "Education Insights" ? (
@@ -123,6 +180,9 @@ function MyProfile({
 }) {
   const [name, setName] = useState(profile?.full_name ?? "");
   const [dob, setDob] = useState(profile?.dob ?? "");
+  const [gender, setGender] = useState<Gender | "">(genderFromData(profile?.data) || "");
+  const [lastPeriod, setLastPeriod] = useState<string>(lastPeriodFromData(profile?.data));
+  const [cycleLength, setCycleLength] = useState<number>(cycleLengthFromData(profile?.data));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const snapshot = useMemo(
@@ -130,6 +190,10 @@ function MyProfile({
     [name, dob]
   );
   const sign = snapshot ? getSignProfile(dob) : null;
+  const cycleReading = useMemo(
+    () => (gender === "female" && lastPeriod ? femaleCycleReading(lastPeriod, cycleLength) : null),
+    [gender, lastPeriod, cycleLength]
+  );
 
   async function save() {
     if (!snapshot) return;
@@ -139,9 +203,15 @@ function MyProfile({
     const { data: userData } = await supabase.auth.getUser();
     const user = userData.user;
     if (!user) { setError("Not signed in"); setBusy(false); return; }
+    const dataPayload = {
+      ...snapshot,
+      gender: gender || undefined,
+      lastPeriod: gender === "female" ? lastPeriod : undefined,
+      cycleLength: gender === "female" ? cycleLength : undefined
+    };
     const { data, error } = await supabase
       .from("numerology_profiles")
-      .upsert({ id: profile?.id, user_id: user.id, full_name: name, dob, data: snapshot })
+      .upsert({ id: profile?.id, user_id: user.id, full_name: name, dob, data: dataPayload })
       .select()
       .single();
     setBusy(false);
@@ -156,12 +226,71 @@ function MyProfile({
         <CardBody className="grid gap-4 md:grid-cols-2">
           <div><Label>Full name (as on birth certificate)</Label><Input value={name} onChange={(e) => setName(e.target.value)} /></div>
           <div><Label>Date of birth</Label><DatePicker value={dob} onChange={(next) => setDob(next)} max={new Date().toISOString().slice(0, 10)} className="w-full" inputClassName="flex-1" /></div>
+          <div>
+            <Label>Gender</Label>
+            <Select value={gender} onChange={(e) => setGender(e.target.value as Gender | "")}>
+              <option value="">Select…</option>
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+              <option value="prefer_not_to_say">Prefer not to say</option>
+            </Select>
+            <div className="mt-1 text-[11px] text-fg-subtle">
+              Used to layer cycle-aware notes on your reading. Stays in your profile only.
+            </div>
+          </div>
+          {gender === "female" && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Last period start</Label>
+                <DatePicker
+                  value={lastPeriod}
+                  onChange={(next) => setLastPeriod(next)}
+                  max={new Date().toISOString().slice(0, 10)}
+                  className="w-full"
+                  inputClassName="flex-1"
+                />
+              </div>
+              <div>
+                <Label>Avg cycle length</Label>
+                <Input
+                  type="number"
+                  min={20}
+                  max={40}
+                  value={cycleLength}
+                  onChange={(e) => setCycleLength(Math.max(20, Math.min(40, Number(e.target.value) || 28)))}
+                />
+              </div>
+            </div>
+          )}
           {error && <div className="md:col-span-2 rounded-lg bg-danger/10 p-3 text-xs text-danger">{error}</div>}
           <div className="md:col-span-2 flex justify-end">
             <Button disabled={!snapshot || busy} onClick={save}>{busy ? "Saving…" : "Save profile"}</Button>
           </div>
         </CardBody>
       </Card>
+
+      {cycleReading && (
+        <Card>
+          <CardHeader><CardTitle>Today's cycle awareness</CardTitle></CardHeader>
+          <CardBody className="grid gap-4 md:grid-cols-3">
+            <div className="rounded-xl border border-line bg-bg-soft/40 p-4">
+              <div className="text-xs uppercase tracking-wide text-fg-subtle">Phase</div>
+              <div className="mt-1 text-lg font-semibold capitalize">{cycleReading.phase}</div>
+              <div className="text-xs text-fg-muted">
+                Day {cycleReading.dayInCycle} of {cycleReading.cycleLength}
+              </div>
+            </div>
+            <div className="rounded-xl border border-line bg-bg-soft/40 p-4">
+              <div className="text-xs uppercase tracking-wide text-fg-subtle">Energy</div>
+              <div className="mt-1 text-sm">{cycleReading.energy}</div>
+            </div>
+            <div className="rounded-xl border border-line bg-bg-soft/40 p-4">
+              <div className="text-xs uppercase tracking-wide text-fg-subtle">Trading note</div>
+              <div className="mt-1 text-sm">{cycleReading.trade}</div>
+            </div>
+          </CardBody>
+        </Card>
+      )}
 
       {snapshot && sign && (
         <>
@@ -229,7 +358,24 @@ function Others({
 }) {
   const [filter, setFilter] = useState<string>("All");
   const [adding, setAdding] = useState(false);
-  const [form, setForm] = useState({ full_name: "", nickname: "", dob: "", relationship: "Friend" });
+  const [form, setForm] = useState<{
+    full_name: string;
+    nickname: string;
+    dob: string;
+    relationship: string;
+    gender: Gender | "";
+    lastPeriod: string;
+    cycleLength: number;
+  }>({
+    full_name: "",
+    nickname: "",
+    dob: "",
+    relationship: "Friend",
+    gender: "",
+    lastPeriod: "",
+    cycleLength: 28
+  });
+  const [openId, setOpenId] = useState<string | null>(null);
 
   const filtered = filter === "All" ? rows : rows.filter((r) => r.relationship === filter);
   const myCalc = myProfile ? buildNumerologySnapshot(myProfile.full_name, myProfile.dob) : null;
@@ -240,14 +386,35 @@ function Others({
     const user = userData.user;
     if (!user || !form.full_name || !form.dob) return;
     const snap = buildNumerologySnapshot(form.full_name, form.dob);
+    const dataPayload = {
+      ...snap,
+      gender: form.gender || undefined,
+      lastPeriod: form.gender === "female" ? form.lastPeriod : undefined,
+      cycleLength: form.gender === "female" ? form.cycleLength : undefined
+    };
     const { data, error } = await supabase
       .from("numerology_others")
-      .insert({ user_id: user.id, ...form, data: snap })
+      .insert({
+        user_id: user.id,
+        full_name: form.full_name,
+        nickname: form.nickname,
+        dob: form.dob,
+        relationship: form.relationship,
+        data: dataPayload
+      })
       .select()
       .single();
     if (error || !data) return;
     onChange([data, ...rows]);
-    setForm({ full_name: "", nickname: "", dob: "", relationship: "Friend" });
+    setForm({
+      full_name: "",
+      nickname: "",
+      dob: "",
+      relationship: "Friend",
+      gender: "",
+      lastPeriod: "",
+      cycleLength: 28
+    });
     setAdding(false);
   }
 
@@ -275,6 +442,47 @@ function Others({
                 {RELATIONSHIPS.map((r) => <option key={r}>{r}</option>)}
               </Select>
             </div>
+            <div>
+              <Label>Gender</Label>
+              <Select
+                value={form.gender}
+                onChange={(e) => setForm({ ...form, gender: e.target.value as Gender | "" })}
+              >
+                <option value="">Select…</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+                <option value="prefer_not_to_say">Prefer not to say</option>
+              </Select>
+            </div>
+            {form.gender === "female" && (
+              <>
+                <div>
+                  <Label>Last period start</Label>
+                  <DatePicker
+                    value={form.lastPeriod}
+                    onChange={(next) => setForm({ ...form, lastPeriod: next })}
+                    max={new Date().toISOString().slice(0, 10)}
+                    className="w-full"
+                    inputClassName="flex-1"
+                  />
+                </div>
+                <div>
+                  <Label>Cycle length</Label>
+                  <Input
+                    type="number"
+                    min={20}
+                    max={40}
+                    value={form.cycleLength}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        cycleLength: Math.max(20, Math.min(40, Number(e.target.value) || 28))
+                      })
+                    }
+                  />
+                </div>
+              </>
+            )}
             <div className="md:col-span-4 flex justify-end">
               <Button onClick={add}>Save person</Button>
             </div>
@@ -304,13 +512,24 @@ function Others({
             const snap = buildNumerologySnapshot(r.full_name, r.dob);
             const compat = myCalc ? compatibility(myCalc, snap) : null;
             return (
-              <Card key={r.id}>
+              <Card
+                key={r.id}
+                onClick={() => setOpenId(r.id)}
+                className="cursor-pointer transition hover:border-brand-400/60 hover:bg-bg-soft/40"
+              >
                 <CardHeader>
                   <CardTitle>
                     {r.full_name}
                     {r.nickname ? <span className="ml-2 text-xs text-fg-subtle">aka {r.nickname}</span> : null}
                   </CardTitle>
-                  <Button variant="ghost" size="icon" onClick={() => remove(r.id)}>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      remove(r.id);
+                    }}
+                  >
                     <Trash2 className="h-4 w-4 text-danger" />
                   </Button>
                 </CardHeader>
@@ -339,6 +558,175 @@ function Others({
           })}
         </div>
       )}
+
+      {openId ? (
+        <OtherDetailModal
+          row={rows.find((r) => r.id === openId) ?? null}
+          myProfile={myProfile}
+          onClose={() => setOpenId(null)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function OtherDetailModal({
+  row,
+  myProfile,
+  onClose
+}: {
+  row: NumerologyOtherRow | null;
+  myProfile: NumerologyProfileRow | null;
+  onClose: () => void;
+}) {
+  if (!row) return null;
+  const snap = buildNumerologySnapshot(row.full_name, row.dob);
+  const sign = getSignProfile(row.dob);
+  const myCalc = myProfile ? buildNumerologySnapshot(myProfile.full_name, myProfile.dob) : null;
+  const compat = myCalc ? compatibility(myCalc, snap) : null;
+  const ins = advancedInsights(snap);
+  const gender = genderFromData(row.data);
+  const lastPeriod = lastPeriodFromData(row.data);
+  const cycleLength = cycleLengthFromData(row.data);
+  const cycle =
+    gender === "female" && lastPeriod ? femaleCycleReading(lastPeriod, cycleLength) : null;
+  const yearSign = chineseZodiacForYear();
+  const yearOutlook = yearOutlookFor(snap.chinese, yearSign);
+
+  return (
+    <div
+      className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="relative max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-line bg-bg-elevated p-6 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-xl border border-line bg-bg text-fg-muted transition hover:text-fg"
+          aria-label="Close detail"
+        >
+          <X className="h-4 w-4" />
+        </button>
+
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <h2 className="text-xl font-semibold">{row.full_name}</h2>
+          {row.nickname ? (
+            <span className="text-xs text-fg-subtle">aka {row.nickname}</span>
+          ) : null}
+          <Badge>{row.relationship}</Badge>
+          {gender ? (
+            <Badge variant="brand">
+              {gender === "prefer_not_to_say"
+                ? "Prefer not to say"
+                : gender === "male"
+                ? "Male"
+                : "Female"}
+            </Badge>
+          ) : null}
+        </div>
+        <div className="mb-5 text-xs text-fg-muted">
+          Born {new Date(row.dob).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="rounded-xl border border-line bg-bg-soft/40 p-4">
+            <div className="text-xs uppercase tracking-wide text-fg-subtle">Western</div>
+            <div className="mt-1 text-2xl">{sign.symbol} {sign.sign}</div>
+            <div className="mt-1 text-xs text-fg-muted">{sign.element} · {sign.modality} · ruled by {sign.ruler}</div>
+            <div className="mt-2 text-xs">{sign.tradeArchetype}</div>
+          </div>
+          <div className="rounded-xl border border-line bg-bg-soft/40 p-4">
+            <div className="text-xs uppercase tracking-wide text-fg-subtle">Chinese</div>
+            <div className="mt-1 text-2xl">{chineseEmoji(snap.chinese)} {snap.chinese}</div>
+            <div className="mt-1 text-xs text-fg-muted">Enemy: {snap.enemyChinese}</div>
+            <div className="mt-2 text-xs">{chinesePersonalityNote(snap.chinese)}</div>
+          </div>
+          <div className="rounded-xl border border-line bg-bg-soft/40 p-4">
+            <div className="text-xs uppercase tracking-wide text-fg-subtle">Numerology core</div>
+            <div className="mt-1 grid grid-cols-3 gap-2 text-center text-sm">
+              <div><div className="text-fg-subtle text-[10px]">Life</div><div className="font-semibold">{snap.lifePath}</div></div>
+              <div><div className="text-fg-subtle text-[10px]">Destiny</div><div className="font-semibold">{snap.destiny}</div></div>
+              <div><div className="text-fg-subtle text-[10px]">Soul</div><div className="font-semibold">{snap.soulUrge}</div></div>
+              <div><div className="text-fg-subtle text-[10px]">Personality</div><div className="font-semibold">{snap.personality}</div></div>
+              <div><div className="text-fg-subtle text-[10px]">Birthday</div><div className="font-semibold">{snap.birthday}</div></div>
+              <div><div className="text-fg-subtle text-[10px]">PY</div><div className="font-semibold">{snap.personalYear}</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div className="rounded-xl border border-line bg-bg-soft/40 p-4">
+            <div className="text-xs uppercase tracking-wide text-fg-subtle">This year ({new Date().getUTCFullYear()})</div>
+            <div className={`mt-2 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs ${OUTLOOK_BADGE[yearOutlook].cls}`}>
+              <span>{chineseEmoji(yearSign)}</span>
+              <span>Year of the {yearSign}</span>
+              <span>· {OUTLOOK_BADGE[yearOutlook].label}</span>
+            </div>
+            <div className="mt-2 text-xs text-fg-muted">
+              {yearOutlook === "great"
+                ? `${snap.chinese} is in a trine year — momentum on their side; lean in.`
+                : yearOutlook === "good"
+                ? `${snap.chinese}'s own year — solid presence; consolidate wins.`
+                : yearOutlook === "challenging"
+                ? `${snap.chinese} sits opposite the year — protect downside, scale slow.`
+                : yearOutlook === "tough"
+                ? `${snap.chinese} clashes with the year's trine — expect friction.`
+                : `Average year — neither tailwind nor headwind; stay neutral.`}
+            </div>
+          </div>
+
+          {compat ? (
+            <div className="rounded-xl border border-line bg-bg-soft/40 p-4">
+              <div className="text-xs uppercase tracking-wide text-fg-subtle">Compatibility with you</div>
+              <div className="mt-1 text-3xl font-semibold text-brand-300">
+                {compat.overall}<span className="text-sm text-fg-subtle">/100</span>
+              </div>
+              <div className="mt-1 text-xs text-fg-muted">
+                LP {compat.breakdown.lifePath} · D {compat.breakdown.destiny} · S {compat.breakdown.soulUrge} · W {compat.breakdown.western} · C {compat.breakdown.chinese}
+              </div>
+              {compat.notes.length > 0 && (
+                <div className="mt-2 text-xs text-warn">{compat.notes.join(" · ")}</div>
+              )}
+            </div>
+          ) : null}
+        </div>
+
+        {cycle ? (
+          <div className="mt-4 rounded-xl border border-line bg-bg-soft/40 p-4">
+            <div className="text-xs uppercase tracking-wide text-fg-subtle">Cycle awareness</div>
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-sm">
+              <span className="font-semibold capitalize">{cycle.phase}</span>
+              <span className="text-fg-subtle">·</span>
+              <span className="text-fg-muted">Day {cycle.dayInCycle} of {cycle.cycleLength}</span>
+            </div>
+            <div className="mt-2 text-xs text-fg-muted">{cycle.energy}</div>
+            <div className="mt-1 text-xs">{cycle.trade}</div>
+            <div className="mt-2 text-[10px] text-fg-subtle">
+              Self-reflection cue only — not medical advice.
+            </div>
+          </div>
+        ) : null}
+
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <div className="rounded-xl border border-line bg-bg-soft/40 p-4">
+            <div className="text-xs uppercase tracking-wide text-fg-subtle">Lifestyle harmony</div>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {ins.useCities.map((c) => <Badge key={c} variant="success">{c}</Badge>)}
+              {ins.useBrands.map((b) => <Badge key={b} variant="success">{b}</Badge>)}
+            </div>
+          </div>
+          <div className="rounded-xl border border-line bg-bg-soft/40 p-4">
+            <div className="text-xs uppercase tracking-wide text-fg-subtle">Friction</div>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {ins.avoidCities.map((c) => <Badge key={c} variant="danger">{c}</Badge>)}
+              {ins.avoidBrands.map((b) => <Badge key={b} variant="danger">{b}</Badge>)}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -467,6 +855,198 @@ function Lunar() {
               </div>
             );
           })}
+        </CardBody>
+      </Card>
+    </div>
+  );
+}
+
+function YearCycle({ profile }: { profile: NumerologyProfileRow | null }) {
+  const currentYear = new Date().getUTCFullYear();
+  const yearSign = chineseZodiacForYear(currentYear);
+  const lastYearSign = chineseZodiacForYear(currentYear - 1);
+  const nextYearSign = chineseZodiacForYear(currentYear + 1);
+
+  const mySnap = profile ? buildNumerologySnapshot(profile.full_name, profile.dob) : null;
+  const myOutlook = mySnap ? yearOutlookFor(mySnap.chinese, yearSign) : null;
+
+  const grouped: Record<YearCycleOutlook, ChineseSign[]> = {
+    great: [], good: [], average: [], tough: [], challenging: []
+  };
+  for (const s of ALL_CHINESE) {
+    grouped[yearOutlookFor(s, yearSign)].push(s);
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>This year — {yearSign}</CardTitle>
+          <Sparkles className="h-4 w-4 text-brand-300" />
+        </CardHeader>
+        <CardBody className="grid gap-6 md:grid-cols-[auto,1fr] md:items-center">
+          <div className="text-center">
+            <div className="text-7xl">{chineseEmoji(yearSign)}</div>
+            <div className="mt-2 text-sm font-semibold">Year of the {yearSign}</div>
+            <div className="text-xs text-fg-subtle">{currentYear}</div>
+          </div>
+          <div className="space-y-3 text-sm">
+            <p className="text-fg-muted">{chinesePersonalityNote(yearSign)}</p>
+            {mySnap && myOutlook ? (
+              <div
+                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs ${OUTLOOK_BADGE[myOutlook].cls}`}
+              >
+                <span className="text-base leading-none">{chineseEmoji(mySnap.chinese)}</span>
+                <span>You are {mySnap.chinese}</span>
+                <span>· {OUTLOOK_BADGE[myOutlook].label}</span>
+              </div>
+            ) : (
+              <div className="text-xs text-fg-subtle">
+                Save your profile on <span className="text-fg">My Profile</span> to see your outlook
+                this year.
+              </div>
+            )}
+            {mySnap && myOutlook ? (
+              <p className="text-xs text-fg-muted">
+                {myOutlook === "great"
+                  ? `${mySnap.chinese} is in trine with the ${yearSign} — momentum on your side. This is a year to lean in, scale conviction setups, and take aim at bigger goals. Edges compound.`
+                  : myOutlook === "good"
+                  ? `${mySnap.chinese} sits in its own resonance — solid presence, steady wins. Consolidate gains, refine systems, build the playbook for next year.`
+                  : myOutlook === "challenging"
+                  ? `${mySnap.chinese} sits opposite the ${yearSign} — the universe brings friction. Protect downside, slow scaling, focus on capital preservation. Lay low and let the year pass.`
+                  : myOutlook === "tough"
+                  ? `${mySnap.chinese} clashes with the trine of the ${yearSign} — expect headwinds in collaborations and outside pressure. Trade smaller, choose battles.`
+                  : `${mySnap.chinese} has a neutral relationship with the ${yearSign} — neither tailwind nor headwind. Stay disciplined; let your edge do the work.`}
+              </p>
+            ) : null}
+          </div>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>How every sign fares this year</CardTitle></CardHeader>
+        <CardBody className="space-y-3">
+          {(["great", "good", "average", "tough", "challenging"] as YearCycleOutlook[]).map((outlook) => (
+            <div key={outlook} className="flex flex-wrap items-center gap-2">
+              <span
+                className={`inline-flex w-32 shrink-0 items-center justify-center rounded-full border px-2 py-1 text-[10px] uppercase tracking-wide ${OUTLOOK_BADGE[outlook].cls}`}
+              >
+                {OUTLOOK_BADGE[outlook].label}
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {grouped[outlook].length === 0 ? (
+                  <span className="text-xs text-fg-subtle">—</span>
+                ) : (
+                  grouped[outlook].map((s) => (
+                    <span
+                      key={s}
+                      className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs ${
+                        mySnap?.chinese === s
+                          ? "border-brand-400 bg-brand-500/15 text-brand-200"
+                          : "border-line bg-bg-soft text-fg"
+                      }`}
+                    >
+                      <span>{chineseEmoji(s)}</span>
+                      <span>{s}</span>
+                    </span>
+                  ))
+                )}
+              </div>
+            </div>
+          ))}
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Cycle bridge: last → this → next</CardTitle></CardHeader>
+        <CardBody className="grid gap-3 md:grid-cols-3">
+          {[
+            { year: currentYear - 1, sign: lastYearSign, label: "Last year" },
+            { year: currentYear, sign: yearSign, label: "This year" },
+            { year: currentYear + 1, sign: nextYearSign, label: "Next year" }
+          ].map(({ year, sign, label }) => (
+            <div
+              key={year}
+              className={`rounded-xl border p-4 ${
+                year === currentYear ? "border-brand-400 bg-brand-500/10" : "border-line bg-bg-soft/40"
+              }`}
+            >
+              <div className="text-xs uppercase tracking-wide text-fg-subtle">{label}</div>
+              <div className="mt-1 flex items-center gap-2">
+                <span className="text-3xl">{chineseEmoji(sign)}</span>
+                <div>
+                  <div className="font-semibold">{sign}</div>
+                  <div className="text-xs text-fg-subtle">{year}</div>
+                </div>
+              </div>
+              {mySnap && (
+                <div
+                  className={`mt-2 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] ${OUTLOOK_BADGE[yearOutlookFor(mySnap.chinese, sign)].cls}`}
+                >
+                  {OUTLOOK_BADGE[yearOutlookFor(mySnap.chinese, sign)].label}
+                </div>
+              )}
+            </div>
+          ))}
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Number frequencies & vibrations</CardTitle></CardHeader>
+        <CardBody className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+          {NUMBER_VIBRATIONS.map((v) => {
+            const isYours =
+              !!mySnap &&
+              (v.number === mySnap.lifePath || v.number === mySnap.personalYear);
+            return (
+              <div
+                key={v.number}
+                className={`rounded-xl border p-3 ${
+                  isYours ? "border-brand-400 bg-brand-500/10" : "border-line bg-bg-soft/40"
+                }`}
+              >
+                <div className="flex items-baseline justify-between">
+                  <div className="text-2xl font-semibold">{v.number}</div>
+                  <div className="text-xs text-fg-subtle">{v.title}</div>
+                </div>
+                <div className="mt-1 text-xs text-fg-muted">{v.vibration}</div>
+                <div className="mt-2 text-xs">
+                  <span className="text-success">Use:</span> {v.use}
+                </div>
+                <div className="mt-1 text-xs">
+                  <span className="text-warn">Caution:</span> {v.caution}
+                </div>
+              </div>
+            );
+          })}
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>How to use numbers in your favour</CardTitle></CardHeader>
+        <CardBody className="space-y-2 text-sm text-fg-muted">
+          <p>
+            Anchor key decisions to your <span className="text-fg">Personal Year</span>{" "}
+            {mySnap ? mySnap.personalYear : "(unknown — save your profile)"}
+            : align launches, big trades and money moves with the theme of that number.
+          </p>
+          <p>
+            Reduce relevant dates (entries, deposits, signings) to a single digit and check
+            harmony against your Life Path. Numbers in the same harmony group amplify; clashes
+            warn you to slow down.
+          </p>
+          <p>
+            Use the year animal as a cultural overlay: this {currentYear} the energy of the{" "}
+            <span className="text-fg">{yearSign}</span> rewards{" "}
+            {yearSign === "Horse"
+              ? "speed, mobility and brave moves — but not chaos."
+              : yearSign === "Dragon"
+              ? "ambition and visibility — show up bigger than you feel."
+              : "the qualities described above."}
+          </p>
+          <p className="text-[11px] text-fg-subtle">
+            Frameworks, not predictions. Use as a journaling lens.
+          </p>
         </CardBody>
       </Card>
     </div>

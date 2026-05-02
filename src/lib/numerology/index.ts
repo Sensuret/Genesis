@@ -392,3 +392,232 @@ const INSIGHTS: Record<
 export function advancedInsights(snapshot: NumerologySnapshot) {
   return INSIGHTS[snapshot.lifePath] ?? INSIGHTS[1];
 }
+
+// ---------------------------------------------------------------------
+// Chinese Year Cycle
+// ---------------------------------------------------------------------
+const CHINESE_EMOJI: Record<ChineseSign, string> = {
+  Rat: "🐀",
+  Ox: "🐂",
+  Tiger: "🐅",
+  Rabbit: "🐇",
+  Dragon: "🐉",
+  Snake: "🐍",
+  Horse: "🐎",
+  Goat: "🐐",
+  Monkey: "🐒",
+  Rooster: "🐓",
+  Dog: "🐕",
+  Pig: "🐖"
+};
+
+/** Chinese zodiac for a calendar year (Gregorian-approx; same logic as the per-DOB function). */
+export function chineseZodiacForYear(year: number = new Date().getUTCFullYear()): ChineseSign {
+  const idx = (year - 4) % 12;
+  return CHINESE[(idx + 12) % 12];
+}
+
+export function chineseEmoji(sign: ChineseSign): string {
+  return CHINESE_EMOJI[sign];
+}
+
+const CHINESE_TRINE: Record<ChineseSign, ChineseSign[]> = {
+  Rat: ["Dragon", "Monkey"],
+  Ox: ["Snake", "Rooster"],
+  Tiger: ["Horse", "Dog"],
+  Rabbit: ["Goat", "Pig"],
+  Dragon: ["Rat", "Monkey"],
+  Snake: ["Ox", "Rooster"],
+  Horse: ["Tiger", "Dog"],
+  Goat: ["Rabbit", "Pig"],
+  Monkey: ["Rat", "Dragon"],
+  Rooster: ["Ox", "Snake"],
+  Dog: ["Tiger", "Horse"],
+  Pig: ["Rabbit", "Goat"]
+};
+
+export type YearCycleOutlook = "great" | "good" | "average" | "tough" | "challenging";
+
+/**
+ * Pulls the per-sign outlook for a given year of the Chinese cycle.
+ * Loosely derived from compatibility-trine logic plus enemy axis.
+ */
+export function yearOutlookFor(personalSign: ChineseSign, yearSign: ChineseSign): YearCycleOutlook {
+  if (CHINESE_ENEMY[personalSign] === yearSign) return "challenging";
+  if (personalSign === yearSign) return "good";
+  if (CHINESE_TRINE[personalSign]?.includes(yearSign)) return "great";
+  if (CHINESE_TRINE[CHINESE_ENEMY[personalSign]]?.includes(yearSign)) return "tough";
+  return "average";
+}
+
+const CHINESE_PERSONALITY: Record<ChineseSign, string> = {
+  Rat: "Resourceful, fast learner, social opportunist; thrives in info-rich markets.",
+  Ox: "Patient, methodical, dependable; loves a system, hates impulsive size.",
+  Tiger: "Bold, charismatic, competitive; runs fast — guard against revenge trades.",
+  Rabbit: "Diplomatic, intuitive, cautious; reads room flow before sizing in.",
+  Dragon: "Magnetic, ambitious, lucky; needs scale and a real edge to focus.",
+  Snake: "Wise, calculating, private; deep research types who size on conviction.",
+  Horse: "Energetic, free-spirited, swing-trader energy; trim positions early.",
+  Goat: "Empathic, artistic, gentle; struggles with discipline under fire.",
+  Monkey: "Inventive, witty, agile; great at adapting strategies on the fly.",
+  Rooster: "Detail-obsessed, punctual, candid; loves checklists and journals.",
+  Dog: "Loyal, principled, defensive; protects capital first, returns second.",
+  Pig: "Generous, indulgent, lucky; risk of over-sharing tips and over-sizing."
+};
+
+export function chinesePersonalityNote(sign: ChineseSign): string {
+  return CHINESE_PERSONALITY[sign];
+}
+
+// ---------------------------------------------------------------------
+// Number frequencies / vibrations 1–9 (+ master 11/22/33)
+// ---------------------------------------------------------------------
+export type NumberVibration = {
+  number: number;
+  title: string;
+  vibration: string;
+  use: string;
+  caution: string;
+};
+
+export const NUMBER_VIBRATIONS: NumberVibration[] = [
+  {
+    number: 1,
+    title: "The Pioneer",
+    vibration: "Initiative, leadership, originality.",
+    use: "Front-load the day with the riskiest decision; you have natural authority.",
+    caution: "Lone-wolf trap — verify with one outside opinion before sizing up."
+  },
+  {
+    number: 2,
+    title: "The Diplomat",
+    vibration: "Partnership, sensitivity, balance.",
+    use: "Pair-trades and group strategy reviews amplify your edge.",
+    caution: "Avoid emotional revenge fills; you absorb others' moods."
+  },
+  {
+    number: 3,
+    title: "The Communicator",
+    vibration: "Expression, joy, social charm.",
+    use: "Journaling and recap videos compound your insights.",
+    caution: "Distraction-prone; turn off chats during execution windows."
+  },
+  {
+    number: 4,
+    title: "The Builder",
+    vibration: "Discipline, structure, patience.",
+    use: "Backtests and rule-based systems play to your strengths.",
+    caution: "Rigidity — schedule time to update rules to new regimes."
+  },
+  {
+    number: 5,
+    title: "The Adventurer",
+    vibration: "Change, freedom, sensory intelligence.",
+    use: "News-driven and momentum strategies feel native.",
+    caution: "Over-trading; cap shots-per-day to enforce filtering."
+  },
+  {
+    number: 6,
+    title: "The Caretaker",
+    vibration: "Responsibility, harmony, service.",
+    use: "Mentor-led trading rooms; teaching cements your edge.",
+    caution: "Over-helping — protect capital before saving someone else's."
+  },
+  {
+    number: 7,
+    title: "The Mystic",
+    vibration: "Analysis, depth, intuition.",
+    use: "Quant work, pattern research, solitude before entries.",
+    caution: "Paralysis-by-analysis; set a 'good enough' shipping bar."
+  },
+  {
+    number: 8,
+    title: "The Executive",
+    vibration: "Power, abundance, manifestation.",
+    use: "Scaling, prop firms, business builds — your octave is wealth-flow.",
+    caution: "Greed cycle — define a stop-out and walk away rule."
+  },
+  {
+    number: 9,
+    title: "The Sage",
+    vibration: "Completion, compassion, release.",
+    use: "Closing chapters: prune accounts, retire bad habits, redistribute gains.",
+    caution: "Holding losers too long for the story; cut sharper."
+  },
+  {
+    number: 11,
+    title: "The Visionary (master)",
+    vibration: "Illumination, inspiration, intuition x10.",
+    use: "Macro pattern reading, themes that span months — trust early signals.",
+    caution: "Nervous system overload; ground with breathwork before market open."
+  },
+  {
+    number: 22,
+    title: "The Master Builder",
+    vibration: "Large-scale construction; turning vision into structure.",
+    use: "Funds, multi-account scaling, infrastructure plays.",
+    caution: "Scope creep — partition into 90-day milestones."
+  },
+  {
+    number: 33,
+    title: "The Master Teacher",
+    vibration: "Service through wisdom — trade as a curriculum.",
+    use: "Teach the system; your portfolio benefits from articulation.",
+    caution: "Burning out helping others; protect deep-work blocks."
+  }
+];
+
+// ---------------------------------------------------------------------
+// Female cycle helper (lunar approximation)
+// ---------------------------------------------------------------------
+/**
+ * Approximate cycle phase from a "last period start" date and average
+ * cycle length. Genesis uses this purely as a self-reflection cue —
+ * not medical advice. Phases align with the typical 28-day model.
+ */
+export type CyclePhase = "menstrual" | "follicular" | "ovulation" | "luteal";
+export type CycleReading = {
+  phase: CyclePhase;
+  dayInCycle: number;
+  cycleLength: number;
+  trade: string;
+  energy: string;
+};
+
+export function femaleCycleReading(
+  lastPeriodIso: string,
+  cycleLength = 28,
+  now: Date = new Date()
+): CycleReading | null {
+  const start = new Date(lastPeriodIso);
+  if (Number.isNaN(start.getTime())) return null;
+  const cl = Math.max(20, Math.min(40, cycleLength));
+  const diffDays = Math.floor((now.getTime() - start.getTime()) / 86_400_000);
+  const day = ((diffDays % cl) + cl) % cl + 1; // 1..cl
+  let phase: CyclePhase = "follicular";
+  if (day <= 5) phase = "menstrual";
+  else if (day <= 13) phase = "follicular";
+  else if (day <= 16) phase = "ovulation";
+  else phase = "luteal";
+
+  const tradeNotes: Record<CyclePhase, string> = {
+    menstrual: "Lower size, prefer review days, journal heavily — your edge is reflective.",
+    follicular: "Risk-on phase; explore new setups and re-test backtests with curiosity.",
+    ovulation: "Peak presence and pattern recognition; great window for high-conviction A+ setups.",
+    luteal: "Slow execution down; tighten stops, avoid revenge trades, end day earlier."
+  };
+  const energyNotes: Record<CyclePhase, string> = {
+    menstrual: "Inward, restorative.",
+    follicular: "Outward, building, social.",
+    ovulation: "Magnetic, radiant, connective.",
+    luteal: "Critical, refining, more inward day-by-day."
+  };
+
+  return {
+    phase,
+    dayInCycle: day,
+    cycleLength: cl,
+    trade: tradeNotes[phase],
+    energy: energyNotes[phase]
+  };
+}

@@ -18,7 +18,14 @@ type DayBucket = { pnl: number; trades: number; wins: number };
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-export function TradeCalendar({ trades }: { trades: TradeRow[] }) {
+export function TradeCalendar({
+  trades,
+  headerActions
+}: {
+  trades: TradeRow[];
+  /** Optional buttons rendered to the right of the monthly stats pill. */
+  headerActions?: React.ReactNode;
+}) {
   const [cursor, setCursor] = useState<Date>(() => new Date());
   const { fmt } = useMoney();
 
@@ -135,6 +142,7 @@ export function TradeCalendar({ trades }: { trades: TradeRow[] }) {
           <span className="rounded-md bg-bg-soft px-2 py-0.5 font-medium text-fg-muted">
             {tradingDays} day{tradingDays === 1 ? "" : "s"}
           </span>
+          {headerActions ? <div className="ml-1 flex items-center gap-1">{headerActions}</div> : null}
         </div>
       </div>
 

@@ -3,7 +3,16 @@
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, PolarRadiusAxis } from "recharts";
 import type { GsScoreInputs } from "@/lib/analytics";
 
-export function GsScoreRadar({ parts, score }: { parts: GsScoreInputs; score: number }) {
+export function GsScoreRadar({
+  parts,
+  score,
+  radarHeight = "h-56"
+}: {
+  parts: GsScoreInputs;
+  score: number;
+  /** Tailwind height class for the radar; pass smaller values when stacked. */
+  radarHeight?: string;
+}) {
   const data = [
     { metric: "Win %", value: clamp(parts.winPct / 70 * 100) },
     { metric: "Profit factor", value: clamp((parts.profitFactor - 1) / 2 * 100) },
@@ -15,7 +24,7 @@ export function GsScoreRadar({ parts, score }: { parts: GsScoreInputs; score: nu
 
   return (
     <div className="space-y-3">
-      <div className="h-56">
+      <div className={radarHeight}>
         <ResponsiveContainer>
           <RadarChart data={data} outerRadius="78%">
             <PolarGrid stroke="rgba(127,127,150,0.25)" />

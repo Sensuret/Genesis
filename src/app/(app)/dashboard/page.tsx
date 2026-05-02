@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import Link from "next/link";
 import { Plus } from "lucide-react";
+import { ScreenshotButton } from "@/components/ui/screenshot-button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
 import { useTrades } from "@/lib/hooks/use-trades";
@@ -144,7 +145,7 @@ export default function DashboardPage() {
         : Math.max(tradeStreakBest.winTrades, tradeStreakBest.lossTrades);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <PageHeader
         title="Dashboard"
         extra={<MoonInline />}
@@ -156,7 +157,7 @@ export default function DashboardPage() {
       />
 
       {/* Hero row — 5 stat cards mirroring the TradeZella reference. */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <NetPnlCard value={stats.net} tradeCount={filtered.length} />
         <WinRateCard
           winRate={stats.win}
@@ -180,45 +181,25 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* Equity curve (left, 4 cols) + Trade calendar (right, 8 cols). */}
-      <div className="grid gap-4 lg:grid-cols-12">
-        <Card className="lg:col-span-4">
-          <CardHeader>
-            <CardTitle>Daily net cumulative P&L</CardTitle>
-          </CardHeader>
-          <CardBody>
-            <EquityCurveChart data={equity} />
-          </CardBody>
-        </Card>
-        <Card className="lg:col-span-8">
-          <CardHeader>
-            <CardTitle>Trade calendar</CardTitle>
-          </CardHeader>
-          <CardBody>
-            <TradeCalendar trades={filtered} />
-          </CardBody>
-        </Card>
+      {/* Left column (4 cols): Daily P&L stacked over GS Score —
+          equal total height to the calendar on the right (8 cols). */}
+      <div className="grid gap-3 lg:grid-cols-12 lg:items-stretch">
+        <div className="flex flex-col gap-3 lg:col-span-4">
+          <DailyPnlCard data={equity} />
+          <GsScoreCard parts={parts} score={score} />
+        </div>
+        <CalendarCard trades={filtered} />
       </div>
 
-      {/* GS score (left) + Net daily P&L bar chart (right). */}
-      <div className="grid gap-4 lg:grid-cols-12">
-        <Card className="lg:col-span-5">
-          <CardHeader>
-            <CardTitle>GS Score</CardTitle>
-          </CardHeader>
-          <CardBody>
-            <GsScoreRadar parts={parts} score={score} />
-          </CardBody>
-        </Card>
-        <Card className="lg:col-span-7">
-          <CardHeader>
-            <CardTitle>Net daily P&L (last 30)</CardTitle>
-          </CardHeader>
-          <CardBody>
-            <DailyPnlChart data={daily} />
-          </CardBody>
-        </Card>
-      </div>
+      {/* Net daily P&L bar chart on its own row, full width. */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Net daily P&L (last 30)</CardTitle>
+        </CardHeader>
+        <CardBody>
+          <DailyPnlChart data={daily} />
+        </CardBody>
+      </Card>
 
       {/* R:R distribution + Performance breakdowns. */}
       <div className="grid gap-4 lg:grid-cols-2">
@@ -288,5 +269,54 @@ function MiniStat({
       <div className="text-xs text-fg-muted">{label}</div>
       <div className={`text-xl font-semibold tracking-tight ${color}`}>{value}</div>
     </div>
+  );
+}
+
+function DailyPnlCard({ data }: { data: ReturnType<typeof equityCurve> }) {
+  const ref = useRef<HTMLDivElement>(null);
+  return (
+    <Card ref={ref} className="flex flex-1 flex-col">
+      <CardHeader>
+        <CardTitle>Daily net cumulative P&L</CardTitle>
+        <ScreenshotButton targetRef={ref} filename="daily-net-cumulative-pnl" />
+      </CardHeader>
+      <CardBody className="flex-1">
+        <div className="h-full min-h-[240px]">
+          <EquityCurveChart data={data} height="h-full" />
+        </div>
+      </CardBody>
+    </Card>
+  );
+}
+
+function GsScoreCard({ parts, score }: { parts: Parameters<typeof gsScore>[0]; score: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  return (
+    <Card ref={ref} className="flex flex-1 flex-col">
+      <CardHeader>
+        <CardTitle>GS Score</CardTitle>
+        <ScreenshotButton targetRef={ref} filename="gs-score" />
+      </CardHeader>
+      <CardBody className="flex-1">
+        <GsScoreRadar parts={parts} score={score} radarHeight="h-44" />
+      </CardBody>
+    </Card>
+  );
+}
+
+function CalendarCard({ trades }: { trades: import("@/lib/supabase/types").TradeRow[] }) {
+  const ref = useRef<HTMLDivElement>(null);
+  return (
+    <Card ref={ref} className="lg:col-span-8">
+      <CardHeader>
+        <CardTitle>Trade calendar</CardTitle>
+      </CardHeader>
+      <CardBody>
+        <TradeCalendar
+          trades={trades}
+          headerActions={<ScreenshotButton targetRef={ref} filename="trade-calendar" className="h-7 w-7" />}
+        />
+      </CardBody>
+    </Card>
   );
 }
