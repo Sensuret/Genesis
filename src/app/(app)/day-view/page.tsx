@@ -6,25 +6,34 @@ import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { DatePicker } from "@/components/ui/date-picker";
 import { ScreenshotButton } from "@/components/ui/screenshot-button";
 import { Stat } from "@/components/ui/stat";
-import { Badge } from "@/components/ui/badge";
 import { useTrades } from "@/lib/hooks/use-trades";
 import { totalPnl, winRate, profitFactor, totalCommissions, totalSpread, applyAllFilters, realisedRR } from "@/lib/analytics";
-import { useFilters, useMoney } from "@/lib/filters/store";
+import { useFilters } from "@/lib/filters/store";
 import { MoonWidget } from "@/components/moon-widget";
 import { IntradayEquityChart } from "@/components/charts/intraday-equity";
-import { formatNumber, pnlColor, shortDate } from "@/lib/utils";
+import { TradeLogTable } from "@/components/trades/trade-log-table";
+import { formatNumber, shortDate } from "@/lib/utils";
 import { Empty } from "@/components/ui/empty";
 
 export default function DayViewPage() {
   const { trades, loading } = useTrades();
   const { filters } = useFilters();
-  const { fmt } = useMoney();
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const pageRef = useRef<HTMLDivElement>(null);
 
   const filtered = useMemo(() => applyAllFilters(trades, filters), [trades, filters]);
   const today = useMemo(() => filtered.filter((t) => t.trade_date === date), [filtered, date]);
   const moonDate = useMemo(() => new Date(`${date}T12:00:00Z`), [date]);
+
+  // Most recent observed account balance — used to compute Net ROI when a
+  // trade row doesn't carry its own balance snapshot.
+  const balanceFallback = useMemo<number | null>(() => {
+    for (let i = trades.length - 1; i >= 0; i -= 1) {
+      const b = trades[i].account_balance;
+      if (typeof b === "number" && b > 0) return b;
+    }
+    return null;
+  }, [trades]);
 
   const rrStats = useMemo(() => {
     const rrs = today.map(realisedRR).filter((x): x is number => x !== null && Number.isFinite(x));
@@ -76,38 +85,8 @@ export default function DayViewPage() {
 
           <Card>
             <CardHeader><CardTitle>Trades</CardTitle></CardHeader>
-            <CardBody className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="border-b border-line text-xs text-fg-subtle">
-                  <tr>
-                    {["Pair", "Side", "Session", "P&L", "R:R", "Setup", "Mistake", "Emotions", "Notes"].map((h) => (
-                      <th key={h} className="px-3 py-2.5 font-medium">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {today.map((t) => {
-                    const rr = realisedRR(t);
-                    return (
-                      <tr key={t.id} className="border-b border-line/50 last:border-0">
-                        <td className="px-3 py-2.5 font-medium">{t.pair ?? "—"}</td>
-                        <td className="px-3 py-2.5">{t.side ? <Badge variant={t.side === "long" ? "success" : "danger"}>{t.side}</Badge> : "—"}</td>
-                        <td className="px-3 py-2.5 text-fg-muted">{t.session ?? "—"}</td>
-                        <td className={`px-3 py-2.5 font-medium ${pnlColor(t.pnl)}`}>{fmt(t.pnl)}</td>
-                        <td className="px-3 py-2.5">{rr === null ? <span className="text-fg-muted">—</span> : `1:${formatNumber(rr, 2)}`}</td>
-                        <td className="px-3 py-2.5 text-fg-muted">{t.setup_tag ?? "—"}</td>
-                        <td className="px-3 py-2.5 text-fg-muted">{t.mistake_tag ?? "—"}</td>
-                        <td className="px-3 py-2.5">
-                          <div className="flex flex-wrap gap-1">
-                            {(t.emotions ?? []).map((e) => <Badge key={e} variant="brand">{e}</Badge>)}
-                          </div>
-                        </td>
-                        <td className="px-3 py-2.5 max-w-xs truncate text-fg-muted">{t.notes ?? "—"}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            <CardBody className="p-0">
+              <TradeLogTable trades={today} balanceFallback={balanceFallback} hideOpenDate />
             </CardBody>
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-5 py-3 text-xs">
               <div className="text-fg-muted">

@@ -291,6 +291,15 @@ function GsScoreCard({ parts, score }: { parts: Parameters<typeof gsScore>[0]; s
 function CalendarCard({ trades }: { trades: import("@/lib/supabase/types").TradeRow[] }) {
   const ref = useRef<HTMLDivElement>(null);
   const [openDate, setOpenDate] = useState<string | null>(null);
+  // Most recent observed account balance — Net ROI fallback for trades that
+  // don't carry their own balance snapshot.
+  const balanceFallback = (() => {
+    for (let i = trades.length - 1; i >= 0; i -= 1) {
+      const b = trades[i].account_balance;
+      if (typeof b === "number" && b > 0) return b;
+    }
+    return null;
+  })();
   return (
     <Card ref={ref} className="lg:col-span-8">
       <CardHeader className="px-4 py-3">
@@ -307,6 +316,7 @@ function CalendarCard({ trades }: { trades: import("@/lib/supabase/types").Trade
         <DayViewModal
           date={openDate}
           trades={trades}
+          balanceFallback={balanceFallback}
           onClose={() => setOpenDate(null)}
         />
       )}

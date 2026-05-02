@@ -5,11 +5,10 @@ import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Stat } from "@/components/ui/stat";
-import { Badge } from "@/components/ui/badge";
 import { ScreenshotButton } from "@/components/ui/screenshot-button";
 import { MoonWidget } from "@/components/moon-widget";
 import { IntradayEquityChart } from "@/components/charts/intraday-equity";
-import { useMoney } from "@/lib/filters/store";
+import { TradeLogTable } from "@/components/trades/trade-log-table";
 import {
   totalPnl,
   winRate,
@@ -19,13 +18,18 @@ import {
   realisedRR
 } from "@/lib/analytics";
 import type { TradeRow } from "@/lib/supabase/types";
-import { formatNumber, pnlColor, shortDate } from "@/lib/utils";
+import { formatNumber, shortDate } from "@/lib/utils";
 
 type DayViewModalProps = {
   /** ISO yyyy-mm-dd. */
   date: string;
   /** Already-filtered trades for the user's view; the modal extracts this day. */
   trades: TradeRow[];
+  /**
+   * Most recent observed account balance, used as Net ROI fallback when a
+   * trade row has no balance of its own.
+   */
+  balanceFallback?: number | null;
   onClose: () => void;
 };
 
@@ -34,8 +38,7 @@ type DayViewModalProps = {
  * date. Reused by the Dashboard trade calendar and the Reports calendar
  * mini-month grids.
  */
-export function DayViewModal({ date, trades, onClose }: DayViewModalProps) {
-  const { fmt } = useMoney();
+export function DayViewModal({ date, trades, balanceFallback = null, onClose }: DayViewModalProps) {
   const captureRef = useRef<HTMLDivElement>(null);
 
   const today = useMemo(() => trades.filter((t) => t.trade_date === date), [trades, date]);
@@ -154,64 +157,8 @@ export function DayViewModal({ date, trades, onClose }: DayViewModalProps) {
                 <CardHeader>
                   <CardTitle>Trades</CardTitle>
                 </CardHeader>
-                <CardBody className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead className="border-b border-line text-xs text-fg-subtle">
-                      <tr>
-                        {["Pair", "Side", "Session", "P&L", "R:R", "Setup", "Mistake", "Emotions", "Notes"].map(
-                          (h) => (
-                            <th key={h} className="px-3 py-2.5 font-medium">
-                              {h}
-                            </th>
-                          )
-                        )}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {today.map((t) => {
-                        const rr = realisedRR(t);
-                        return (
-                          <tr key={t.id} className="border-b border-line/50 last:border-0">
-                            <td className="px-3 py-2.5 font-medium">{t.pair ?? "—"}</td>
-                            <td className="px-3 py-2.5">
-                              {t.side ? (
-                                <Badge variant={t.side === "long" ? "success" : "danger"}>
-                                  {t.side}
-                                </Badge>
-                              ) : (
-                                "—"
-                              )}
-                            </td>
-                            <td className="px-3 py-2.5 text-fg-muted">{t.session ?? "—"}</td>
-                            <td className={`px-3 py-2.5 font-medium ${pnlColor(t.pnl)}`}>
-                              {fmt(t.pnl)}
-                            </td>
-                            <td className="px-3 py-2.5">
-                              {rr === null ? (
-                                <span className="text-fg-muted">—</span>
-                              ) : (
-                                `1:${formatNumber(rr, 2)}`
-                              )}
-                            </td>
-                            <td className="px-3 py-2.5 text-fg-muted">{t.setup_tag ?? "—"}</td>
-                            <td className="px-3 py-2.5 text-fg-muted">{t.mistake_tag ?? "—"}</td>
-                            <td className="px-3 py-2.5">
-                              <div className="flex flex-wrap gap-1">
-                                {(t.emotions ?? []).map((e) => (
-                                  <Badge key={e} variant="brand">
-                                    {e}
-                                  </Badge>
-                                ))}
-                              </div>
-                            </td>
-                            <td className="px-3 py-2.5 max-w-xs truncate text-fg-muted">
-                              {t.notes ?? "—"}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                <CardBody className="p-0">
+                  <TradeLogTable trades={today} balanceFallback={balanceFallback} hideOpenDate />
                 </CardBody>
                 <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-5 py-3 text-xs">
                   <div className="text-fg-muted">
