@@ -5,8 +5,7 @@ import type { TradeRow } from "@/lib/supabase/types";
 import { rDistribution } from "@/lib/analytics";
 
 function fillFor(bucket: string): string {
-  if (bucket === "0R") return "rgb(130 130 150)";
-  if (bucket.startsWith("-") || bucket.startsWith("≤-")) return "url(#rr-down)";
+  if (bucket === "<1:1") return "url(#rr-down)";
   return "url(#rr-up)";
 }
 
@@ -16,7 +15,7 @@ export function RDistributionChart({ trades }: { trades: TradeRow[] }) {
   if (total === 0) {
     return (
       <div className="flex h-64 w-full items-center justify-center text-xs text-fg-muted">
-        No RR data — trades need entry, stop loss and exit prices to compute realised RR.
+        No R:R data — trades need entry, stop-loss and take-profit levels.
       </div>
     );
   }

@@ -71,14 +71,14 @@ function buildInsights(trades: TradeRow[], fmt: (n: number | null | undefined) =
     });
   }
 
-  // RR distribution signal
+  // Planned R:R signal (TP vs SL).
   const rrs = trades.map(realisedRR).filter((x): x is number => x !== null);
   const avgRR = rrs.length ? rrs.reduce((s, x) => s + x, 0) / rrs.length : 0;
   if (rrs.length >= 10) {
-    if (avgRR < 0.5) {
-      out.push({ tone: "warn", title: "Average RR is low", detail: `Avg ${avgRR.toFixed(2)}R — try cutting losers earlier or trailing winners.` });
-    } else if (avgRR > 1.5) {
-      out.push({ tone: "good", title: "RR is paying you well", detail: `Avg ${avgRR.toFixed(2)}R per trade.` });
+    if (avgRR < 1) {
+      out.push({ tone: "warn", title: "Planned R:R is below 1:1", detail: `Avg setup is 1:${avgRR.toFixed(2)} — you're risking more than you stand to make.` });
+    } else if (avgRR >= 2) {
+      out.push({ tone: "good", title: "Strong R:R discipline", detail: `Avg planned setup is 1:${avgRR.toFixed(2)} reward-to-risk.` });
     }
   }
 
