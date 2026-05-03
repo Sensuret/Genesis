@@ -243,16 +243,23 @@ function toEmotions(value: unknown): string[] | null {
 }
 
 /**
- * Detect the trading session from a broker open-time string. We treat broker
- * timestamps as UTC. Standard FX session windows (UTC), with overlap rules
- * picking the *primary* (highest-volume) session:
+ * Detect the trading session from a broker open-time string. Standard FX
+ * session windows (UTC), with overlap rules picking the *primary* (highest-
+ * volume) session:
  *
  *   21:00 – 23:59  →  Sydney  (only Sydney is open)
  *   00:00 – 06:59  →  Asia    (Sydney+Tokyo overlap; Tokyo dominates)
  *   07:00 – 11:59  →  London  (Tokyo+London overlap; London opens drives)
  *   12:00 – 20:59  →  New York (London+NY overlap up to 16:00; NY runs solo after)
+ *
+ * The optional `brokerOffsetMinutes` arg subtracts that many minutes from the
+ * raw timestamp before bucketing — letting us re-bucket trades whose broker
+ * server timezone wasn't UTC (e.g. FTMO at GMT+2 → offset = +120).
  */
-export function detectSession(value: unknown): string | null {
+export function detectSession(
+  value: unknown,
+  brokerOffsetMinutes: number | null = null
+): string | null {
   if (!value) return null;
   const s = String(value).trim();
   const mt = s.match(/^(\d{4})[./-](\d{2})[./-](\d{2})(?:[ T](\d{2}))/);
@@ -264,6 +271,11 @@ export function detectSession(value: unknown): string | null {
     if (!Number.isNaN(d.getTime())) hour = d.getUTCHours();
   }
   if (hour === null) return null;
+  if (brokerOffsetMinutes != null && Number.isFinite(brokerOffsetMinutes)) {
+    // The timestamp was recorded in broker-local time; convert to UTC.
+    const adjusted = hour - Math.round(brokerOffsetMinutes / 60);
+    hour = ((adjusted % 24) + 24) % 24;
+  }
   if (hour >= 21 && hour <= 23) return "Sydney";
   if (hour >= 0 && hour < 7) return "Asia";
   if (hour >= 7 && hour < 12) return "London";

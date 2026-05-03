@@ -56,6 +56,10 @@ export type TradeFileRow = {
   name: string;
   source: string | null;
   trade_count: number;
+  /** Per-file broker timezone offset in minutes from UTC. MT4/MT5 server
+   *  timezones differ between brokers (FTMO/ICMarkets ≈ GMT+2/+3 with DST,
+   *  Pepperstone ≈ UTC). Null = use the parser's auto-detected default. */
+  broker_tz_offset_minutes: number | null;
   created_at: string;
 };
 

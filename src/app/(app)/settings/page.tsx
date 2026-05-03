@@ -8,6 +8,7 @@ import { Input, Label } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
 import type { ProfileRow } from "@/lib/supabase/types";
 import { ThemePicker } from "@/components/theme-picker";
+import { ImportedFilesCard } from "@/components/settings/imported-files";
 
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
@@ -129,6 +130,8 @@ export default function SettingsPage() {
           </CardBody>
         </Card>
       </form>
+
+      <ImportedFilesCard />
 
       <Card>
         <CardHeader>
