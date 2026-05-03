@@ -44,7 +44,17 @@ export function PerfBar({
             tickFormatter={(v: number) => formatMoney(v, currency)}
           />
           <YAxis dataKey="key" type="category" stroke="rgb(130 130 150)" fontSize={11} width={120} />
-          <Tooltip formatter={(v: number) => formatMoney(v, currency)} />
+          <Tooltip
+            cursor={{ fill: "transparent" }}
+            contentStyle={{
+              background: "rgb(15 14 26 / 0.95)",
+              border: "1px solid rgb(168 102 255 / 0.4)",
+              borderRadius: 12,
+              color: "white",
+              fontSize: 12
+            }}
+            formatter={(v: number) => formatMoney(v, currency)}
+          />
           <Bar dataKey="pnl" radius={[0, 6, 6, 0]}>
             {converted.map((d) => (
               <Cell key={d.key} fill={d.pnl >= 0 ? "url(#perf-up)" : "url(#perf-down)"} />

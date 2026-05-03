@@ -45,7 +45,17 @@ export function DailyPnlChart({ data }: { data: Array<{ date: string; pnl: numbe
             tickMargin={2}
             tickFormatter={(v: number) => formatMoneyCompact(v, currency)}
           />
-          <Tooltip formatter={(v: number) => formatMoney(v, currency)} />
+          <Tooltip
+            cursor={{ fill: "transparent" }}
+            contentStyle={{
+              background: "rgb(15 14 26 / 0.95)",
+              border: "1px solid rgb(168 102 255 / 0.4)",
+              borderRadius: 12,
+              color: "white",
+              fontSize: 12
+            }}
+            formatter={(v: number) => formatMoney(v, currency)}
+          />
           <Bar dataKey="pnl" radius={[6, 6, 0, 0]}>
             {converted.map((d) => (
               <Cell key={d.date} fill={d.pnl >= 0 ? "url(#bar-up)" : "url(#bar-down)"} />
