@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, Label } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -12,39 +12,94 @@ import type { TradeFileRow, TradeRow } from "@/lib/supabase/types";
 import { shortDate } from "@/lib/utils";
 
 /**
- * Common MetaTrader broker server timezones. Stored as UTC-offset minutes so
- * we can subtract the offset from the recorded timestamp to get true UTC
- * before bucketing into Asia / Sydney / London / New York. The list covers
- * the brokers our users tend to import from; an "Auto" / "UTC" pair handles
- * the long tail.
+ * Detect the viewer's local timezone (via Intl API) — used as the Auto
+ * fallback so users in EAT / EEST / CST etc. get a sensible session split
+ * out of the box. Returns `{ offset, label }` where offset is in minutes
+ * east of UTC and label is like "GMT+3 · Nairobi".
  */
-const TZ_OPTIONS: Array<{ value: number | "auto"; label: string }> = [
-  { value: "auto", label: "Auto-detect" },
-  { value: 0, label: "UTC (GMT+0)" },
-  { value: 60, label: "GMT+1 (Pepperstone, Tickmill)" },
-  { value: 120, label: "GMT+2 (FTMO, ICMarkets winter)" },
-  { value: 180, label: "GMT+3 (FTMO, ICMarkets summer / EET DST)" },
-  { value: 240, label: "GMT+4" },
-  { value: 300, label: "GMT+5" },
-  { value: -300, label: "GMT-5 (US Eastern, OANDA winter)" },
-  { value: -240, label: "GMT-4 (US Eastern DST)" }
-];
-
-function tzLabel(offset: number | null): string {
-  if (offset == null) return "Auto-detect";
-  const found = TZ_OPTIONS.find((o) => o.value === offset);
-  if (found) return found.label;
+function localAutoDetected(): { offset: number; label: string } {
+  // `Date#getTimezoneOffset` returns minutes *west* of UTC; flip the sign.
+  const offset = -new Date().getTimezoneOffset();
+  let place = "";
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    place = tz ? tz.split("/").pop()!.replace(/_/g, " ") : "";
+  } catch {
+    /* ignore */
+  }
   const sign = offset >= 0 ? "+" : "-";
   const abs = Math.abs(offset);
   const h = Math.floor(abs / 60);
   const m = abs % 60;
-  return `GMT${sign}${h}${m ? `:${String(m).padStart(2, "0")}` : ""}`;
+  const gmt = `GMT${sign}${h}${m ? `:${String(m).padStart(2, "0")}` : ""}`;
+  return { offset, label: place ? `${gmt} · ${place}` : gmt };
+}
+
+/**
+ * MetaTrader broker-server timezones, expanded. Every UTC offset from -12
+ * to +14 in 30-minute steps is covered so any broker — HFM, JustMarkets,
+ * Exness, XM, IC Markets, FTMO, OANDA, Pepperstone, Tickmill, FBS, etc. —
+ * can be picked. The most common brokers are annotated in the label.
+ * `"auto"` resolves to the viewer's local timezone at render time.
+ */
+const BROKER_HINTS: Record<number, string> = {
+  [-300]: "OANDA winter, FX Pro US",
+  [-240]: "OANDA DST, FX Pro US DST",
+  [0]: "UTC (Pepperstone winter)",
+  [60]: "Pepperstone, Tickmill",
+  [120]: "FTMO, IC Markets, Admirals, FBS winter · HFM, JustMarkets winter",
+  [180]: "FTMO, IC Markets, Admirals, Exness, XM, HFM, JustMarkets (DST / EEST)",
+  [240]: "UAE, Gulf brokers",
+  [300]: "Pakistan",
+  [330]: "India",
+  [480]: "Singapore, China",
+  [540]: "Japan, Korea"
+};
+
+function labelForOffset(offset: number): string {
+  const sign = offset >= 0 ? "+" : "-";
+  const abs = Math.abs(offset);
+  const h = Math.floor(abs / 60);
+  const m = abs % 60;
+  const gmt = `GMT${sign}${h}${m ? `:${String(m).padStart(2, "0")}` : ""}`;
+  const hint = BROKER_HINTS[offset];
+  return hint ? `${gmt} — ${hint}` : gmt;
+}
+
+/** All half-hour offsets from -12 to +14 (Chatham/Kiribati). */
+function buildTzOffsets(): number[] {
+  const out: number[] = [];
+  for (let total = -12 * 60; total <= 14 * 60; total += 30) out.push(total);
+  return out;
+}
+
+type TzOption = { value: number | "auto"; label: string };
+
+function buildTzOptions(auto: { label: string }): TzOption[] {
+  const options: TzOption[] = [
+    { value: "auto", label: `Auto-detect (${auto.label})` }
+  ];
+  for (const off of buildTzOffsets()) {
+    options.push({ value: off, label: labelForOffset(off) });
+  }
+  return options;
+}
+
+function tzLabel(offset: number | null, auto: { label: string }): string {
+  if (offset == null) return `Auto-detect (${auto.label})`;
+  return labelForOffset(offset);
 }
 
 export function ImportedFilesCard() {
   const { files, trades, refresh } = useTrades();
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Compute on the client after mount — SSR has no access to Intl timezone.
+  const [auto, setAuto] = useState<{ offset: number; label: string }>({ offset: 0, label: "GMT+0" });
+  useEffect(() => {
+    setAuto(localAutoDetected());
+  }, []);
+  const TZ_OPTIONS = useMemo(() => buildTzOptions(auto), [auto]);
 
   async function updateFileTimezone(file: TradeFileRow, value: number | "auto") {
     setSavingId(file.id);
@@ -64,10 +119,13 @@ export function ImportedFilesCard() {
       //    offset so dashboards / reports / streaks pick up the change. We
       //    only update rows where the recomputed session differs from the
       //    stored value to keep this idempotent and cheap.
+      //    "auto" → use the viewer's local-timezone offset so Kenyan users
+      //    on HFM (GMT+3 in summer) get sessions split against the right UTC.
+      const effectiveOffset = value === "auto" ? auto.offset : offset;
       const fileTrades = trades.filter((t) => t.file_id === file.id);
       const updates: Array<{ id: string; session: string | null }> = [];
       for (const t of fileTrades) {
-        const next = detectSession(t.open_time ?? t.trade_date, offset);
+        const next = detectSession(t.open_time ?? t.trade_date, effectiveOffset);
         if (next !== t.session) updates.push({ id: t.id, session: next });
       }
       // Run sequentially in small chunks — Supabase has no native bulk-update
@@ -143,7 +201,7 @@ export function ImportedFilesCard() {
                       <td className="px-3 py-2.5">
                         <div className="font-medium text-fg">{f.name}</div>
                         <div className="text-xs text-fg-muted">
-                          {f.source ?? "Generic"} · current: {tzLabel(f.broker_tz_offset_minutes)}
+                          {f.source ?? "Generic"} · current: {tzLabel(f.broker_tz_offset_minutes, auto)}
                         </div>
                       </td>
                       <td className="px-3 py-2.5 text-fg-muted">{shortDate(f.created_at)}</td>

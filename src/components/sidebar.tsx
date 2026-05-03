@@ -7,7 +7,7 @@ import {
   Flame, Calculator, NotebookPen, Sparkles, Settings, LogOut,
   ChevronLeft, ChevronRight, BookOpen, BarChart3, User
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { cn } from "@/lib/utils";
 import { LogoMark, Wordmark } from "@/components/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -45,6 +45,17 @@ export function Sidebar() {
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [profile, setProfile] = useState<Partial<ProfileRow> | null>(null);
+  // Optimistic pending-route state: highlight the target link the moment the
+  // user clicks, even before the new page's data has resolved. Cleared once
+  // the pathname catches up. Prevents the "two highlighted items" effect
+  // during slow navigations.
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
+  useEffect(() => {
+    if (pendingHref && (pathname === pendingHref || pathname.startsWith(`${pendingHref}/`))) {
+      setPendingHref(null);
+    }
+  }, [pathname, pendingHref]);
 
   useEffect(() => {
     const v = typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY) : null;
@@ -108,13 +119,20 @@ export function Sidebar() {
       <nav className={cn("flex-1 space-y-1 overflow-y-auto py-4", collapsed ? "px-2" : "px-3")}>
         {NAV.map((item) => {
           const Icon = item.icon;
-          const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+          // Prefer the optimistic pending highlight so the clicked link
+          // becomes the only "active" item the instant the user clicks.
+          const matchesPath = pathname === item.href || pathname.startsWith(`${item.href}/`);
+          const active = pendingHref ? pendingHref === item.href : matchesPath;
           if (item.primary) {
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 title={collapsed ? item.label : undefined}
+                onClick={() => {
+                  setPendingHref(item.href);
+                  startTransition(() => {});
+                }}
                 className={cn(
                   "mb-3 flex h-10 items-center gap-2 rounded-xl bg-brand-500 text-sm font-medium text-white shadow-glow hover:bg-brand-400",
                   collapsed ? "justify-center px-0" : "justify-center"
@@ -130,6 +148,10 @@ export function Sidebar() {
               key={item.href}
               href={item.href}
               title={collapsed ? item.label : undefined}
+              onClick={() => {
+                setPendingHref(item.href);
+                startTransition(() => {});
+              }}
               className={cn(
                 "nav-item-hover flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition-colors",
                 collapsed && "justify-center px-2",

@@ -327,8 +327,10 @@ function metaTraderRowToTrade(row: unknown[]): ParsedTrade {
     session: detectSession(openTime),
     side,
     entry,
-    stop_loss: toNumber(row[6]),
-    take_profit: toNumber(row[7]),
+    // MT writes 0 when no S/L or T/P was set — store null so analytics
+    // don't treat "no stop" as "stop at price zero".
+    stop_loss: (() => { const v = toNumber(row[6]); return v === 0 ? null : v; })(),
+    take_profit: (() => { const v = toNumber(row[7]); return v === 0 ? null : v; })(),
     exit_price,
     lot_size: toNumber(row[4]),
     result_r: null,
@@ -456,8 +458,111 @@ export type ParseResult = {
   headers: string[];
   mapping: Partial<Record<FieldKey, string>>;
   raw: Record<string, unknown>[];
-  format: "metatrader" | "generic";
+  format: "metatrader" | "hfm" | "generic";
 };
+
+/**
+ * HFM / HotForex exports: each trade is represented as TWO rows sharing a
+ * Position ID.
+ *   - row A (opener): Open Date == Close Date, Profit == 0, Duration blank
+ *   - row B (closer): Open Date < Close Date, Profit populated, Duration set
+ * Row A's Action ("Buy"/"Sell") is the real trade direction; row B's Action
+ * is the *closing* order (opposite side), so we must NOT use it for `side`.
+ */
+function isHfmHeader(headers: string[]): boolean {
+  const norm = headers.map((h) => normalize(String(h ?? "")));
+  return (
+    norm.includes("position id") &&
+    norm.includes("open date") &&
+    norm.includes("close date") &&
+    norm.includes("open price") &&
+    norm.includes("close price") &&
+    norm.includes("profit") &&
+    norm.includes("action")
+  );
+}
+
+/** Parse HFM-style duration strings like "1h 12m 23s" → seconds. */
+function parseHfmDuration(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  if (typeof value === "number" && Number.isFinite(value)) return Math.round(value);
+  const s = String(value).trim();
+  if (!s || s === "-") return null;
+  let total = 0;
+  let matched = false;
+  const h = s.match(/(\d+)\s*h/i);
+  if (h) { total += Number.parseInt(h[1], 10) * 3600; matched = true; }
+  const m = s.match(/(\d+)\s*m(?!s)/i);
+  if (m) { total += Number.parseInt(m[1], 10) * 60; matched = true; }
+  const sec = s.match(/(\d+)\s*s/i);
+  if (sec) { total += Number.parseInt(sec[1], 10); matched = true; }
+  return matched ? total : null;
+}
+
+function parseHfmRows(rows: Record<string, unknown>[]): ParsedTrade[] {
+  // Group by Position ID. Opener = row where profit == 0 and close == open
+  // time. Closer = the other row for that position.
+  const byId = new Map<string, { opener?: Record<string, unknown>; closer?: Record<string, unknown> }>();
+  for (const r of rows) {
+    const pid = String(r["Position ID"] ?? "").trim();
+    if (!pid) continue;
+    const bucket = byId.get(pid) ?? {};
+    const profit = toNumber(r["Profit"]);
+    const dur = parseHfmDuration(r["Duration"]);
+    const isCloser = (dur != null && dur > 0) || (profit != null && profit !== 0);
+    if (isCloser) bucket.closer = r;
+    else bucket.opener = r;
+    byId.set(pid, bucket);
+  }
+
+  const trades: ParsedTrade[] = [];
+  for (const { opener, closer } of byId.values()) {
+    // Need at least the closer row to have an actual trade.
+    if (!closer) continue;
+    const base = opener ?? closer;
+    const openerAction = String((opener ?? closer)["Action"] ?? "").toLowerCase();
+    const side: "long" | "short" | null =
+      openerAction.startsWith("buy") ? "long" :
+      openerAction.startsWith("sell") ? "short" : null;
+    const pair = base["Symbol"] ? String(base["Symbol"]) : null;
+    const entry = toNumber(base["Open Price"]);
+    const exit_price = toNumber(closer["Close Price"]);
+    const open_time = toIsoTimestamp(base["Open Date"]);
+    const close_time = toIsoTimestamp(closer["Close Date"]);
+    const durationFromString = parseHfmDuration(closer["Duration"]);
+    const duration_seconds = durationFromString ?? computeDurationSeconds(open_time, close_time);
+    // HFM's "Pips" column reports points, not forex-pips. Prefer our
+    // computed value so indices/metals/crypto are normalised consistently
+    // across broker files.
+    const computedPips = computePips({ pair, entry, exit_price, side });
+    const pipsFromFile = toNumber(closer["Pips"]);
+    trades.push({
+      pair,
+      trade_date: toDate(base["Open Date"]),
+      open_time,
+      close_time,
+      duration_seconds,
+      pips: computedPips ?? pipsFromFile,
+      session: detectSession(base["Open Date"]),
+      side,
+      entry,
+      stop_loss: null,
+      take_profit: null,
+      exit_price,
+      lot_size: toNumber(base["Lots"]),
+      result_r: null,
+      pnl: toNumber(closer["Profit"]),
+      commissions: null,
+      spread: null,
+      account_balance: null,
+      setup_tag: null,
+      mistake_tag: null,
+      emotions: null,
+      notes: null
+    });
+  }
+  return trades;
+}
 
 export async function parseFile(file: File): Promise<ParseResult> {
   const ext = file.name.toLowerCase().split(".").pop() ?? "";
@@ -483,6 +588,24 @@ export async function parseFile(file: File): Promise<ParseResult> {
       pnl: "Profit"
     };
     return { trades, headers, mapping, raw: rows, format: "metatrader" };
+  }
+
+  if (isHfmHeader(headers)) {
+    const trades = parseHfmRows(rows);
+    const mapping: Partial<Record<FieldKey, string>> = {
+      trade_date: "Open Date",
+      open_time: "Open Date",
+      close_time: "Close Date",
+      pair: "Symbol",
+      side: "Action",
+      lot_size: "Lots",
+      entry: "Open Price",
+      exit_price: "Close Price",
+      pnl: "Profit",
+      pips: "Pips",
+      duration_seconds: "Duration"
+    };
+    return { trades, headers, mapping, raw: rows, format: "hfm" };
   }
 
   const mapping = buildColumnMap(headers);

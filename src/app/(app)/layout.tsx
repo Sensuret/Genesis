@@ -7,10 +7,13 @@ import { createClient } from "@/lib/supabase/server";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient();
+  // getSession() is a cookie-only read; getUser() makes an auth-server round
+  // trip on every page navigation (300–1500ms). The client-side refresh
+  // catches any expired sessions.
   const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+    data: { session }
+  } = await supabase.auth.getSession();
+  if (!session) redirect("/login");
 
   return (
     <TradesProvider>

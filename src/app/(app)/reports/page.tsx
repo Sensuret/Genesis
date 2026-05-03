@@ -242,7 +242,9 @@ function Risk({ trades, currency }: { trades: TradeRow[]; currency: string }) {
   const winRRs = trades.filter((t) => (t.pnl ?? 0) > 0).map(realisedRR).filter((x): x is number => x !== null);
   const lossRRs = trades.filter((t) => (t.pnl ?? 0) < 0).map(realisedRR).filter((x): x is number => x !== null);
   const allRRs = trades.map(realisedRR).filter((x): x is number => x !== null);
-  const avgRR = allRRs.length ? allRRs.reduce((s, x) => s + x, 0) / allRRs.length : 0;
+  const avgRR = avgOrNull(allRRs);
+  const avgWinRR = avgOrNull(winRRs);
+  const avgLossRR = avgOrNull(lossRRs);
   const expectancy = trades.length
     ? trades.reduce((s, t) => s + (t.pnl ?? 0), 0) / trades.length
     : 0;
@@ -251,12 +253,17 @@ function Risk({ trades, currency }: { trades: TradeRow[]; currency: string }) {
       <div className="grid gap-4 md:grid-cols-4">
         <Stat label="Max drawdown" value={dd} format="currency" positive={false} />
         <Stat label="Recovery factor" value={rf} format="number" />
-        <Stat label="Avg planned R:R" value={avgRR} format="number" positive={avgRR >= 1} />
+        <Stat
+          label="Avg planned R:R"
+          value={formatRatio(avgRR)}
+          format="text"
+          positive={avgRR !== null && avgRR >= 1}
+        />
         <Stat label="Per-trade expectancy" value={expectancy} format="currency" positive={expectancy >= 0} />
       </div>
       <div className="grid gap-4 md:grid-cols-3">
-        <Stat label="R:R on winning trades" value={avg(winRRs)} format="number" />
-        <Stat label="R:R on losing trades" value={avg(lossRRs)} format="number" positive={false} />
+        <Stat label="R:R on winning trades" value={formatRatio(avgWinRR)} format="text" />
+        <Stat label="R:R on losing trades" value={formatRatio(avgLossRR)} format="text" positive={false} />
         <Stat label="Trades with R:R data" value={allRRs.length} format="number" />
       </div>
       <Card>
@@ -264,6 +271,7 @@ function Risk({ trades, currency }: { trades: TradeRow[]; currency: string }) {
         <CardBody>
           <div className="text-xs text-fg-muted">
             Planned R:R is computed from each trade&apos;s entry, stop-loss and take-profit levels.
+            Trades without a stop-loss/take-profit (e.g. HFM exports) are excluded.
             Display currency: <span className="text-fg">{currency}</span>.
           </div>
         </CardBody>
@@ -272,8 +280,13 @@ function Risk({ trades, currency }: { trades: TradeRow[]; currency: string }) {
   );
 }
 
-function avg(arr: number[]): number {
-  return arr.length ? arr.reduce((s, x) => s + x, 0) / arr.length : 0;
+function avgOrNull(arr: number[]): number | null {
+  return arr.length ? arr.reduce((s, x) => s + x, 0) / arr.length : null;
+}
+
+function formatRatio(r: number | null): string {
+  if (r === null || !Number.isFinite(r) || r <= 0) return "—";
+  return `1 : ${formatNumber(r, 2)}`;
 }
 
 function WinsLosses({ trades, fmt }: { trades: TradeRow[]; fmt: Fmt }) {
