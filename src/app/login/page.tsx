@@ -9,6 +9,7 @@ import { LogoMark, Wordmark } from "@/components/logo";
 import { GoogleButton } from "@/components/google-button";
 import { createClient } from "@/lib/supabase/client";
 import { friendlyAuthMessage } from "@/lib/auth-errors";
+import { useHydrated } from "@/lib/hooks/use-hydrated";
 
 export default function LoginPage() {
   return (
@@ -26,10 +27,11 @@ function LoginInner() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const hydrated = useHydrated();
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (loading) return;
+    if (loading || !hydrated) return;
     setLoading(true);
     setError(null);
     setInfo(null);
@@ -105,8 +107,8 @@ function LoginInner() {
           {error && <div className="rounded-lg bg-danger/10 p-3 text-xs text-danger">{error}</div>}
           {info && <div className="rounded-lg bg-success/10 p-3 text-xs text-success">{info}</div>}
 
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? "Signing in…" : "Sign in"}
+          <Button type="submit" className="w-full" disabled={loading || !hydrated}>
+            {!hydrated ? "Loading…" : loading ? "Signing in…" : "Sign in"}
           </Button>
         </form>
 

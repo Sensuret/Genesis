@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useHydrated } from "@/lib/hooks/use-hydrated";
 
 /**
  * Google OAuth button (sign-in / sign-up — Supabase treats them the same way).
@@ -11,8 +12,10 @@ import { createClient } from "@/lib/supabase/client";
 export function GoogleButton({ mode }: { mode: "signin" | "signup" }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const hydrated = useHydrated();
 
   async function onClick() {
+    if (loading || !hydrated) return;
     setLoading(true);
     setError(null);
     const supabase = createClient();
@@ -37,12 +40,18 @@ export function GoogleButton({ mode }: { mode: "signin" | "signup" }) {
     <div className="space-y-2">
       <button
         type="button"
-        disabled={loading}
+        disabled={loading || !hydrated}
         onClick={onClick}
         className="flex h-10 w-full items-center justify-center gap-3 rounded-xl border border-line bg-bg-elevated text-sm font-medium text-fg transition hover:border-brand-400 hover:bg-bg-soft disabled:cursor-not-allowed disabled:opacity-60"
       >
         <GoogleGlyph />
-        {loading ? "Redirecting…" : mode === "signin" ? "Sign in with Google" : "Sign up with Google"}
+        {!hydrated
+          ? "Loading…"
+          : loading
+            ? "Redirecting…"
+            : mode === "signin"
+              ? "Sign in with Google"
+              : "Sign up with Google"}
       </button>
       {error && <div className="rounded-lg bg-danger/10 p-2 text-xs text-danger">{error}</div>}
     </div>

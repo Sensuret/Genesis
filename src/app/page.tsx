@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { LogoMark, Wordmark } from "@/components/logo";
-import { Button } from "@/components/ui/button";
 import { ArrowRight, BarChart3, Sparkles, Calculator, NotebookPen } from "lucide-react";
 
 export default function Landing() {
@@ -15,8 +14,18 @@ export default function Landing() {
           <Wordmark size="lg" />
         </div>
         <div className="flex items-center gap-3">
-          <Link href="/login"><Button variant="ghost">Log in</Button></Link>
-          <Link href="/register"><Button>Get started</Button></Link>
+          <Link
+            href="/login"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl px-4 text-sm font-medium text-fg transition hover:bg-bg-soft"
+          >
+            Log in
+          </Link>
+          <Link
+            href="/register"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-brand-500 px-4 text-sm font-medium text-white shadow-glow transition hover:bg-brand-400"
+          >
+            Get started
+          </Link>
         </div>
       </header>
 
@@ -34,8 +43,18 @@ export default function Landing() {
           a real edge — not just a spreadsheet.
         </p>
         <div className="mt-10 flex items-center justify-center gap-3">
-          <Link href="/register"><Button size="lg">Start free <ArrowRight className="h-4 w-4" /></Button></Link>
-          <Link href="/login"><Button size="lg" variant="secondary">I have an account</Button></Link>
+          <Link
+            href="/register"
+            className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-brand-500 px-6 text-base font-medium text-white shadow-glow transition hover:bg-brand-400"
+          >
+            Start free <ArrowRight className="h-4 w-4" />
+          </Link>
+          <Link
+            href="/login"
+            className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-line bg-bg-soft px-6 text-base font-medium text-fg transition hover:bg-bg-elevated"
+          >
+            I have an account
+          </Link>
         </div>
       </section>
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { useMoney } from "@/lib/filters/store";
 import { realisedRR } from "@/lib/analytics";
@@ -68,6 +69,12 @@ type TradeLogTableProps = {
   balanceFallback?: number | null;
   /** Hide Open Date column (e.g. when the table is already scoped to one day). */
   hideOpenDate?: boolean;
+  /**
+   * Show only the first `pageSize` rows initially with a Show more / Show all
+   * footer. Defaults to 100 to keep the Trades page snappy on accounts with
+   * thousands of imports. Pass `null` to render every row.
+   */
+  pageSize?: number | null;
   className?: string;
 };
 
@@ -81,9 +88,27 @@ export function TradeLogTable({
   trades,
   balanceFallback = null,
   hideOpenDate = false,
+  pageSize = 100,
   className
 }: TradeLogTableProps) {
   const { fmt } = useMoney();
+  const [limit, setLimit] = useState(pageSize ?? trades.length);
+
+  // If the trades list shrinks (e.g. via filters) below the current limit,
+  // reset back to the page size so we don't pretend to "show more" rows.
+  useEffect(() => {
+    if (pageSize == null) {
+      setLimit(trades.length);
+    } else if (trades.length <= pageSize) {
+      setLimit(trades.length);
+    } else {
+      setLimit((prev) => Math.min(Math.max(prev, pageSize), trades.length));
+    }
+  }, [trades.length, pageSize]);
+
+  const visible = pageSize == null ? trades : trades.slice(0, limit);
+  const hidden = trades.length - visible.length;
+
   return (
     <div className={cn("overflow-x-auto", className)}>
       <table className="w-full text-left text-sm">
@@ -107,7 +132,7 @@ export function TradeLogTable({
           </tr>
         </thead>
         <tbody>
-          {trades.map((t) => {
+          {visible.map((t) => {
             const rr = realisedRR(t);
             const session = t.session ?? detectSession(t.open_time ?? t.trade_date);
             const status = rowStatus(t);
@@ -192,6 +217,29 @@ export function TradeLogTable({
           })}
         </tbody>
       </table>
+      {hidden > 0 && (
+        <div className="flex items-center justify-between gap-3 border-t border-line bg-bg-soft/30 px-4 py-3 text-xs text-fg-muted">
+          <span>
+            Showing {visible.length} of {trades.length} trades
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setLimit((l) => Math.min(l + (pageSize ?? 100), trades.length))}
+              className="rounded-lg border border-line bg-bg-elevated px-3 py-1.5 text-xs font-medium text-fg transition hover:border-brand-400 hover:text-brand-200"
+            >
+              Show {Math.min(pageSize ?? 100, hidden)} more
+            </button>
+            <button
+              type="button"
+              onClick={() => setLimit(trades.length)}
+              className="rounded-lg border border-line bg-bg-elevated px-3 py-1.5 text-xs font-medium text-fg-muted transition hover:border-brand-400 hover:text-brand-200"
+            >
+              Show all
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
