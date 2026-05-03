@@ -8,18 +8,23 @@ import { LogoMark, Wordmark } from "@/components/logo";
 import { GoogleButton } from "@/components/google-button";
 import { createClient } from "@/lib/supabase/client";
 import { friendlyAuthMessage } from "@/lib/auth-errors";
+import { useHydrated } from "@/lib/hooks/use-hydrated";
 
 export default function RegisterPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [otpStep, setOtpStep] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
+  const [otpError, setOtpError] = useState<string | null>(null);
+  const [verifying, setVerifying] = useState(false);
+  const hydrated = useHydrated();
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (loading) return;
+    if (loading || !hydrated) return;
     setLoading(true);
     setError(null);
 
@@ -30,17 +35,12 @@ export default function RegisterPage() {
     }
 
     const supabase = createClient();
-    const siteUrl =
-      (typeof window !== "undefined" ? window.location.origin : "") ||
-      process.env.NEXT_PUBLIC_SITE_URL ||
-      "";
 
     const { data, error: signUpErr } = await supabase.auth.signUp({
       email: email.trim(),
       password,
       options: {
-        data: { full_name: name },
-        emailRedirectTo: `${siteUrl}/auth/callback?next=/dashboard`
+        data: { full_name: name }
       }
     });
 
@@ -61,13 +61,59 @@ export default function RegisterPage() {
       return;
     }
 
+    // If a session was issued immediately (e.g. project has email confirmation
+    // disabled), drop straight into the app. Otherwise show the OTP code step.
     if (data.session) {
       window.location.assign("/dashboard");
       return;
     }
 
-    setSuccess(true);
+    setOtpStep(true);
     setLoading(false);
+  }
+
+  async function verifyOtp(e: React.FormEvent) {
+    e.preventDefault();
+    if (verifying || !hydrated) return;
+    const code = otpCode.trim();
+    if (code.length < 6) {
+      setOtpError("Enter the 6-digit code from the email we just sent you.");
+      return;
+    }
+    setVerifying(true);
+    setOtpError(null);
+
+    const supabase = createClient();
+    const { error: verifyErr } = await supabase.auth.verifyOtp({
+      email: email.trim(),
+      token: code,
+      type: "signup"
+    });
+
+    if (verifyErr) {
+      setOtpError(friendlyAuthMessage(verifyErr.message, "signup"));
+      setVerifying(false);
+      return;
+    }
+
+    // Verified — Supabase has stored the session in the client. Force a full
+    // reload so the server picks up the cookie on the next render.
+    window.location.assign("/dashboard");
+  }
+
+  async function resendOtp() {
+    if (verifying) return;
+    setOtpError(null);
+    const supabase = createClient();
+    const { error: resendErr } = await supabase.auth.resend({
+      type: "signup",
+      email: email.trim()
+    });
+    if (resendErr) {
+      setOtpError(friendlyAuthMessage(resendErr.message, "signup"));
+      return;
+    }
+    setOtpError("New code sent. Check your email.");
   }
 
   return (
@@ -80,15 +126,65 @@ export default function RegisterPage() {
           <p className="mt-2 text-sm text-fg-muted">Create your account and start journaling.</p>
         </div>
 
-        {success ? (
-          <div className="space-y-3 text-center">
-            <p className="text-sm text-fg">
-              Check your email to confirm your account, then come back here to sign in.
+        {otpStep ? (
+          <form onSubmit={verifyOtp} className="space-y-4" noValidate>
+            <p className="text-center text-sm text-fg">
+              We sent a 6-digit code to <span className="font-medium">{email}</span>. Enter it below
+              to confirm your account — no need to click any link.
             </p>
-            <Link href="/login" className="text-sm text-brand-300 hover:underline">
-              Back to sign in
-            </Link>
-          </div>
+            <div>
+              <Label>Confirmation code</Label>
+              <Input
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                pattern="[0-9]*"
+                value={otpCode}
+                onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                placeholder="123456"
+                className="text-center text-lg tracking-[0.4em]"
+                required
+              />
+            </div>
+
+            {otpError && (
+              <div className="rounded-lg bg-danger/10 p-3 text-xs text-danger">{otpError}</div>
+            )}
+
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={verifying || !hydrated || otpCode.length < 6}
+            >
+              {!hydrated
+                ? "Loading…"
+                : verifying
+                  ? "Verifying…"
+                  : "Confirm & continue"}
+            </Button>
+
+            <div className="flex items-center justify-between text-xs text-fg-muted">
+              <button
+                type="button"
+                onClick={resendOtp}
+                disabled={verifying}
+                className="text-brand-300 hover:underline disabled:opacity-60"
+              >
+                Resend code
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setOtpStep(false);
+                  setOtpCode("");
+                  setOtpError(null);
+                }}
+                className="text-fg-muted hover:text-fg"
+              >
+                Use a different email
+              </button>
+            </div>
+          </form>
         ) : (
           <>
             <GoogleButton mode="signup" />
@@ -130,8 +226,8 @@ export default function RegisterPage() {
                 <div className="rounded-lg bg-danger/10 p-3 text-xs text-danger">{error}</div>
               )}
 
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? "Creating account…" : "Create account"}
+              <Button type="submit" className="w-full" disabled={loading || !hydrated}>
+                {!hydrated ? "Loading…" : loading ? "Creating account…" : "Create account"}
               </Button>
             </form>
           </>

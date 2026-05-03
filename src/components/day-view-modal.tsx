@@ -158,7 +158,7 @@ export function DayViewModal({ date, trades, balanceFallback = null, onClose }: 
                   <CardTitle>Trades</CardTitle>
                 </CardHeader>
                 <CardBody className="p-0">
-                  <TradeLogTable trades={today} balanceFallback={balanceFallback} hideOpenDate />
+                  <TradeLogTable trades={today} balanceFallback={balanceFallback} hideOpenDate pageSize={null} />
                 </CardBody>
                 <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-5 py-3 text-xs">
                   <div className="text-fg-muted">

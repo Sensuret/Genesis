@@ -7,16 +7,18 @@ import { Input, Label } from "@/components/ui/input";
 import { LogoMark, Wordmark } from "@/components/logo";
 import { createClient } from "@/lib/supabase/client";
 import { friendlyAuthMessage } from "@/lib/auth-errors";
+import { useHydrated } from "@/lib/hooks/use-hydrated";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
+  const hydrated = useHydrated();
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (loading) return;
+    if (loading || !hydrated) return;
     setLoading(true);
     setError(null);
 
@@ -75,8 +77,8 @@ export default function ForgotPasswordPage() {
 
             {error && <div className="rounded-lg bg-danger/10 p-3 text-xs text-danger">{error}</div>}
 
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Sending…" : "Send reset link"}
+            <Button type="submit" className="w-full" disabled={loading || !hydrated}>
+              {!hydrated ? "Loading…" : loading ? "Sending…" : "Send reset link"}
             </Button>
 
             <p className="text-center text-sm text-fg-muted">
