@@ -20,11 +20,20 @@ export type EquityPoint = { date: string; equity: number; pnl: number };
  */
 export function realisedRR(t: TradeRow): number | null {
   if (t.entry == null || t.stop_loss == null || t.take_profit == null) return null;
+  // MetaTrader writes 0 in the S/L and T/P columns when no levels were set.
+  // Treat those as "no stop" / "no target" — otherwise `risk` becomes the
+  // full entry price and produces absurd R:R values like 267,000.
+  if (t.stop_loss === 0 || t.take_profit === 0) return null;
   const risk = Math.abs(t.entry - t.stop_loss);
   const reward = Math.abs(t.take_profit - t.entry);
   if (!Number.isFinite(risk) || risk === 0) return null;
   if (!Number.isFinite(reward)) return null;
-  return reward / risk;
+  // Sanity cap: a planned R:R above 50:1 almost certainly means the SL or
+  // TP value is corrupt (e.g. entry 1.0823 with SL captured as 0.0001).
+  // Drop these so averages aren't dragged to infinity.
+  const rr = reward / risk;
+  if (rr > 50) return null;
+  return rr;
 }
 
 /**

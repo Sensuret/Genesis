@@ -30,6 +30,9 @@ import { Empty } from "@/components/ui/empty";
 import { formatNumber, formatPercent } from "@/lib/utils";
 import type { TradeRow } from "@/lib/supabase/types";
 import { useFilters, useMoney } from "@/lib/filters/store";
+import { ReportsDetailed } from "@/components/reports/detailed";
+import { createClient } from "@/lib/supabase/client";
+import { useEffect } from "react";
 
 type Fmt = (n: number | null | undefined) => string;
 
@@ -41,6 +44,21 @@ export default function ReportsPage() {
   const { filters } = useFilters();
   const { fmt } = useMoney();
   const [tab, setTab] = useState<Tab>("Overview");
+  const [startBalance, setStartBalance] = useState<number | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      const supabase = createClient();
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) return;
+      const { data } = await supabase
+        .from("profiles")
+        .select("starting_balance")
+        .eq("id", userData.user.id)
+        .maybeSingle();
+      if (data?.starting_balance) setStartBalance(Number(data.starting_balance));
+    })();
+  }, []);
 
   const filtered = useMemo(() => applyAllFilters(trades, filters), [trades, filters]);
   const screenshotRef = useRef<HTMLDivElement>(null);
@@ -62,7 +80,7 @@ export default function ReportsPage() {
     <div ref={screenshotRef} className="space-y-6">
       <PageHeader
         title="Reports"
-        description="Tradezella-depth insights — overview, detailed cuts, risk, wins vs losses, comparisons and calendar."
+        description="GS-depth insights — overview, detailed cuts, risk, wins vs losses, comparisons and calendar."
         actions={<ScreenshotButton targetRef={screenshotRef} filename={`reports-${tab.toLowerCase().replace(/\s+/g, "-")}`} />}
       />
 
@@ -83,7 +101,12 @@ export default function ReportsPage() {
       </div>
 
       {tab === "Overview" && <Overview trades={filtered} currency={filters.currency} />}
-      {tab === "Detailed" && <Detailed trades={filtered} fmt={fmt} />}
+      {tab === "Detailed" && (
+        <>
+          <ReportsDetailed trades={filtered} fmt={fmt} startBalance={startBalance} />
+          <Detailed trades={filtered} fmt={fmt} />
+        </>
+      )}
       {tab === "Risk" && <Risk trades={filtered} currency={filters.currency} />}
       {tab === "Wins vs Losses" && <WinsLosses trades={filtered} fmt={fmt} />}
       {tab === "Compare" && <Compare trades={filtered} fmt={fmt} />}
@@ -158,7 +181,11 @@ function Detailed({ trades, fmt }: { trades: TradeRow[]; fmt: Fmt }) {
   }));
 
   return (
-    <>
+    <div className="space-y-4">
+      <div className="mt-6 flex items-baseline justify-between gap-3">
+        <h3 className="text-base font-semibold text-fg">Habits &amp; breakdowns</h3>
+        <span className="text-xs text-fg-muted">Setups, mistakes, sessions, days, pairs &amp; emotions</span>
+      </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader><CardTitle>Best setups</CardTitle></CardHeader>
@@ -205,7 +232,7 @@ function Detailed({ trades, fmt }: { trades: TradeRow[]; fmt: Fmt }) {
           )}
         </CardBody>
       </Card>
-    </>
+    </div>
   );
 }
 
@@ -215,7 +242,9 @@ function Risk({ trades, currency }: { trades: TradeRow[]; currency: string }) {
   const winRRs = trades.filter((t) => (t.pnl ?? 0) > 0).map(realisedRR).filter((x): x is number => x !== null);
   const lossRRs = trades.filter((t) => (t.pnl ?? 0) < 0).map(realisedRR).filter((x): x is number => x !== null);
   const allRRs = trades.map(realisedRR).filter((x): x is number => x !== null);
-  const avgRR = allRRs.length ? allRRs.reduce((s, x) => s + x, 0) / allRRs.length : 0;
+  const avgRR = avgOrNull(allRRs);
+  const avgWinRR = avgOrNull(winRRs);
+  const avgLossRR = avgOrNull(lossRRs);
   const expectancy = trades.length
     ? trades.reduce((s, t) => s + (t.pnl ?? 0), 0) / trades.length
     : 0;
@@ -224,12 +253,17 @@ function Risk({ trades, currency }: { trades: TradeRow[]; currency: string }) {
       <div className="grid gap-4 md:grid-cols-4">
         <Stat label="Max drawdown" value={dd} format="currency" positive={false} />
         <Stat label="Recovery factor" value={rf} format="number" />
-        <Stat label="Avg planned R:R" value={avgRR} format="number" positive={avgRR >= 1} />
+        <Stat
+          label="Avg planned R:R"
+          value={formatRatio(avgRR)}
+          format="text"
+          positive={avgRR !== null && avgRR >= 1}
+        />
         <Stat label="Per-trade expectancy" value={expectancy} format="currency" positive={expectancy >= 0} />
       </div>
       <div className="grid gap-4 md:grid-cols-3">
-        <Stat label="R:R on winning trades" value={avg(winRRs)} format="number" />
-        <Stat label="R:R on losing trades" value={avg(lossRRs)} format="number" positive={false} />
+        <Stat label="R:R on winning trades" value={formatRatio(avgWinRR)} format="text" />
+        <Stat label="R:R on losing trades" value={formatRatio(avgLossRR)} format="text" positive={false} />
         <Stat label="Trades with R:R data" value={allRRs.length} format="number" />
       </div>
       <Card>
@@ -237,6 +271,7 @@ function Risk({ trades, currency }: { trades: TradeRow[]; currency: string }) {
         <CardBody>
           <div className="text-xs text-fg-muted">
             Planned R:R is computed from each trade&apos;s entry, stop-loss and take-profit levels.
+            Trades without a stop-loss/take-profit (e.g. HFM exports) are excluded.
             Display currency: <span className="text-fg">{currency}</span>.
           </div>
         </CardBody>
@@ -245,8 +280,13 @@ function Risk({ trades, currency }: { trades: TradeRow[]; currency: string }) {
   );
 }
 
-function avg(arr: number[]): number {
-  return arr.length ? arr.reduce((s, x) => s + x, 0) / arr.length : 0;
+function avgOrNull(arr: number[]): number | null {
+  return arr.length ? arr.reduce((s, x) => s + x, 0) / arr.length : null;
+}
+
+function formatRatio(r: number | null): string {
+  if (r === null || !Number.isFinite(r) || r <= 0) return "—";
+  return `1 : ${formatNumber(r, 2)}`;
 }
 
 function WinsLosses({ trades, fmt }: { trades: TradeRow[]; fmt: Fmt }) {

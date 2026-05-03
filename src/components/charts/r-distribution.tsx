@@ -37,7 +37,16 @@ export function RDistributionChart({ trades }: { trades: TradeRow[] }) {
           </defs>
           <XAxis dataKey="bucket" stroke="rgb(130 130 150)" fontSize={11} tickLine={false} axisLine={false} />
           <YAxis allowDecimals={false} stroke="rgb(130 130 150)" fontSize={11} tickLine={false} axisLine={false} />
-          <Tooltip />
+          <Tooltip
+            cursor={{ fill: "transparent" }}
+            contentStyle={{
+              background: "rgb(15 14 26 / 0.95)",
+              border: "1px solid rgb(168 102 255 / 0.4)",
+              borderRadius: 12,
+              color: "white",
+              fontSize: 12
+            }}
+          />
           <Bar dataKey="count" radius={[6, 6, 0, 0]}>
             {data.map((d) => (
               <Cell key={d.bucket} fill={fillFor(d.bucket)} />

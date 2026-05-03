@@ -265,6 +265,14 @@ alter table public.trades
   add column if not exists duration_seconds integer,
   add column if not exists pips numeric;
 
+-- Per-file broker timezone offset (in minutes from UTC). MetaTrader exports
+-- print timestamps in the broker's server timezone — typically GMT+2/+3 with
+-- DST (FTMO, ICMarkets) or GMT+0 (Pepperstone). Storing the offset per file
+-- lets the user override the auto-detected value from Settings, and we can
+-- re-bucket trade `session` values when this changes.
+alter table public.trade_files
+  add column if not exists broker_tz_offset_minutes integer;
+
 -- =====================================================================
 -- user_settings: per-user JSON blob for notebook embeds, scratchpad,
 -- preferred currency, etc. One row per user.

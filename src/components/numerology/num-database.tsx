@@ -41,10 +41,12 @@ function compareStrings(a: string, b: string): number {
 
 export function NumDatabase({
   rows,
-  selfSnap
+  selfSnap,
+  onSelectProfile
 }: {
   rows: CombinedProfile[];
   selfSnap: NumerologySnapshot | null;
+  onSelectProfile?: (rowId: string) => void;
 }) {
   const [sortKey, setSortKey] = useState<SortKey>("numId");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -158,12 +160,16 @@ export function NumDatabase({
           </tr>
         </thead>
         <tbody>
-          {sorted.map((r) => (
+          {sorted.map((r) => {
+            const clickable = !!onSelectProfile && r.source === "other";
+            return (
             <tr
               key={r.rowId}
+              onClick={() => clickable && onSelectProfile?.(r.rowId)}
               className={cn(
-                "border-t border-line",
-                r.source === "self" && "bg-brand-500/5"
+                "border-t border-line transition",
+                r.source === "self" && "bg-brand-500/5",
+                clickable && "cursor-pointer hover:bg-brand-500/5"
               )}
             >
               <td className="px-3 py-2 font-mono text-[11px] font-semibold text-brand-200">
@@ -202,7 +208,8 @@ export function NumDatabase({
               </td>
               <td className="px-3 py-2 text-fg-muted">{formatDate(r.createdAt)}</td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>

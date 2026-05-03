@@ -60,7 +60,11 @@ export default function AddTradePage() {
 function UploadForm({ onDone }: { onDone: () => void }) {
   const [name, setName] = useState("");
   const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<{ trades: ParsedTrade[]; mapping: Record<string, string | undefined> } | null>(null);
+  const [preview, setPreview] = useState<{
+    trades: ParsedTrade[];
+    mapping: Record<string, string | undefined>;
+    format: "metatrader" | "hfm" | "generic";
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const input = useRef<HTMLInputElement>(null);
@@ -70,7 +74,7 @@ function UploadForm({ onDone }: { onDone: () => void }) {
     setBusy(true);
     try {
       const result = await parseFile(f);
-      setPreview({ trades: result.trades, mapping: result.mapping });
+      setPreview({ trades: result.trades, mapping: result.mapping, format: result.format });
       setFile(f);
       if (!name) setName(f.name.replace(/\.[^.]+$/, ""));
     } catch (e) {
@@ -95,7 +99,17 @@ function UploadForm({ onDone }: { onDone: () => void }) {
 
     const { data: created, error: fileErr } = await supabase
       .from("trade_files")
-      .insert({ user_id: user.id, name: name || file.name, source: "upload", trade_count: preview.trades.length })
+      .insert({
+        user_id: user.id,
+        name: name || file.name,
+        // Tag with the detected parser format so the Settings Imported-files
+        // card can show "MT4/5" vs "HFM" vs "Generic" at a glance.
+        source:
+          preview.format === "metatrader" ? "MT4/5" :
+          preview.format === "hfm" ? "HFM" :
+          "Generic",
+        trade_count: preview.trades.length
+      })
       .select()
       .single();
     if (fileErr || !created) {
