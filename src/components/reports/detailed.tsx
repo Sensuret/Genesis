@@ -42,8 +42,16 @@ function fmtSigned(n: number, fmt: Fmt): string {
 }
 
 function durationHours(t: TradeRow): number | null {
-  if (t.duration_seconds == null) return null;
-  return t.duration_seconds / 3600;
+  // Prefer the stored seconds, but fall back to open_time/close_time so
+  // imports that didn't persist `duration_seconds` (older generic imports,
+  // HFM before the dedicated parser landed) still contribute to the avg.
+  let secs = t.duration_seconds;
+  if (secs == null && t.open_time && t.close_time) {
+    const ms = new Date(t.close_time).getTime() - new Date(t.open_time).getTime();
+    if (Number.isFinite(ms) && ms > 0) secs = Math.round(ms / 1000);
+  }
+  if (secs == null || !Number.isFinite(secs) || secs <= 0) return null;
+  return secs / 3600;
 }
 
 function median(nums: number[]): number {
@@ -123,8 +131,11 @@ export function ReportsDetailed({
   const medDuration = median(durations);
 
   // ---- Focus assets / sessions / days / time windows -------------------
+  // Only surface profitable assets here — this card is for "where to double
+  // down", not a full leaderboard. Unprofitable assets show up in the
+  // per-asset equity curves section below.
   const focusAssets = useMemo(
-    () => [...byPair].sort((a, b) => b.pnl - a.pnl).slice(0, 3),
+    () => [...byPair].filter((a) => a.pnl > 0).sort((a, b) => b.pnl - a.pnl).slice(0, 3),
     [byPair]
   );
 
@@ -419,14 +430,18 @@ export function ReportsDetailed({
                     <tr>
                       <th className="px-2 py-1.5 font-medium">Session</th>
                       <th className="px-2 py-1.5 text-right font-medium">Trades</th>
+                      <th className="px-2 py-1.5 text-right font-medium">Total P&amp;L</th>
                       <th className="px-2 py-1.5 text-right font-medium">Avg P&amp;L</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {sessionRows.map((s) => (
+                    {[...sessionRows].sort((a, b) => b.pnl - a.pnl).map((s) => (
                       <tr key={s.session} className="border-b border-line/50 last:border-0">
                         <td className="px-2 py-1.5">{s.session}</td>
                         <td className="px-2 py-1.5 text-right tabular-nums">{s.trades}</td>
+                        <td className={cn("px-2 py-1.5 text-right tabular-nums", pnlClass(s.pnl))}>
+                          {fmt(s.pnl)}
+                        </td>
                         <td className={cn("px-2 py-1.5 text-right tabular-nums", pnlClass(s.avg))}>
                           {fmt(s.avg)}
                         </td>
@@ -441,8 +456,18 @@ export function ReportsDetailed({
           <DayCard title="Worst Performing Days" rows={dayRows} order="asc" fmt={fmt} />
           <DayCard title="Best Performing Days" rows={dayRows} order="desc" fmt={fmt} />
 
-          <WindowCard title="Worst Trade Time Window" row={worstWindow} fmt={fmt} kind="bad" />
-          <WindowCard title="Best Trade Time Window" row={bestWindow} fmt={fmt} kind="good" />
+          <WindowCard
+            title="Worst Trade Time Window"
+            row={worstWindow && worstWindow.pnl < 0 ? worstWindow : undefined}
+            fmt={fmt}
+            kind="bad"
+          />
+          <WindowCard
+            title="Best Trade Time Window"
+            row={bestWindow && bestWindow.pnl > 0 ? bestWindow : undefined}
+            fmt={fmt}
+            kind="good"
+          />
         </div>
       </section>
 
@@ -554,15 +579,19 @@ function DayCard({
   order: "asc" | "desc";
   fmt: Fmt;
 }) {
-  const sorted = [...rows].sort((a, b) => (order === "desc" ? b.pnl - a.pnl : a.pnl - b.pnl));
-  const top = sorted[0];
+  // "Best" shows only positive days; "Worst" shows only negative days. A
+  // break-even day should never appear in either. Up to 4 rows so users with
+  // data spread across the week can see the full picture.
+  const filtered = rows.filter((r) => (order === "desc" ? r.pnl > 0 : r.pnl < 0));
+  const sorted = [...filtered].sort((a, b) => (order === "desc" ? b.pnl - a.pnl : a.pnl - b.pnl));
+  const visible = sorted.slice(0, 4);
   return (
     <Card>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
       </CardHeader>
       <CardBody>
-        {top ? (
+        {visible.length > 0 ? (
           <table className="w-full text-left text-xs">
             <thead className="border-b border-line text-fg-subtle">
               <tr>
@@ -571,16 +600,20 @@ function DayCard({
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td className="px-2 py-2">{top.day}</td>
-                <td className={cn("px-2 py-2 text-right tabular-nums font-semibold", pnlClass(top.pnl))}>
-                  {fmt(top.pnl)}
-                </td>
-              </tr>
+              {visible.map((r) => (
+                <tr key={r.day} className="border-b border-line/50 last:border-0">
+                  <td className="px-2 py-1.5">{r.day}</td>
+                  <td className={cn("px-2 py-1.5 text-right tabular-nums font-semibold", pnlClass(r.pnl))}>
+                    {fmt(r.pnl)}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         ) : (
-          <div className="text-sm text-fg-muted">No data.</div>
+          <div className="text-sm text-fg-muted">
+            {order === "desc" ? "No profitable days yet." : "No losing days yet."}
+          </div>
         )}
       </CardBody>
     </Card>

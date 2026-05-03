@@ -41,8 +41,25 @@ export function realisedRR(t: TradeRow): number | null {
  * The legacy parser sometimes appended an empty trailing row (the famous
  * "April 29 ghost row" the user reported) — those have no pair, no pnl,
  * no entry. We filter those out everywhere they're displayed.
+ *
+ * HFM / HotForex exports also write one "opener" row per trade with
+ * Profit == 0 and Open Time == Close Time (the closer row has the real
+ * pnl + duration). The dedicated HFM parser pairs them, but HFM files
+ * imported via the *generic* parser (before PR #24) produced duplicate
+ * opener rows that drag every average to zero. We detect & skip those
+ * here so old HFM imports still look sensible without a re-upload.
  */
+function isHfmOpenerGhost(t: TradeRow): boolean {
+  return (
+    (t.pnl === 0 || t.pnl == null) &&
+    !!t.open_time &&
+    !!t.close_time &&
+    t.open_time === t.close_time
+  );
+}
+
 export function isRealTrade(t: TradeRow): boolean {
+  if (isHfmOpenerGhost(t)) return false;
   return !!(t.pair || t.pnl != null || t.entry != null || t.exit_price != null || t.lot_size != null);
 }
 
