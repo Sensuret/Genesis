@@ -62,7 +62,7 @@ export default function ReportsPage() {
     <div ref={screenshotRef} className="space-y-6">
       <PageHeader
         title="Reports"
-        description="Tradezella-depth insights — overview, detailed cuts, risk, wins vs losses, comparisons and calendar."
+        description="GS-depth insights — overview, detailed cuts, risk, wins vs losses, comparisons and calendar."
         actions={<ScreenshotButton targetRef={screenshotRef} filename={`reports-${tab.toLowerCase().replace(/\s+/g, "-")}`} />}
       />
 

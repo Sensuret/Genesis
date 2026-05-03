@@ -33,7 +33,7 @@ import {
 } from "@/lib/astrology";
 import { westernZodiac, type WesternSign } from "@/lib/numerology";
 import type { NumerologyOtherRow, NumerologyProfileRow } from "@/lib/supabase/types";
-import { Plus, Sparkles, Trash2, X } from "lucide-react";
+import { Pencil, Plus, Sparkles, Trash2, X } from "lucide-react";
 import {
   applyFilters,
   buildCombinedProfiles,
@@ -44,6 +44,14 @@ import { NumDatabase } from "@/components/numerology/num-database";
 import { NumOverview } from "@/components/numerology/num-overview";
 
 type Gender = "male" | "female" | "prefer_not_to_say";
+
+type NumerologyOtherUpdate = {
+  full_name?: string;
+  dob?: string;
+  relationship?: string;
+  gender?: Gender | "";
+  nicknames?: string[];
+};
 
 function genderFromData(data: unknown): Gender | "" {
   if (!data || typeof data !== "object") return "";
@@ -276,7 +284,7 @@ export default function NumerologyPage() {
       ) : tab === "Calculate For Others" ? (
         <Others rows={others} onChange={setOthers} myProfile={my} />
       ) : tab === "Combined" ? (
-        <Combined profile={my} others={others} />
+        <Combined profile={my} others={others} onChangeOthers={setOthers} />
       ) : tab === "Lunar Cycle" ? (
         <Lunar />
       ) : tab === "Year Cycle" ? (
@@ -607,9 +615,78 @@ function Others({
   }
 
   async function remove(id: string) {
+    if (typeof window !== "undefined" && !window.confirm("Delete this profile? This cannot be undone.")) {
+      return;
+    }
     const supabase = createClient();
-    await supabase.from("numerology_others").delete().eq("id", id);
+    const { data: userData } = await supabase.auth.getUser();
+    const user = userData.user;
+    if (!user) return;
+    const { error } = await supabase
+      .from("numerology_others")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", user.id);
+    if (error) {
+      console.error("Failed to delete numerology profile", error);
+      if (typeof window !== "undefined") {
+        window.alert(`Failed to delete: ${error.message}`);
+      }
+      return;
+    }
     onChange(rows.filter((r) => r.id !== id));
+    if (openId === id) setOpenId(null);
+  }
+
+  async function update(id: string, patch: NumerologyOtherUpdate) {
+    const supabase = createClient();
+    const { data: userData } = await supabase.auth.getUser();
+    const user = userData.user;
+    if (!user) return null;
+    const target = rows.find((r) => r.id === id);
+    if (!target) return null;
+
+    const nextFullName = patch.full_name ?? target.full_name;
+    const nextDob = patch.dob ?? target.dob;
+    const nextRelationship = patch.relationship ?? target.relationship;
+    const nextGender = patch.gender ?? genderFromData(target.data);
+    const nextNicknames =
+      patch.nicknames ?? nicknamesFromData(target.data);
+
+    const snap = buildNumerologySnapshot(nextFullName, nextDob);
+    const cleanNicks = nextNicknames.map((n) => n.trim()).filter(Boolean);
+    const dataPayload = {
+      ...snap,
+      gender: nextGender || undefined,
+      lastPeriod:
+        nextGender === "female" ? lastPeriodFromData(target.data) : undefined,
+      cycleLength:
+        nextGender === "female" ? cycleLengthFromData(target.data) : undefined,
+      nicknames: cleanNicks
+    };
+
+    const { data, error } = await supabase
+      .from("numerology_others")
+      .update({
+        full_name: nextFullName,
+        nickname: cleanNicks[0] ?? "",
+        dob: nextDob,
+        relationship: nextRelationship,
+        data: dataPayload
+      })
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .select()
+      .single();
+    if (error || !data) {
+      console.error("Failed to update numerology profile", error);
+      if (typeof window !== "undefined") {
+        window.alert(`Failed to update: ${error?.message ?? "unknown"}`);
+      }
+      return null;
+    }
+    onChange(rows.map((r) => (r.id === id ? data : r)));
+    return data;
   }
 
   return (
@@ -763,6 +840,13 @@ function Others({
           row={rows.find((r) => r.id === openId) ?? null}
           myProfile={myProfile}
           onClose={() => setOpenId(null)}
+          onUpdate={async (patch) => {
+            const next = await update(openId, patch);
+            return next;
+          }}
+          onDelete={async () => {
+            await remove(openId);
+          }}
         />
       ) : null}
     </div>
@@ -772,11 +856,15 @@ function Others({
 function OtherDetailModal({
   row,
   myProfile,
-  onClose
+  onClose,
+  onUpdate,
+  onDelete
 }: {
   row: NumerologyOtherRow | null;
   myProfile: NumerologyProfileRow | null;
   onClose: () => void;
+  onUpdate: (patch: NumerologyOtherUpdate) => Promise<NumerologyOtherRow | null>;
+  onDelete: () => Promise<void>;
 }) {
   if (!row) return null;
   const snap = buildNumerologySnapshot(row.full_name, row.dob);
@@ -803,6 +891,8 @@ function OtherDetailModal({
     yearOutlook={yearOutlook}
     yearSign={yearSign}
     onClose={onClose}
+    onUpdate={onUpdate}
+    onDelete={onDelete}
   />;
 }
 
@@ -816,7 +906,9 @@ function OtherDetailModalContent({
   cycle,
   yearOutlook,
   yearSign,
-  onClose
+  onClose,
+  onUpdate,
+  onDelete
 }: {
   row: NumerologyOtherRow;
   snap: NumerologySnapshot;
@@ -828,8 +920,44 @@ function OtherDetailModalContent({
   yearOutlook: YearCycleOutlook;
   yearSign: ChineseSign;
   onClose: () => void;
+  onUpdate: (patch: NumerologyOtherUpdate) => Promise<NumerologyOtherRow | null>;
+  onDelete: () => Promise<void>;
 }) {
   const modalRef = useRef<HTMLDivElement>(null);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState({
+    full_name: row.full_name,
+    dob: row.dob,
+    relationship: row.relationship,
+    gender: gender as Gender | "",
+    nicknames: padNicknames(nicknamesFromData(row.data))
+  });
+  const [saving, setSaving] = useState(false);
+
+  function startEdit() {
+    setDraft({
+      full_name: row.full_name,
+      dob: row.dob,
+      relationship: row.relationship,
+      gender: genderFromData(row.data),
+      nicknames: padNicknames(nicknamesFromData(row.data))
+    });
+    setEditing(true);
+  }
+
+  async function saveEdit() {
+    setSaving(true);
+    const patch: NumerologyOtherUpdate = {
+      full_name: draft.full_name,
+      dob: draft.dob,
+      relationship: draft.relationship,
+      gender: draft.gender,
+      nicknames: draft.nicknames
+    };
+    const next = await onUpdate(patch);
+    setSaving(false);
+    if (next) setEditing(false);
+  }
 
   return (
     <div
@@ -842,20 +970,111 @@ function OtherDetailModalContent({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="absolute right-4 top-4 flex items-center gap-2" data-screenshot-ignore="true">
-          <ScreenshotButton
-            targetRef={modalRef}
-            filename={`numerology-${row.full_name.replace(/\s+/g, "-").toLowerCase()}`}
-            label="Save profile snapshot as PNG"
-          />
-          <button
-            type="button"
-            onClick={onClose}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-line bg-bg text-fg-muted transition hover:text-fg"
-            aria-label="Close detail"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          {editing ? (
+            <>
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={saveEdit}
+                disabled={saving || !draft.full_name || !draft.dob}
+              >
+                {saving ? "Saving…" : "Save"}
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => setEditing(false)} disabled={saving}>
+                Cancel
+              </Button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={startEdit}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-line bg-bg text-fg-muted transition hover:border-brand-400/60 hover:text-brand-200"
+                aria-label="Edit profile"
+                title="Edit"
+              >
+                <Pencil className="h-4 w-4" />
+              </button>
+              <ScreenshotButton
+                targetRef={modalRef}
+                filename={`numerology-${row.full_name.replace(/\s+/g, "-").toLowerCase()}`}
+                label="Save profile snapshot as PNG"
+              />
+              <button
+                type="button"
+                onClick={() => onDelete()}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-line bg-bg text-fg-muted transition hover:border-danger/60 hover:text-danger"
+                aria-label="Delete profile"
+                title="Delete"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-line bg-bg text-fg-muted transition hover:text-fg"
+                aria-label="Close detail"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </>
+          )}
         </div>
+
+        {editing && (
+          <div className="mb-5 space-y-3 rounded-2xl border border-brand-400/40 bg-brand-500/5 p-4">
+            <div className="text-xs uppercase tracking-wide text-brand-200">Edit profile</div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div>
+                <Label>Full name</Label>
+                <Input
+                  value={draft.full_name}
+                  onChange={(e) => setDraft({ ...draft, full_name: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label>DOB</Label>
+                <DatePicker
+                  value={draft.dob}
+                  onChange={(next) => setDraft({ ...draft, dob: next })}
+                  max={new Date().toISOString().slice(0, 10)}
+                  className="w-full"
+                  inputClassName="flex-1"
+                />
+              </div>
+              <div>
+                <Label>Relationship</Label>
+                <Select
+                  value={draft.relationship}
+                  onChange={(e) => setDraft({ ...draft, relationship: e.target.value })}
+                >
+                  {RELATIONSHIPS.map((r) => (
+                    <option key={r}>{r}</option>
+                  ))}
+                </Select>
+              </div>
+              <div>
+                <Label>Gender</Label>
+                <Select
+                  value={draft.gender}
+                  onChange={(e) =>
+                    setDraft({ ...draft, gender: e.target.value as Gender | "" })
+                  }
+                >
+                  <option value="">Select…</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                  <option value="prefer_not_to_say">Prefer not to say</option>
+                </Select>
+              </div>
+            </div>
+            <NicknameInputs
+              values={draft.nicknames}
+              onChange={(next) => setDraft({ ...draft, nicknames: next })}
+              compact
+            />
+          </div>
+        )}
 
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <h2 className="text-xl font-semibold">{row.full_name}</h2>
@@ -985,13 +1204,16 @@ type CombinedSubTab = "Today" | "General Num Database" | "Overview";
 
 function Combined({
   profile,
-  others
+  others,
+  onChangeOthers
 }: {
   profile: NumerologyProfileRow | null;
   others: NumerologyOtherRow[];
+  onChangeOthers: (rows: NumerologyOtherRow[]) => void;
 }) {
   const [sub, setSub] = useState<CombinedSubTab>("Today");
   const [filters, setFilters] = useState<NumFilters>({});
+  const [openId, setOpenId] = useState<string | null>(null);
 
   const me = useMemo(
     () => (profile ? buildNumerologySnapshot(profile.full_name, profile.dob) : null),
@@ -1005,6 +1227,76 @@ function Combined({
     () => applyFilters(all, filters, me),
     [all, filters, me]
   );
+
+  async function removeOther(id: string) {
+    if (typeof window !== "undefined" && !window.confirm("Delete this profile? This cannot be undone.")) {
+      return;
+    }
+    const supabase = createClient();
+    const { data: userData } = await supabase.auth.getUser();
+    const user = userData.user;
+    if (!user) return;
+    const { error } = await supabase
+      .from("numerology_others")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", user.id);
+    if (error) {
+      console.error("Failed to delete numerology profile", error);
+      if (typeof window !== "undefined") window.alert(`Failed to delete: ${error.message}`);
+      return;
+    }
+    onChangeOthers(others.filter((r) => r.id !== id));
+    if (openId === id) setOpenId(null);
+  }
+
+  async function updateOther(id: string, patch: NumerologyOtherUpdate): Promise<NumerologyOtherRow | null> {
+    const supabase = createClient();
+    const { data: userData } = await supabase.auth.getUser();
+    const user = userData.user;
+    if (!user) return null;
+    const target = others.find((r) => r.id === id);
+    if (!target) return null;
+
+    const nextFullName = patch.full_name ?? target.full_name;
+    const nextDob = patch.dob ?? target.dob;
+    const nextRelationship = patch.relationship ?? target.relationship;
+    const nextGender = patch.gender ?? genderFromData(target.data);
+    const nextNicknames = patch.nicknames ?? nicknamesFromData(target.data);
+
+    const snap = buildNumerologySnapshot(nextFullName, nextDob);
+    const cleanNicks = nextNicknames.map((n) => n.trim()).filter(Boolean);
+    const dataPayload = {
+      ...snap,
+      gender: nextGender || undefined,
+      lastPeriod: nextGender === "female" ? lastPeriodFromData(target.data) : undefined,
+      cycleLength: nextGender === "female" ? cycleLengthFromData(target.data) : undefined,
+      nicknames: cleanNicks
+    };
+
+    const { data, error } = await supabase
+      .from("numerology_others")
+      .update({
+        full_name: nextFullName,
+        nickname: cleanNicks[0] ?? "",
+        dob: nextDob,
+        relationship: nextRelationship,
+        data: dataPayload
+      })
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .select()
+      .single();
+    if (error || !data) {
+      console.error("Failed to update numerology profile", error);
+      if (typeof window !== "undefined") window.alert(`Failed to update: ${error?.message ?? "unknown"}`);
+      return null;
+    }
+    onChangeOthers(others.map((r) => (r.id === id ? data : r)));
+    return data;
+  }
+
+  const openRow = openId ? others.find((r) => r.id === openId) ?? null : null;
 
   return (
     <div className="space-y-4">
@@ -1031,12 +1323,24 @@ function Combined({
         <>
           <FilterBar filters={filters} onChange={setFilters} selfSnap={me} />
           {sub === "General Num Database" ? (
-            <NumDatabase rows={filtered} selfSnap={me} />
+            <NumDatabase rows={filtered} selfSnap={me} onSelectProfile={(id) => setOpenId(id)} />
           ) : (
-            <NumOverview rows={filtered} selfSnap={me} />
+            <NumOverview rows={filtered} selfSnap={me} onSelectProfile={(id) => setOpenId(id)} />
           )}
         </>
       )}
+
+      {openRow ? (
+        <OtherDetailModal
+          row={openRow}
+          myProfile={profile}
+          onClose={() => setOpenId(null)}
+          onUpdate={(patch) => updateOther(openRow.id, patch)}
+          onDelete={async () => {
+            await removeOther(openRow.id);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
