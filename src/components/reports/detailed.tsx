@@ -225,17 +225,17 @@ export function ReportsDetailed({
                 <Empty title="No assets" description="Tag your trades with a symbol to see distribution." />
               ) : (
                 <div className="grid items-center gap-3 sm:grid-cols-[1fr_auto]">
-                  <div className="h-56">
+                  <div className="h-60">
                     <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
+                      <PieChart margin={{ top: 16, right: 8, bottom: 16, left: 8 }}>
                         <Pie
                           data={byPair}
                           dataKey="trades"
                           nameKey="key"
                           cx="50%"
                           cy="50%"
-                          innerRadius={48}
-                          outerRadius={88}
+                          innerRadius={42}
+                          outerRadius={72}
                           paddingAngle={2}
                           label={(d: { percent?: number }) =>
                             d.percent && d.percent >= 0.04
