@@ -34,6 +34,14 @@ import {
 import { westernZodiac, type WesternSign } from "@/lib/numerology";
 import type { NumerologyOtherRow, NumerologyProfileRow } from "@/lib/supabase/types";
 import { Plus, Sparkles, Trash2, X } from "lucide-react";
+import {
+  applyFilters,
+  buildCombinedProfiles,
+  type NumFilters
+} from "@/lib/numerology/filters";
+import { FilterBar } from "@/components/numerology/filter-bar";
+import { NumDatabase } from "@/components/numerology/num-database";
+import { NumOverview } from "@/components/numerology/num-overview";
 
 type Gender = "male" | "female" | "prefer_not_to_say";
 
@@ -973,6 +981,8 @@ function OtherDetailModalContent({
   );
 }
 
+type CombinedSubTab = "Today" | "General Num Database" | "Overview";
+
 function Combined({
   profile,
   others
@@ -980,7 +990,72 @@ function Combined({
   profile: NumerologyProfileRow | null;
   others: NumerologyOtherRow[];
 }) {
-  if (!profile) return <Empty title="Save your profile first" description="Add your name and DOB on the My Profile tab to unlock combined readings." />;
+  const [sub, setSub] = useState<CombinedSubTab>("Today");
+  const [filters, setFilters] = useState<NumFilters>({});
+
+  const me = useMemo(
+    () => (profile ? buildNumerologySnapshot(profile.full_name, profile.dob) : null),
+    [profile]
+  );
+  const all = useMemo(
+    () => buildCombinedProfiles(profile, others),
+    [profile, others]
+  );
+  const filtered = useMemo(
+    () => applyFilters(all, filters, me),
+    [all, filters, me]
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-2">
+        {(["Today", "General Num Database", "Overview"] as CombinedSubTab[]).map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setSub(t)}
+            className={`rounded-xl border px-3 py-1.5 text-xs font-medium transition ${
+              sub === t
+                ? "border-brand-400 bg-brand-500/15 text-brand-200"
+                : "border-line bg-bg-soft text-fg-muted hover:text-fg"
+            }`}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {sub === "Today" ? (
+        <CombinedToday profile={profile} others={others} />
+      ) : (
+        <>
+          <FilterBar filters={filters} onChange={setFilters} selfSnap={me} />
+          {sub === "General Num Database" ? (
+            <NumDatabase rows={filtered} selfSnap={me} />
+          ) : (
+            <NumOverview rows={filtered} selfSnap={me} />
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function CombinedToday({
+  profile,
+  others
+}: {
+  profile: NumerologyProfileRow | null;
+  others: NumerologyOtherRow[];
+}) {
+  if (!profile) {
+    return (
+      <Empty
+        title="Save your profile first"
+        description="Add your name and DOB on the My Profile tab to unlock combined readings."
+      />
+    );
+  }
   const me = buildNumerologySnapshot(profile.full_name, profile.dob);
   const sign = getSignProfile(profile.dob);
   const moon = moonPhase();
@@ -988,7 +1063,7 @@ function Combined({
   return (
     <div className="space-y-6">
       <Card>
-        <CardHeader><CardTitle>Today's combined reading</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Today&apos;s combined reading</CardTitle></CardHeader>
         <CardBody className="grid gap-4 md:grid-cols-3">
           <div className="rounded-xl border border-line bg-bg-soft/40 p-4">
             <div className="text-xs text-fg-muted">Numerology</div>
