@@ -3,18 +3,21 @@
 import { useState } from "react";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { ImportedFilesCard } from "@/components/settings/imported-files";
+import { EaSyncCard } from "@/components/settings/ea-sync-card";
 import { cn } from "@/lib/utils";
 
 type AccountsSubTab = "manual" | "auto";
 
 /**
- * Accounts subsection. Hosts the existing ImportedFilesCard (with
- * broker-timezone auto-detect) under the "Manual Accounts" sub-tab, and
- * stubs the "Automatically Synced Accounts" sub-tab for the upcoming
- * MT4/MT5 EA sync work.
+ * Accounts subsection. Hosts the existing ImportedFilesCard under the
+ * "Manual Accounts" sub-tab, and the live EA-sync flow (API key issuance
+ * + connected terminals) under "Automatically Synced Accounts".
  */
 export function AccountsSection() {
   const [tab, setTab] = useState<AccountsSubTab>("manual");
+  // The Supabase URL is public and shown on the EA-sync card so the user
+  // can copy/paste it into MetaTrader's WebRequest whitelist.
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 
   return (
     <div className="space-y-4">
@@ -44,41 +47,7 @@ export function AccountsSection() {
         </div>
       )}
 
-      {tab === "auto" && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Automatically synced accounts</CardTitle>
-          </CardHeader>
-          <CardBody className="space-y-3 text-xs text-fg-muted">
-            <p>
-              Connect MT4 / MT5 terminals so trades stream in automatically — no more
-              statement uploads. Each connected terminal can host a real or demo account, and the
-              account label / broker / server are auto-detected and shown in the top-bar selector
-              alongside your manual accounts.
-            </p>
-            <p>
-              Two setup paths are coming:
-            </p>
-            <ul className="list-disc space-y-1 pl-4">
-              <li>
-                <span className="font-medium text-fg">MT4 / MT5 Expert Advisor (EA)</span> — drop
-                a small EA into your MetaTrader terminal, paste your Genesis API key, and trades
-                push to your account in real time. Works with any broker. Run it on Oracle's free
-                Windows VPS to capture trades placed from your phone too.
-              </li>
-              <li>
-                <span className="font-medium text-fg">Direct broker auto-sync</span> — for
-                supported brokers, connect once via OAuth / API key and Genesis polls the broker
-                directly. No terminal required.
-              </li>
-            </ul>
-            <p className="text-fg-subtle">
-              Reserved · the EA flow is the next big release. The detailed integration guide,
-              EA download, and key issuance show up here once it ships.
-            </p>
-          </CardBody>
-        </Card>
-      )}
+      {tab === "auto" && <EaSyncCard supabaseUrl={supabaseUrl} />}
     </div>
   );
 }

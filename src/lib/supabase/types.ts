@@ -68,7 +68,34 @@ export type TradeFileRow = {
   deposits_total: number | null;
   /** Sum of every Withdrawal transaction the broker recorded for this file. */
   withdrawals_total: number | null;
+  /** "manual" for CSV-imported, "ea" for MT4/MT5 Expert Advisor sync,
+   *  "broker_api" reserved for future direct-broker integrations. */
+  sync_kind?: "manual" | "ea" | "broker_api";
+  /** EA-only: the MetaTrader account number this row represents. */
+  account_number?: string | null;
+  /** EA-only: AccountName() (or user-provided label). */
+  account_name?: string | null;
+  /** EA-only: AccountCompany(). */
+  broker?: string | null;
+  /** EA-only: AccountServer(). */
+  server?: string | null;
+  /** EA-only: "MT4" or "MT5". */
+  platform?: "MT4" | "MT5" | null;
+  /** EA-only: most recent trade-event timestamp seen for this account. */
+  last_synced_at?: string | null;
   created_at: string;
+};
+
+/** API key row for the MT4/MT5 Expert Advisor auto-sync flow. */
+export type GenesisApiKeyRow = {
+  id: string;
+  user_id: string;
+  label: string;
+  key_hash: string;
+  key_prefix: string;
+  created_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
 };
 
 export type ProfileRow = {
@@ -195,7 +222,8 @@ export type Resolution = {
   background?: ResolutionBackground;
   /** Whether to render the "YEAR OF THE <ANIMAL>" eyebrow label. Default true. */
   show_year_label?: boolean;
-  /** Whether to render the small Genesis brand mark on the card. Default true. */
+  /** @deprecated The Genesis brand mark is now always rendered on Resolution
+   *  cards. Kept on the type so legacy rows still parse without errors. */
   show_genesis_logo?: boolean;
 };
 
@@ -280,9 +308,25 @@ export type Database = {
         Insert: Insertable<PlaybookRow>;
         Update: Updatable<PlaybookRow>;
       };
+      genesis_api_keys: {
+        Row: GenesisApiKeyRow;
+        Insert: Pick<GenesisApiKeyRow, "user_id" | "key_hash" | "key_prefix"> &
+          Partial<Pick<GenesisApiKeyRow, "id" | "label" | "created_at" | "last_used_at" | "revoked_at">>;
+        Update: Partial<GenesisApiKeyRow>;
+      };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      generate_genesis_api_key: {
+        Args: { p_label?: string };
+        Returns: {
+          id: string;
+          plaintext: string;
+          key_prefix: string;
+          created_at: string;
+        }[];
+      };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };

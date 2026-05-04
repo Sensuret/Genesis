@@ -288,7 +288,6 @@ function CreateForm({ onSave }: { onSave: (r: Resolution) => void }) {
   const [sections, setSections] = useState<ResolutionSection[]>(() => [makeBlankSection(0)]);
   const [background, setBackground] = useState<ResolutionBackground>({ kind: "theme" });
   const [showYearLabel, setShowYearLabel] = useState(true);
-  const [showGenesisLogo, setShowGenesisLogo] = useState(true);
   const [showPreview, setShowPreview] = useState(false);
   const [bgOpen, setBgOpen] = useState(false);
   const zodiac = chineseZodiacOf(year);
@@ -338,15 +337,13 @@ function CreateForm({ onSave }: { onSave: (r: Resolution) => void }) {
       created_at: new Date().toISOString(),
       sections: cleaned,
       background,
-      show_year_label: showYearLabel,
-      show_genesis_logo: showGenesisLogo
+      show_year_label: showYearLabel
     });
     // Reset
     setSections([makeBlankSection(0)]);
     setTitle("");
     setBackground({ kind: "theme" });
     setShowYearLabel(true);
-    setShowGenesisLogo(true);
     setShowPreview(false);
   }
 
@@ -394,8 +391,7 @@ function CreateForm({ onSave }: { onSave: (r: Resolution) => void }) {
             }
           ],
     background,
-    show_year_label: showYearLabel,
-    show_genesis_logo: showGenesisLogo
+    show_year_label: showYearLabel
   };
 
   return (
@@ -476,15 +472,6 @@ function CreateForm({ onSave }: { onSave: (r: Resolution) => void }) {
                       className="h-4 w-4 accent-brand-500"
                     />
                     Show "YEAR OF THE {zodiac.toUpperCase()}" label
-                  </label>
-                  <label className="inline-flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={showGenesisLogo}
-                      onChange={(e) => setShowGenesisLogo(e.target.checked)}
-                      className="h-4 w-4 accent-brand-500"
-                    />
-                    Show Genesis logo
                   </label>
                   <span className="text-[11px] text-fg-subtle">
                     The {zodiac.toLowerCase()} icon for the year cycle is permanent
@@ -709,8 +696,6 @@ function ResolutionModal({
     onUpdate({ ...resolution, background: bg });
   const toggleYearLabel = () =>
     onUpdate({ ...resolution, show_year_label: !(resolution.show_year_label !== false) });
-  const toggleGenesisLogo = () =>
-    onUpdate({ ...resolution, show_genesis_logo: !(resolution.show_genesis_logo !== false) });
   const updateTitle = (title: string) =>
     onUpdate({ ...resolution, title: title.trim() || undefined });
 
@@ -772,15 +757,6 @@ function ResolutionModal({
                 className="h-3.5 w-3.5 accent-brand-500"
               />
               YEAR OF THE {chineseZodiacOf(resolution.year).toUpperCase()}
-            </label>
-            <label className="inline-flex items-center gap-1.5 text-[11px]">
-              <input
-                type="checkbox"
-                checked={resolution.show_genesis_logo !== false}
-                onChange={toggleGenesisLogo}
-                className="h-3.5 w-3.5 accent-brand-500"
-              />
-              Genesis logo
             </label>
           </div>
 
