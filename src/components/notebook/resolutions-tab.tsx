@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, Pencil, Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
@@ -67,6 +67,35 @@ export function ResolutionsTab({ resolutions, onChange }: ResolutionsTabProps) {
     [resolutions, openId]
   );
 
+  const toggleItem = useCallback(
+    (resId: string, sectionId: string, subId: string, itemId: string) => {
+      onChange(
+        resolutions.map((r) => {
+          if (r.id !== resId) return r;
+          return {
+            ...r,
+            sections: r.sections.map((sec) => {
+              if (sec.id !== sectionId) return sec;
+              return {
+                ...sec,
+                subsections: sec.subsections.map((ss) => {
+                  if (ss.id !== subId) return ss;
+                  return {
+                    ...ss,
+                    items: ss.items.map((it) =>
+                      it.id === itemId ? { ...it, checked: !it.checked } : it
+                    )
+                  };
+                })
+              };
+            })
+          };
+        })
+      );
+    },
+    [resolutions, onChange]
+  );
+
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-line bg-bg-soft p-1 inline-flex">
@@ -107,6 +136,7 @@ export function ResolutionsTab({ resolutions, onChange }: ResolutionsTabProps) {
           emptyDescription="Use the Create tab to define this year's resolutions. They'll appear here once saved."
           onOpen={(id) => setOpenId(id)}
           onDelete={(id) => onChange(resolutions.filter((r) => r.id !== id))}
+          onToggleItem={toggleItem}
         />
       )}
 
@@ -117,6 +147,7 @@ export function ResolutionsTab({ resolutions, onChange }: ResolutionsTabProps) {
           emptyDescription="Resolutions automatically move here when their year ends."
           onOpen={(id) => setOpenId(id)}
           onDelete={(id) => onChange(resolutions.filter((r) => r.id !== id))}
+          onToggleItem={toggleItem}
         />
       )}
 
@@ -161,13 +192,15 @@ function ResolutionGrid({
   emptyTitle,
   emptyDescription,
   onOpen,
-  onDelete
+  onDelete,
+  onToggleItem
 }: {
   resolutions: Resolution[];
   emptyTitle: string;
   emptyDescription: string;
   onOpen: (id: string) => void;
   onDelete: (id: string) => void;
+  onToggleItem: (resId: string, sectionId: string, subId: string, itemId: string) => void;
 }) {
   if (!resolutions.length) {
     return <Empty title={emptyTitle} description={emptyDescription} />;
@@ -181,13 +214,17 @@ function ResolutionGrid({
             onClick={() => onOpen(r.id)}
             className="block w-full text-left transition hover:scale-[1.01]"
           >
-            <ResolutionCard resolution={r} variant="preview" />
+            <ResolutionCard
+              resolution={r}
+              variant="preview"
+              onToggleItem={(secId, subId, itemId) => onToggleItem(r.id, secId, subId, itemId)}
+            />
           </button>
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              if (confirm(`Delete ${r.year} resolutions?`)) onDelete(r.id);
+              onDelete(r.id);
             }}
             className="absolute right-3 top-3 inline-flex h-7 w-7 items-center justify-center rounded-lg border border-line bg-bg/90 text-fg-muted opacity-0 transition group-hover:opacity-100 hover:border-danger hover:text-danger"
             aria-label="Delete"
@@ -302,16 +339,17 @@ function CreateForm({ onSave }: { onSave: (r: Resolution) => void }) {
         : [
             {
               id: "ph1",
-              label: "Trading plan",
+              label: "Trading Goals",
               color: "purple",
               subsections: [
                 {
                   id: "ph1-1",
                   label: "Personal account",
-                  target: "$50 → $1000",
+                  target: "$10 000 → $100 000",
                   items: [
-                    { id: "ph1-i1", text: "Q1: Target $250" },
-                    { id: "ph1-i2", text: "Focus on 9 good trades / month" }
+                    { id: "ph1-i1", text: "Q1: Target $100 000" },
+                    { id: "ph1-i2", text: "Monthly target → $35 000 / month (3)" },
+                    { id: "ph1-i3", text: "Focus on 10 good trades targeting $1 000 / trade" }
                   ]
                 }
               ]
@@ -325,7 +363,8 @@ function CreateForm({ onSave }: { onSave: (r: Resolution) => void }) {
                   id: "ph2-1",
                   label: "Daily routine",
                   items: [
-                    { id: "ph2-i1", text: "Sleep ≥ 7h, train 4x / week" }
+                    { id: "ph2-i1", text: "Sleep ≥ 7 h every night" },
+                    { id: "ph2-i2", text: "Train 4× / week, walk 10 000 steps daily" }
                   ]
                 }
               ]
@@ -373,44 +412,18 @@ function CreateForm({ onSave }: { onSave: (r: Resolution) => void }) {
             Year of the <span className="text-fg">{zodiac}</span>
           </div>
 
-          {/* Card decoration controls */}
-          <div className="grid gap-4 rounded-xl border border-line bg-bg-soft/30 p-4 md:grid-cols-[1fr_auto] md:items-start">
-            <div className="space-y-3">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
-                Set background colour
-              </div>
-              <ResolutionBgPicker value={background} onChange={setBackground} />
-              <div className="flex flex-wrap items-center gap-4 pt-2 text-xs text-fg-muted">
-                <label className="inline-flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={showYearLabel}
-                    onChange={(e) => setShowYearLabel(e.target.checked)}
-                    className="h-4 w-4 accent-brand-500"
-                  />
-                  Show "YEAR OF THE {zodiac.toUpperCase()}" label
-                </label>
-                <label className="inline-flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={showGenesisLogo}
-                    onChange={(e) => setShowGenesisLogo(e.target.checked)}
-                    className="h-4 w-4 accent-brand-500"
-                  />
-                  Show Genesis logo
-                </label>
-                <span className="text-[11px] text-fg-subtle">
-                  The {zodiac.toLowerCase()} icon for the year cycle is permanent
-                  and reacts to your selected year.
-                </span>
-              </div>
-            </div>
-            <div className="flex md:justify-end">
-              <Button variant="secondary" onClick={() => setShowPreview((p) => !p)}>
-                {showPreview ? "Hide preview" : "Preview"}
-              </Button>
-            </div>
-          </div>
+          {/* Card decoration controls — collapsible */}
+          <CardDecorationPanel
+            zodiac={zodiac}
+            background={background}
+            setBackground={setBackground}
+            showYearLabel={showYearLabel}
+            setShowYearLabel={setShowYearLabel}
+            showGenesisLogo={showGenesisLogo}
+            setShowGenesisLogo={setShowGenesisLogo}
+            showPreview={showPreview}
+            setShowPreview={setShowPreview}
+          />
 
           {showPreview && (
             <div className="overflow-hidden rounded-2xl border border-line bg-bg-soft/30 p-3">
@@ -434,6 +447,85 @@ function CreateForm({ onSave }: { onSave: (r: Resolution) => void }) {
       <Button variant="secondary" onClick={addSection}>
         <Plus className="h-4 w-4" /> Add section
       </Button>
+    </div>
+  );
+}
+
+function CardDecorationPanel({
+  zodiac,
+  background,
+  setBackground,
+  showYearLabel,
+  setShowYearLabel,
+  showGenesisLogo,
+  setShowGenesisLogo,
+  showPreview,
+  setShowPreview
+}: {
+  zodiac: string;
+  background: ResolutionBackground;
+  setBackground: (bg: ResolutionBackground) => void;
+  showYearLabel: boolean;
+  setShowYearLabel: (v: boolean) => void;
+  showGenesisLogo: boolean;
+  setShowGenesisLogo: (v: boolean) => void;
+  showPreview: boolean;
+  setShowPreview: (fn: (prev: boolean) => boolean) => void;
+}) {
+  const [collapsed, setCollapsed] = useState(false);
+
+  return (
+    <div className="rounded-xl border border-line bg-bg-soft/30">
+      <button
+        type="button"
+        onClick={() => setCollapsed((c) => !c)}
+        className="flex w-full items-center justify-between px-4 py-3 text-left"
+      >
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
+          Set background colour
+        </span>
+        {collapsed ? (
+          <ChevronRight className="h-4 w-4 text-fg-muted" />
+        ) : (
+          <ChevronDown className="h-4 w-4 text-fg-muted" />
+        )}
+      </button>
+      {!collapsed && (
+        <div className="grid gap-4 px-4 pb-4 md:grid-cols-[1fr_auto] md:items-start">
+          <div className="space-y-3">
+            <ResolutionBgPicker value={background} onChange={setBackground} />
+            <div className="flex flex-wrap items-center gap-4 pt-2 text-xs text-fg-muted">
+              <label className="inline-flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={showYearLabel}
+                  onChange={(e) => setShowYearLabel(e.target.checked)}
+                  className="h-4 w-4 accent-brand-500"
+                />
+                Show &quot;YEAR OF THE {zodiac.toUpperCase()}&quot; label
+              </label>
+              <label className="inline-flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={showGenesisLogo}
+                  onChange={(e) => setShowGenesisLogo(e.target.checked)}
+                  className="h-4 w-4 accent-brand-500"
+                />
+                Show Genesis logo
+              </label>
+              <span className="text-[11px] text-fg-subtle">
+                The {zodiac.toLowerCase()} icon for the year cycle is permanent
+                and reacts to your selected year.
+              </span>
+            </div>
+          </div>
+          <div className="flex md:justify-end">
+            <Button variant="secondary" onClick={() => setShowPreview((p) => !p)}>
+              {showPreview ? "Hide preview" : "Preview"}
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -508,7 +600,7 @@ function SectionEditor({
               <Input
                 value={section.label}
                 onChange={(e) => setField("label", e.target.value)}
-                placeholder="2026 Trading Plan"
+                placeholder="e.g. 2026 Trading Plan"
               />
             </div>
             <div>
@@ -548,7 +640,7 @@ function SectionEditor({
                     <Input
                       value={sub.label}
                       onChange={(e) => updateSub(sub.id, (s) => ({ ...s, label: e.target.value }))}
-                      placeholder={sidx === 0 ? "Personal account" : "Funded account"}
+                      placeholder={sidx === 0 ? "e.g. Personal account" : "e.g. Funded account"}
                     />
                   </div>
                   <div>
@@ -556,7 +648,7 @@ function SectionEditor({
                     <Input
                       value={sub.target ?? ""}
                       onChange={(e) => updateSub(sub.id, (s) => ({ ...s, target: e.target.value }))}
-                      placeholder="$50 → $1000"
+                      placeholder="$10 000 → $100 000"
                     />
                   </div>
                   {section.subsections.length > 1 && (
@@ -588,7 +680,7 @@ function SectionEditor({
                       }));
                     }}
                     placeholder={
-                      "Q1: Target $250\nMonthly target → $90 / month (3)\nFocus on 9 good trades targeting $10 / trade"
+                      "Q1: Target $100 000\nMonthly target → $35 000 / month (3)\nFocus on 10 good trades targeting $1 000 / trade"
                     }
                   />
                 </div>

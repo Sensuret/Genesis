@@ -615,9 +615,6 @@ function Others({
   }
 
   async function remove(id: string) {
-    if (typeof window !== "undefined" && !window.confirm("Delete this profile? This cannot be undone.")) {
-      return;
-    }
     const supabase = createClient();
     const { data: userData } = await supabase.auth.getUser();
     const user = userData.user;
@@ -1229,9 +1226,6 @@ function Combined({
   );
 
   async function removeOther(id: string) {
-    if (typeof window !== "undefined" && !window.confirm("Delete this profile? This cannot be undone.")) {
-      return;
-    }
     const supabase = createClient();
     const { data: userData } = await supabase.auth.getUser();
     const user = userData.user;

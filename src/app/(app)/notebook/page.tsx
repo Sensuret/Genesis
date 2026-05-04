@@ -89,8 +89,31 @@ function resolveEmbed(rawUrl: string): { kind: EmbedKind; src: string; provider:
     return { kind: "image", src: u.toString(), provider: "image" };
   }
 
-  // Notion public pages refuse iframe; mark blocked so we can show a
-  // helpful "Open in new tab" fallback rather than a blank rectangle.
+  // TradingView widget / chart embed
+  if (host.endsWith("tradingview.com")) {
+    // Already an embed/widget URL — pass through as iframe
+    if (u.pathname.startsWith("/widgetembed/") || u.pathname.startsWith("/embed/")) {
+      return { kind: "iframe", src: u.toString(), provider: "tradingview" };
+    }
+    // Chart snapshot URL — extract the image
+    const snap = u.pathname.match(/\/x\/([A-Za-z0-9]+)/);
+    if (snap) {
+      return { kind: "image", src: `https://www.tradingview.com/x/${snap[1]}/`, provider: "tradingview" };
+    }
+    // Symbol / chart page — embed via the lightweight widget
+    const sym = u.pathname.match(/\/(?:chart|symbols)\/([^/]+)/);
+    if (sym) {
+      return {
+        kind: "iframe",
+        src: `https://s.tradingview.com/widgetembed/?symbol=${encodeURIComponent(sym[1])}&interval=D&theme=dark&style=1&locale=en&enable_publishing=false&hide_top_toolbar=false&hide_side_toolbar=false`,
+        provider: "tradingview"
+      };
+    }
+    // Fall through to generic iframe for other TradingView URLs
+    return { kind: "iframe", src: u.toString(), provider: "tradingview" };
+  }
+
+  // Notion public pages — try embedding via notion.so embed path
   if (host.endsWith("notion.so") || host.endsWith("notion.site")) {
     return { kind: "blocked", src: u.toString(), provider: "notion" };
   }
@@ -271,7 +294,6 @@ export default function NotebookPage() {
   }
 
   async function deleteNote(id: string) {
-    if (!confirm("Delete this note?")) return;
     const nextNotes = notes.filter((n) => n.id !== id);
     setNotes(nextNotes);
     if (openNote?.id === id) setOpenNote(null);
@@ -350,8 +372,13 @@ export default function NotebookPage() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Embeds</CardTitle>
-          <Button variant="secondary" onClick={() => setAdderOpen((o) => !o)}>
-            <Plus className="h-4 w-4" /> Add embed
+          <Button
+            variant="secondary"
+            onClick={() => setAdderOpen((o) => !o)}
+            disabled={embeds.length >= 5}
+            title={embeds.length >= 5 ? "Maximum 5 embeds" : undefined}
+          >
+            <Plus className="h-4 w-4" /> Add embed{embeds.length > 0 ? ` (${embeds.length}/5)` : ""}
           </Button>
         </CardHeader>
         <CardBody className="space-y-4">
@@ -370,7 +397,7 @@ export default function NotebookPage() {
                 <Input
                   value={newUrl}
                   onChange={(e) => setNewUrl(e.target.value)}
-                  placeholder="YouTube / Vimeo / Loom / direct image URL — most public pages"
+                  placeholder="YouTube / TradingView / image URL — most public pages"
                 />
               </div>
               <Button onClick={addEmbed} disabled={!newLabel.trim() || !newUrl.trim()}>
@@ -459,11 +486,11 @@ export default function NotebookPage() {
                   </div>
                 )}
                 {resolved.kind === "image" && (
-                  <div className="overflow-hidden rounded-xl border border-line bg-bg-elevated">
+                  <div className="flex items-center justify-center overflow-hidden rounded-xl border border-line bg-bg-elevated p-2">
                     <img
                       src={resolved.src}
                       alt={active.label}
-                      className="mx-auto max-h-[calc(100vh-380px)] w-auto object-contain"
+                      className="max-h-[calc(100vh-380px)] max-w-full rounded-lg object-contain"
                     />
                   </div>
                 )}
