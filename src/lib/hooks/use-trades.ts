@@ -74,6 +74,50 @@ export function TradesProvider({ children }: { children: ReactNode }) {
     refresh();
   }, [refresh]);
 
+  // Live-refresh the cache whenever the user inserts / updates / deletes a
+  // trade or imports a new file in another tab (or the upload form on
+  // /add-trade). Without this the Imported-files card in Settings, the
+  // accounts dropdown filter, and the Trades page would hold a stale copy
+  // of `files` until the next manual reload. We only subscribe once we
+  // know who the signed-in user is so the filter clause is scoped tightly.
+  useEffect(() => {
+    let cancelled = false;
+    const supabase = createClient();
+    let cleanup: (() => void) | null = null;
+
+    (async () => {
+      const { data: userData } = await supabase.auth.getUser();
+      if (cancelled || !userData.user) return;
+      const userId = userData.user.id;
+      const channel = supabase
+        .channel(`trades-cache-${userId}`)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "trade_files", filter: `user_id=eq.${userId}` },
+          () => {
+            refresh();
+          }
+        )
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "trades", filter: `user_id=eq.${userId}` },
+          () => {
+            refresh();
+          }
+        )
+        .subscribe();
+
+      cleanup = () => {
+        supabase.removeChannel(channel);
+      };
+    })();
+
+    return () => {
+      cancelled = true;
+      cleanup?.();
+    };
+  }, [refresh]);
+
   const value = useMemo<TradesContextValue>(
     () => ({ trades, files, loading, error, refresh }),
     [trades, files, loading, error, refresh]

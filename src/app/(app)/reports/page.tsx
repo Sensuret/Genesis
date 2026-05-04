@@ -49,53 +49,53 @@ const TABS = ["Overview", "Detailed", "Risk", "Wins vs Losses", "Compare", "Cale
 type Tab = (typeof TABS)[number];
 
 export default function ReportsPage() {
-  const { trades, loading } = useTrades();
+  const { trades, files, loading } = useTrades();
   const { filters } = useFilters();
   const { fmt } = useMoney();
   const [tab, setTab] = useState<Tab>("Overview");
   const [startBalance, setStartBalance] = useState<number | null>(null);
-  const [fileAggregates, setFileAggregates] = useState<{
-    balance: number | null;
-    deposits: number | null;
-    withdrawals: number | null;
-    fileCount: number;
-  }>({ balance: null, deposits: null, withdrawals: null, fileCount: 0 });
 
   useEffect(() => {
     (async () => {
       const supabase = createClient();
       const { data: userData } = await supabase.auth.getUser();
       if (!userData.user) return;
-      const [profileRes, filesRes] = await Promise.all([
-        supabase
-          .from("profiles")
-          .select("starting_balance")
-          .eq("id", userData.user.id)
-          .maybeSingle(),
-        supabase
-          .from("trade_files")
-          .select("account_balance, deposits_total, withdrawals_total")
-          .eq("user_id", userData.user.id)
-      ]);
+      const profileRes = await supabase
+        .from("profiles")
+        .select("starting_balance")
+        .eq("id", userData.user.id)
+        .maybeSingle();
       if (profileRes.data?.starting_balance)
         setStartBalance(Number(profileRes.data.starting_balance));
-      const files = filesRes.data ?? [];
-      let bSum = 0, bAny = false;
-      let dSum = 0, dAny = false;
-      let wSum = 0, wAny = false;
-      for (const f of files) {
-        if (f.account_balance != null) { bSum += f.account_balance; bAny = true; }
-        if (f.deposits_total != null) { dSum += f.deposits_total; dAny = true; }
-        if (f.withdrawals_total != null) { wSum += f.withdrawals_total; wAny = true; }
-      }
-      setFileAggregates({
-        balance: bAny ? bSum : null,
-        deposits: dAny ? dSum : null,
-        withdrawals: wAny ? wSum : null,
-        fileCount: files.length
-      });
     })();
   }, []);
+
+  // Account-info aggregates are scoped to the same accounts the user has
+  // selected in the topbar dropdown — so flipping between files in the
+  // dropdown swaps the Account Balance / Deposits / Withdrawals cards
+  // accordingly. When no account filter is active we show the sum across
+  // every imported file (the "All accounts" aggregate). Reading from the
+  // shared `files` cache keeps this in sync with realtime updates.
+  const fileAggregates = useMemo(() => {
+    const selectedIds = new Set(filters.accountIds);
+    const scope = selectedIds.size === 0
+      ? files
+      : files.filter((f) => selectedIds.has(f.id));
+    let bSum = 0, bAny = false;
+    let dSum = 0, dAny = false;
+    let wSum = 0, wAny = false;
+    for (const f of scope) {
+      if (f.account_balance != null) { bSum += f.account_balance; bAny = true; }
+      if (f.deposits_total != null) { dSum += f.deposits_total; dAny = true; }
+      if (f.withdrawals_total != null) { wSum += f.withdrawals_total; wAny = true; }
+    }
+    return {
+      balance: bAny ? bSum : null,
+      deposits: dAny ? dSum : null,
+      withdrawals: wAny ? wSum : null,
+      fileCount: scope.length
+    };
+  }, [files, filters.accountIds]);
 
   const filtered = useMemo(() => applyAllFilters(trades, filters), [trades, filters]);
   const screenshotRef = useRef<HTMLDivElement>(null);
@@ -595,24 +595,45 @@ function Risk({ trades, currency }: { trades: TradeRow[]; currency: string }) {
 
       {/* Average SL / TP distances in pips. We measure the *planned* stop
           and target sizes — not where the trade actually closed — so this
-          is a pure read on the risk profile of the entries you're taking. */}
+          is a pure read on the risk profile of the entries you're taking.
+          Filters mirror realisedRR(): drop rows where the stored SL or TP
+          is the MetaTrader "no level set" placeholder (0), and cap any
+          individual distance > 100,000 pips as a corrupt-data sentinel. */}
       {(() => {
+        const SANE_PIP_CAP = 100_000;
+        const distanceInPips = (
+          entry: number,
+          target: number,
+          pair: string | null | undefined,
+          side: "long" | "short" | null | undefined
+        ): number | null => {
+          const p = computePips({ pair, entry, exit_price: target, side });
+          if (p == null || !Number.isFinite(p)) return null;
+          const abs = Math.abs(p);
+          if (abs > SANE_PIP_CAP) return null;
+          return abs;
+        };
+
         const slPips = trades
           .map((t) =>
-            t.stop_loss != null && t.entry != null
-              ? computePips({ pair: t.pair, entry: t.entry, exit_price: t.stop_loss, side: t.side })
+            t.stop_loss != null &&
+            t.stop_loss !== 0 &&
+            t.entry != null &&
+            t.entry !== 0
+              ? distanceInPips(t.entry, t.stop_loss, t.pair, t.side)
               : null
           )
-          .filter((p): p is number => p != null)
-          .map((p) => Math.abs(p));
+          .filter((p): p is number => p != null);
         const tpPips = trades
           .map((t) =>
-            t.take_profit != null && t.entry != null
-              ? computePips({ pair: t.pair, entry: t.entry, exit_price: t.take_profit, side: t.side })
+            t.take_profit != null &&
+            t.take_profit !== 0 &&
+            t.entry != null &&
+            t.entry !== 0
+              ? distanceInPips(t.entry, t.take_profit, t.pair, t.side)
               : null
           )
-          .filter((p): p is number => p != null)
-          .map((p) => Math.abs(p));
+          .filter((p): p is number => p != null);
         const avgSl = slPips.length ? slPips.reduce((s, x) => s + x, 0) / slPips.length : null;
         const avgTp = tpPips.length ? tpPips.reduce((s, x) => s + x, 0) / tpPips.length : null;
         return (

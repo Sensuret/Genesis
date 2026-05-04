@@ -58,8 +58,34 @@ function isHfmOpenerGhost(t: TradeRow): boolean {
   );
 }
 
+/**
+ * Pre-PR-K MT5 parser ingested all three sections of the ReportHistory
+ * sheet — Positions, Orders, AND Deals — using the Positions column
+ * indices. The Deals section has a Direction column ("in"/"out") at
+ * index 4 where Volume should be, so those rows landed in the DB with:
+ *   - entry  = (small Volume value, e.g. 0.05)
+ *   - exit   = 0 (Fee column)
+ *   - lot    = null (toNumber("in"/"out") → null)
+ *   - pnl    = the running Balance, NOT the trade's profit
+ * Real Position rows ALWAYS have a numeric volume, so a row with `entry`
+ * set but `lot_size` null is almost certainly a Deals-section ghost.
+ */
+function isMt5DealsGhost(t: TradeRow): boolean {
+  if (t.entry == null || t.lot_size != null) return false;
+  // Volume values are sub-1 (lot sizes); real Position entries on
+  // indices/forex are always > 1 (FX 0.5+, indices 1000+, metals 1000+).
+  // Use a conservative threshold: an "entry" under 5 is a smoking gun for
+  // a Volume-misread.
+  if (Math.abs(t.entry) < 5) return true;
+  // Also catch the case where exit was Fee=0 and pnl = stored Balance:
+  // the running balance series is monotonic and unrelated to trade size.
+  if (t.exit_price === 0 && t.entry < 100) return true;
+  return false;
+}
+
 export function isRealTrade(t: TradeRow): boolean {
   if (isHfmOpenerGhost(t)) return false;
+  if (isMt5DealsGhost(t)) return false;
   return !!(t.pair || t.pnl != null || t.entry != null || t.exit_price != null || t.lot_size != null);
 }
 
