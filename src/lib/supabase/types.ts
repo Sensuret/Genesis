@@ -172,6 +172,16 @@ export type ResolutionSection = {
   subsections: ResolutionSubsection[];
 };
 
+/**
+ * Background style for a Resolution card. "theme" defers to the app's
+ * current theme (default), "solid" uses a single colour swatch, "gradient"
+ * picks one of the named preset gradients.
+ */
+export type ResolutionBackground =
+  | { kind: "theme" }
+  | { kind: "solid"; color: string }
+  | { kind: "gradient"; preset: string };
+
 /** Saved yearly Resolution (a year's worth of goals & sub-goals). */
 export type Resolution = {
   id: string;
@@ -181,6 +191,12 @@ export type Resolution = {
   title?: string;
   created_at: string;
   sections: ResolutionSection[];
+  /** Card background. Falls back to "theme" when omitted (legacy rows). */
+  background?: ResolutionBackground;
+  /** Whether to render the "YEAR OF THE <ANIMAL>" eyebrow label. Default true. */
+  show_year_label?: boolean;
+  /** Whether to render the small Genesis brand mark on the card. Default true. */
+  show_genesis_logo?: boolean;
 };
 
 export type UserSettingsData = {

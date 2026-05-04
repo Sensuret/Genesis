@@ -637,31 +637,52 @@ function Risk({ trades, currency }: { trades: TradeRow[]; currency: string }) {
         const avgSl = slPips.length ? slPips.reduce((s, x) => s + x, 0) / slPips.length : null;
         const avgTp = tpPips.length ? tpPips.reduce((s, x) => s + x, 0) / tpPips.length : null;
         return (
-          <div className="grid gap-4 md:grid-cols-3">
-            <Stat
-              label="Avg SL level (pips)"
-              value={avgSl == null ? "—" : `${formatNumber(avgSl, 1)} pips`}
-              format="text"
-              valueClassName="text-danger"
-              hint={slPips.length ? `Across ${slPips.length} trades with a stop set` : "No trades have a stop loss"}
-            />
-            <Stat
-              label="Avg TP level (pips)"
-              value={avgTp == null ? "—" : `${formatNumber(avgTp, 1)} pips`}
-              format="text"
-              valueClassName="text-success"
-              hint={tpPips.length ? `Across ${tpPips.length} trades with a target set` : "No trades have a take-profit"}
-            />
-            <Stat
-              label="Avg planned SL : TP"
-              value={
-                avgSl == null || avgTp == null || avgSl === 0
-                  ? "—"
-                  : `1 : ${formatNumber(avgTp / avgSl, 2)}`
-              }
-              format="text"
-            />
-          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Average stop-loss / take-profit distances</CardTitle>
+            </CardHeader>
+            <CardBody>
+              <div className="mb-3 text-xs text-fg-muted">
+                Where you typically place your stop and target, measured in pips/points
+                from entry. Trades imported with no SL or TP attached are excluded so the
+                average reflects your actual risk-per-trade.
+              </div>
+              <div className="grid gap-4 md:grid-cols-3">
+                <Stat
+                  label="Avg SL level (pips)"
+                  value={avgSl == null ? "—" : `${formatNumber(avgSl, 1)} pips`}
+                  format="text"
+                  valueClassName="text-danger"
+                  hint={
+                    slPips.length
+                      ? `Across ${slPips.length} trade${slPips.length === 1 ? "" : "s"} with a stop set`
+                      : "None of the imported trades have a stop loss attached"
+                  }
+                />
+                <Stat
+                  label="Avg TP level (pips)"
+                  value={avgTp == null ? "—" : `${formatNumber(avgTp, 1)} pips`}
+                  format="text"
+                  valueClassName="text-success"
+                  hint={
+                    tpPips.length
+                      ? `Across ${tpPips.length} trade${tpPips.length === 1 ? "" : "s"} with a target set`
+                      : "None of the imported trades have a take-profit attached"
+                  }
+                />
+                <Stat
+                  label="Avg planned SL : TP"
+                  value={
+                    avgSl == null || avgTp == null || avgSl === 0
+                      ? "—"
+                      : `1 : ${formatNumber(avgTp / avgSl, 2)}`
+                  }
+                  format="text"
+                  hint="Risk-to-reward implied by your planned stop and target"
+                />
+              </div>
+            </CardBody>
+          </Card>
         );
       })()}
       <Card>

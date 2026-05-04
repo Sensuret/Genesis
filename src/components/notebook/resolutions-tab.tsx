@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, Plus, Trash2, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Pencil, Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label, Textarea } from "@/components/ui/input";
@@ -11,10 +11,12 @@ import { chineseZodiacOf } from "@/lib/zodiac";
 import { cn } from "@/lib/utils";
 import type {
   Resolution,
+  ResolutionBackground,
   ResolutionSection,
   ResolutionSubsection
 } from "@/lib/supabase/types";
 import { ResolutionCard } from "./resolution-card";
+import { ResolutionBgPicker } from "./resolution-bg-picker";
 
 function newId(): string {
   if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
@@ -119,7 +121,13 @@ export function ResolutionsTab({ resolutions, onChange }: ResolutionsTabProps) {
       )}
 
       {open && (
-        <ResolutionModal resolution={open} onClose={() => setOpenId(null)} />
+        <ResolutionModal
+          resolution={open}
+          onClose={() => setOpenId(null)}
+          onUpdate={(next) =>
+            onChange(resolutions.map((r) => (r.id === next.id ? next : r)))
+          }
+        />
       )}
     </div>
   );
@@ -218,6 +226,10 @@ function CreateForm({ onSave }: { onSave: (r: Resolution) => void }) {
   const [year, setYear] = useState<number>(() => new Date().getUTCFullYear());
   const [title, setTitle] = useState<string>("");
   const [sections, setSections] = useState<ResolutionSection[]>(() => [makeBlankSection(0)]);
+  const [background, setBackground] = useState<ResolutionBackground>({ kind: "theme" });
+  const [showYearLabel, setShowYearLabel] = useState(true);
+  const [showGenesisLogo, setShowGenesisLogo] = useState(true);
+  const [showPreview, setShowPreview] = useState(false);
   const zodiac = chineseZodiacOf(year);
 
   function updateSection(id: string, fn: (s: ResolutionSection) => ResolutionSection) {
@@ -263,12 +275,66 @@ function CreateForm({ onSave }: { onSave: (r: Resolution) => void }) {
       year,
       title: title.trim() || undefined,
       created_at: new Date().toISOString(),
-      sections: cleaned
+      sections: cleaned,
+      background,
+      show_year_label: showYearLabel,
+      show_genesis_logo: showGenesisLogo
     });
     // Reset
     setSections([makeBlankSection(0)]);
     setTitle("");
+    setBackground({ kind: "theme" });
+    setShowYearLabel(true);
+    setShowGenesisLogo(true);
+    setShowPreview(false);
   }
+
+  // Live preview object — used by both the inline preview card and the bg
+  // picker swatches so the user sees their choices immediately.
+  const previewResolution: Resolution = {
+    id: "preview",
+    year,
+    title: title.trim() || undefined,
+    created_at: new Date().toISOString(),
+    sections:
+      sections.some((s) => s.label.trim())
+        ? sections.filter((s) => s.label.trim())
+        : [
+            {
+              id: "ph1",
+              label: "Trading plan",
+              color: "purple",
+              subsections: [
+                {
+                  id: "ph1-1",
+                  label: "Personal account",
+                  target: "$50 → $1000",
+                  items: [
+                    { id: "ph1-i1", text: "Q1: Target $250" },
+                    { id: "ph1-i2", text: "Focus on 9 good trades / month" }
+                  ]
+                }
+              ]
+            },
+            {
+              id: "ph2",
+              label: "Health & habits",
+              color: "green",
+              subsections: [
+                {
+                  id: "ph2-1",
+                  label: "Daily routine",
+                  items: [
+                    { id: "ph2-i1", text: "Sleep ≥ 7h, train 4x / week" }
+                  ]
+                }
+              ]
+            }
+          ],
+    background,
+    show_year_label: showYearLabel,
+    show_genesis_logo: showGenesisLogo
+  };
 
   return (
     <div className="space-y-4">
@@ -276,31 +342,81 @@ function CreateForm({ onSave }: { onSave: (r: Resolution) => void }) {
         <CardHeader>
           <CardTitle>Define your resolution</CardTitle>
         </CardHeader>
-        <CardBody className="grid gap-4 md:grid-cols-[140px_1fr_auto] md:items-end">
-          <div>
-            <Label>Year</Label>
-            <Input
-              type="number"
-              min={2000}
-              max={2200}
-              value={year}
-              onChange={(e) => setYear(Number(e.target.value) || new Date().getUTCFullYear())}
-            />
-            <div className="mt-1 text-[11px] text-fg-subtle">
-              Year of the {zodiac}
+        <CardBody className="space-y-4">
+          {/* Year + Title side-by-side on the same line. The Year-of-the-X
+              hint is rendered inside the Year input footer instead of below
+              so it doesn't push Title off-axis. */}
+          <div className="grid gap-3 md:grid-cols-[160px_1fr_auto] md:items-end">
+            <div>
+              <Label>Year</Label>
+              <Input
+                type="number"
+                min={2000}
+                max={2200}
+                value={year}
+                onChange={(e) => setYear(Number(e.target.value) || new Date().getUTCFullYear())}
+              />
+            </div>
+            <div>
+              <Label>Title (optional)</Label>
+              <Input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder={`${year} Resolutions`}
+              />
+            </div>
+            <Button onClick={save} disabled={!canSave()}>
+              Save resolution
+            </Button>
+          </div>
+          <div className="text-[11px] text-fg-subtle">
+            Year of the <span className="text-fg">{zodiac}</span>
+          </div>
+
+          {/* Card decoration controls */}
+          <div className="grid gap-4 rounded-xl border border-line bg-bg-soft/30 p-4 md:grid-cols-[1fr_auto] md:items-start">
+            <div className="space-y-3">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
+                Set background colour
+              </div>
+              <ResolutionBgPicker value={background} onChange={setBackground} />
+              <div className="flex flex-wrap items-center gap-4 pt-2 text-xs text-fg-muted">
+                <label className="inline-flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={showYearLabel}
+                    onChange={(e) => setShowYearLabel(e.target.checked)}
+                    className="h-4 w-4 accent-brand-500"
+                  />
+                  Show "YEAR OF THE {zodiac.toUpperCase()}" label
+                </label>
+                <label className="inline-flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={showGenesisLogo}
+                    onChange={(e) => setShowGenesisLogo(e.target.checked)}
+                    className="h-4 w-4 accent-brand-500"
+                  />
+                  Show Genesis logo
+                </label>
+                <span className="text-[11px] text-fg-subtle">
+                  The {zodiac.toLowerCase()} icon for the year cycle is permanent
+                  and reacts to your selected year.
+                </span>
+              </div>
+            </div>
+            <div className="flex md:justify-end">
+              <Button variant="secondary" onClick={() => setShowPreview((p) => !p)}>
+                {showPreview ? "Hide preview" : "Preview"}
+              </Button>
             </div>
           </div>
-          <div>
-            <Label>Title (optional)</Label>
-            <Input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder={`${year} Resolutions`}
-            />
-          </div>
-          <Button onClick={save} disabled={!canSave()}>
-            Save resolution
-          </Button>
+
+          {showPreview && (
+            <div className="overflow-hidden rounded-2xl border border-line bg-bg-soft/30 p-3">
+              <ResolutionCard resolution={previewResolution} variant="preview" />
+            </div>
+          )}
         </CardBody>
       </Card>
 
@@ -495,13 +611,25 @@ function SectionEditor({
 
 function ResolutionModal({
   resolution,
-  onClose
+  onClose,
+  onUpdate
 }: {
   resolution: Resolution;
   onClose: () => void;
+  onUpdate: (next: Resolution) => void;
 }) {
   const [orientation, setOrientation] = useState<"portrait" | "landscape">("portrait");
+  const [editMode, setEditMode] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
+
+  const setBackground = (bg: ResolutionBackground) =>
+    onUpdate({ ...resolution, background: bg });
+  const toggleYearLabel = () =>
+    onUpdate({ ...resolution, show_year_label: !(resolution.show_year_label !== false) });
+  const toggleGenesisLogo = () =>
+    onUpdate({ ...resolution, show_genesis_logo: !(resolution.show_genesis_logo !== false) });
+  const updateTitle = (title: string) =>
+    onUpdate({ ...resolution, title: title.trim() || undefined });
 
   return (
     <div
@@ -515,37 +643,79 @@ function ResolutionModal({
         )}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between rounded-xl border border-line bg-bg-elevated px-3 py-2">
-          <div className="flex items-center gap-2 text-xs text-fg-muted">
-            <span className="font-semibold uppercase tracking-wide">View</span>
-            <div className="rounded-lg border border-line bg-bg-soft p-0.5">
-              <button
-                type="button"
-                onClick={() => setOrientation("portrait")}
-                className={cn(
-                  "rounded-md px-2 py-1 text-[11px]",
-                  orientation === "portrait"
-                    ? "bg-bg-elevated text-fg shadow-sm"
-                    : "text-fg-muted"
-                )}
-              >
-                Portrait
-              </button>
-              <button
-                type="button"
-                onClick={() => setOrientation("landscape")}
-                className={cn(
-                  "rounded-md px-2 py-1 text-[11px]",
-                  orientation === "landscape"
-                    ? "bg-bg-elevated text-fg shadow-sm"
-                    : "text-fg-muted"
-                )}
-              >
-                Landscape
-              </button>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-bg-elevated px-3 py-2">
+          <div className="flex flex-wrap items-center gap-3 text-xs text-fg-muted">
+            <div className="flex items-center gap-2">
+              <span className="font-semibold uppercase tracking-wide">View</span>
+              <div className="rounded-lg border border-line bg-bg-soft p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setOrientation("portrait")}
+                  className={cn(
+                    "rounded-md px-2 py-1 text-[11px]",
+                    orientation === "portrait"
+                      ? "bg-bg-elevated text-fg shadow-sm"
+                      : "text-fg-muted"
+                  )}
+                >
+                  Portrait
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOrientation("landscape")}
+                  className={cn(
+                    "rounded-md px-2 py-1 text-[11px]",
+                    orientation === "landscape"
+                      ? "bg-bg-elevated text-fg shadow-sm"
+                      : "text-fg-muted"
+                  )}
+                >
+                  Landscape
+                </button>
+              </div>
             </div>
+
+            <ResolutionBgPicker
+              compact
+              value={resolution.background}
+              onChange={setBackground}
+            />
+
+            <label className="inline-flex items-center gap-1.5 text-[11px]">
+              <input
+                type="checkbox"
+                checked={resolution.show_year_label !== false}
+                onChange={toggleYearLabel}
+                className="h-3.5 w-3.5 accent-brand-500"
+              />
+              YEAR OF THE {chineseZodiacOf(resolution.year).toUpperCase()}
+            </label>
+            <label className="inline-flex items-center gap-1.5 text-[11px]">
+              <input
+                type="checkbox"
+                checked={resolution.show_genesis_logo !== false}
+                onChange={toggleGenesisLogo}
+                className="h-3.5 w-3.5 accent-brand-500"
+              />
+              Genesis logo
+            </label>
           </div>
+
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setEditMode((e) => !e)}
+              className={cn(
+                "inline-flex h-9 w-9 items-center justify-center rounded-xl border transition",
+                editMode
+                  ? "border-brand-400 bg-brand-500/15 text-brand-200"
+                  : "border-line bg-bg text-fg-muted hover:border-brand-400 hover:text-fg"
+              )}
+              aria-label="Edit"
+              title="Edit resolution"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
             <ScreenshotButton
               targetRef={cardRef}
               filename={`resolution-${resolution.year}-${orientation}`}
@@ -561,6 +731,40 @@ function ResolutionModal({
             </button>
           </div>
         </div>
+
+        {editMode && (
+          <div className="space-y-3 rounded-xl border border-line bg-bg-elevated p-3">
+            <div className="grid gap-3 md:grid-cols-[160px_1fr]">
+              <div>
+                <Label>Year</Label>
+                <Input
+                  type="number"
+                  min={2000}
+                  max={2200}
+                  value={resolution.year}
+                  onChange={(e) =>
+                    onUpdate({
+                      ...resolution,
+                      year: Number(e.target.value) || resolution.year
+                    })
+                  }
+                />
+              </div>
+              <div>
+                <Label>Title (optional)</Label>
+                <Input
+                  value={resolution.title ?? ""}
+                  onChange={(e) => updateTitle(e.target.value)}
+                  placeholder={`${resolution.year} Resolutions`}
+                />
+              </div>
+            </div>
+            <div className="text-[11px] text-fg-subtle">
+              Toggle the labels above and pick a background — your changes save
+              automatically and the card preview updates in real time.
+            </div>
+          </div>
+        )}
 
         <div ref={cardRef} className="overflow-y-auto">
           <ResolutionCard resolution={resolution} orientation={orientation} />

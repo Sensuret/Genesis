@@ -103,7 +103,9 @@ export function EquityCurveChart({
             fill="url(#equity-fill)"
             strokeWidth={2}
             name={`Equity (${currency})`}
-            isAnimationActive={false}
+            isAnimationActive={true}
+            animationDuration={900}
+            animationEasing="ease-out"
           />
         </AreaChart>
       </ResponsiveContainer>

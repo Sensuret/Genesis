@@ -23,6 +23,89 @@ function newId(): string {
   return `nb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/**
+ * Many sites (YouTube watch pages, Vimeo, Loom, Twitter, Notion public pages,
+ * Pinterest pins) refuse to load inside an iframe by default — they set
+ * X-Frame-Options or a Content-Security-Policy that the browser silently
+ * blocks. So a raw "paste the URL into an iframe" approach renders blank.
+ *
+ * This helper rewrites known providers to their embeddable URL form so the
+ * embed actually shows. For unknown providers we fall back to the original
+ * URL and rely on the host allowing iframe embedding.
+ */
+type EmbedKind = "iframe" | "image" | "blocked";
+
+function resolveEmbed(rawUrl: string): { kind: EmbedKind; src: string; provider: string } {
+  let u: URL;
+  try {
+    u = new URL(rawUrl);
+  } catch {
+    return { kind: "blocked", src: rawUrl, provider: "unknown" };
+  }
+  const host = u.hostname.toLowerCase().replace(/^www\./, "");
+
+  // YouTube — accept watch?v=, youtu.be/, shorts/, embed/, playlist?list=
+  if (host === "youtube.com" || host === "m.youtube.com" || host === "youtu.be") {
+    let id: string | null = null;
+    if (host === "youtu.be") id = u.pathname.slice(1);
+    else if (u.pathname === "/watch") id = u.searchParams.get("v");
+    else if (u.pathname.startsWith("/shorts/")) id = u.pathname.split("/")[2] ?? null;
+    else if (u.pathname.startsWith("/embed/")) id = u.pathname.split("/")[2] ?? null;
+    const list = u.searchParams.get("list");
+    if (list && !id) {
+      return { kind: "iframe", src: `https://www.youtube.com/embed/videoseries?list=${list}`, provider: "youtube" };
+    }
+    if (id) return { kind: "iframe", src: `https://www.youtube.com/embed/${id}`, provider: "youtube" };
+  }
+
+  // Vimeo
+  if (host === "vimeo.com" || host === "player.vimeo.com") {
+    const id = u.pathname.match(/(\d{4,})/)?.[1];
+    if (id) return { kind: "iframe", src: `https://player.vimeo.com/video/${id}`, provider: "vimeo" };
+  }
+
+  // Loom
+  if (host === "loom.com" || host === "www.loom.com") {
+    const m = u.pathname.match(/\/share\/([a-z0-9]+)/i);
+    if (m) return { kind: "iframe", src: `https://www.loom.com/embed/${m[1]}`, provider: "loom" };
+  }
+
+  // Twitter / X — render via the Twitter embed iframe
+  if (host === "twitter.com" || host === "x.com") {
+    const m = u.pathname.match(/\/status\/(\d+)/);
+    if (m) {
+      return {
+        kind: "iframe",
+        src: `https://platform.twitter.com/embed/Tweet.html?id=${m[1]}&theme=dark`,
+        provider: "twitter"
+      };
+    }
+  }
+
+  // Direct image links (Pinterest pins resolve to a page that *contains* an
+  // image; we can only inline the page itself which Pinterest blocks. So if
+  // the URL ends with an image extension, render as <img>.)
+  if (/\.(png|jpe?g|gif|webp|svg|avif)(\?|$)/i.test(u.pathname)) {
+    return { kind: "image", src: u.toString(), provider: "image" };
+  }
+
+  // Notion public pages refuse iframe; mark blocked so we can show a
+  // helpful "Open in new tab" fallback rather than a blank rectangle.
+  if (host.endsWith("notion.so") || host.endsWith("notion.site")) {
+    return { kind: "blocked", src: u.toString(), provider: "notion" };
+  }
+
+  // Pinterest pin pages also refuse iframe.
+  if (host.endsWith("pinterest.com") || host.endsWith("pin.it")) {
+    return { kind: "blocked", src: u.toString(), provider: "pinterest" };
+  }
+
+  // Default: try iframing the URL as-is. If the host allows it, it'll
+  // render; if not, the iframe stays blank and the user can use the
+  // "Open in new tab" button we always show next to the embed bar.
+  return { kind: "iframe", src: u.toString(), provider: host };
+}
+
 function isJsonObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
@@ -273,7 +356,7 @@ export default function NotebookPage() {
         </CardHeader>
         <CardBody className="space-y-4">
           {adderOpen && (
-            <div className="grid gap-3 rounded-xl border border-line bg-bg-soft/40 p-4 sm:grid-cols-[1fr_2fr_auto] sm:items-end">
+            <div className="grid gap-3 rounded-xl border border-line bg-bg-soft/40 p-4 sm:grid-cols-[1fr_2fr_auto_auto] sm:items-end">
               <div>
                 <Label>Label</Label>
                 <Input
@@ -287,11 +370,21 @@ export default function NotebookPage() {
                 <Input
                   value={newUrl}
                   onChange={(e) => setNewUrl(e.target.value)}
-                  placeholder="https://www.notion.so/your-shared-page"
+                  placeholder="YouTube / Vimeo / Loom / direct image URL — most public pages"
                 />
               </div>
               <Button onClick={addEmbed} disabled={!newLabel.trim() || !newUrl.trim()}>
                 Save
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setAdderOpen(false);
+                  setNewLabel("");
+                  setNewUrl("");
+                }}
+              >
+                <X className="h-4 w-4" /> Cancel
               </Button>
             </div>
           )}
@@ -333,15 +426,74 @@ export default function NotebookPage() {
             </div>
           )}
 
-          {active && (
-            <div className="overflow-hidden rounded-xl border border-line bg-white">
-              <iframe
-                src={active.url}
-                title={active.label}
-                className="h-[calc(100vh-360px)] w-full"
-              />
-            </div>
-          )}
+          {active && (() => {
+            const resolved = resolveEmbed(active.url);
+            return (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between rounded-xl border border-line bg-bg-soft/40 px-3 py-2 text-xs">
+                  <div className="flex min-w-0 items-center gap-2 text-fg-muted">
+                    <span className="truncate font-medium text-fg">{active.label}</span>
+                    <span className="rounded bg-bg-elevated px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-fg-subtle">
+                      {resolved.provider}
+                    </span>
+                  </div>
+                  <a
+                    href={active.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-brand-300 hover:text-brand-200"
+                  >
+                    Open in new tab <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+                {resolved.kind === "iframe" && (
+                  <div className="overflow-hidden rounded-xl border border-line bg-black">
+                    <iframe
+                      src={resolved.src}
+                      title={active.label}
+                      className="h-[calc(100vh-380px)] w-full"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                      allowFullScreen
+                      referrerPolicy="strict-origin-when-cross-origin"
+                    />
+                  </div>
+                )}
+                {resolved.kind === "image" && (
+                  <div className="overflow-hidden rounded-xl border border-line bg-bg-elevated">
+                    <img
+                      src={resolved.src}
+                      alt={active.label}
+                      className="mx-auto max-h-[calc(100vh-380px)] w-auto object-contain"
+                    />
+                  </div>
+                )}
+                {resolved.kind === "blocked" && (
+                  <div className="rounded-xl border border-amber-400/30 bg-amber-500/5 p-6 text-center text-sm">
+                    <div className="font-medium text-fg">
+                      {resolved.provider === "notion"
+                        ? "Notion pages can't be embedded directly."
+                        : resolved.provider === "pinterest"
+                        ? "Pinterest pins can't be embedded directly."
+                        : "This page refuses to load inside an iframe."}
+                    </div>
+                    <div className="mt-1 text-xs text-fg-muted">
+                      {resolved.provider === "pinterest"
+                        ? "Right-click the pin → 'Copy image address', save the embed with that direct image URL, and it'll show inline here."
+                        : "Most modern sites block iframe embedding for security. Use the link below to open it in a new tab, or paste a direct image / video URL instead."}
+                    </div>
+                    <a
+                      href={active.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-3 inline-flex items-center gap-1 rounded-lg border border-line bg-bg-elevated px-3 py-1.5 text-xs text-brand-300 hover:border-brand-400"
+                    >
+                      Open <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </CardBody>
       </Card>
 

@@ -534,7 +534,9 @@ export function ReportsDetailed({
                           stroke={curve.total >= 0 ? "#22c55e" : "#ef4444"}
                           strokeWidth={2}
                           dot={false}
-                          isAnimationActive={false}
+                          isAnimationActive={true}
+                          animationDuration={700}
+                          animationEasing="ease-out"
                         />
                         <Tooltip
                           cursor={{ stroke: "#ffffff20" }}
