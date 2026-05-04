@@ -75,7 +75,9 @@ export function ResolutionCard({
   const isLandscape = orientation === "landscape";
   const bg = resolveBackgroundCss(resolution.background);
   const showYearLabel = resolution.show_year_label !== false;
-  const showGenesisLogo = resolution.show_genesis_logo !== false;
+  // The Genesis brand mark is always rendered on Resolution cards —
+  // historic rows that explicitly stored `show_genesis_logo: false` are
+  // overridden so the brand stays consistent across the app.
 
   // When a custom background is applied we want to anchor text colour to a
   // tone that always reads against the chosen colour. "light" → soft white
@@ -250,24 +252,26 @@ export function ResolutionCard({
         Finish strong
       </div>
 
-      {/* Genesis brand mark — toggleable per resolution. */}
-      {showGenesisLogo && (
-        <div
-          aria-hidden
-          className="pointer-events-none absolute bottom-3 right-3 inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.18em]"
-          style={
-            bg
-              ? {
-                  color: onLight ? "rgb(15 23 42 / 0.7)" : "rgba(255,255,255,0.78)",
-                  borderColor: onLight ? "rgb(15 23 42 / 0.2)" : "rgba(255,255,255,0.25)",
-                  background: onLight ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.18)"
-                }
-              : undefined
-          }
-        >
-          <span className={!bg ? "text-fg-muted" : undefined}>Genesis</span>
-        </div>
-      )}
+      {/* Genesis brand mark — always rendered. The `Ǝ` (U+018E) glyphs
+          mirror the regular E so the mark reads as the actual Genesis
+          word-mark used elsewhere in the app. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute bottom-3 right-3 inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.18em]"
+        style={
+          bg
+            ? {
+                color: onLight ? "rgb(15 23 42 / 0.7)" : "rgba(255,255,255,0.78)",
+                borderColor: onLight ? "rgb(15 23 42 / 0.2)" : "rgba(255,255,255,0.25)",
+                background: onLight ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.18)"
+              }
+            : undefined
+        }
+      >
+        <span className={!bg ? "text-fg-muted" : undefined} aria-label="Genesis">
+          GƎNƎSIS
+        </span>
+      </div>
     </div>
   );
 }

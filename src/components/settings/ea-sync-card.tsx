@@ -1,0 +1,352 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { Check, Copy, Eye, EyeOff, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input, Label } from "@/components/ui/input";
+import { useTrades } from "@/lib/hooks/use-trades";
+import { createClient } from "@/lib/supabase/client";
+import type { GenesisApiKeyRow, TradeFileRow } from "@/lib/supabase/types";
+import { shortDate, cn } from "@/lib/utils";
+
+/**
+ * MT4 / MT5 Expert Advisor key issuance + connected-terminal list.
+ * Lives under Settings → Accounts → Automatically Synced Accounts. The
+ * plaintext key is shown ONCE on creation; only its SHA-256 hash is
+ * persisted via the `generate_genesis_api_key` SECURITY DEFINER RPC.
+ */
+export function EaSyncCard({ supabaseUrl }: { supabaseUrl: string }) {
+  const { files } = useTrades();
+  const [keys, setKeys] = useState<GenesisApiKeyRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [label, setLabel] = useState("Genesis EA key");
+  const [creating, setCreating] = useState(false);
+  const [revealedKey, setRevealedKey] = useState<{ id: string; plaintext: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  // EA-synced trade_files come back from the global useTrades() hook so the
+  // top-bar Accounts picker stays the source of truth — we just filter to
+  // the EA rows for display here.
+  const eaFiles = useMemo<TradeFileRow[]>(
+    () => files.filter((f) => f.sync_kind === "ea"),
+    [files]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const supabase = createClient();
+      const { data, error: err } = await supabase
+        .from("genesis_api_keys")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (cancelled) return;
+      if (err) setError(err.message);
+      setKeys((data ?? []) as GenesisApiKeyRow[]);
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function generate() {
+    setCreating(true);
+    setError(null);
+    try {
+      const supabase = createClient();
+      const { data, error: err } = await supabase.rpc("generate_genesis_api_key", {
+        p_label: label.trim() || "Genesis EA key"
+      });
+      if (err) throw err;
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row?.plaintext) throw new Error("No key returned");
+      setRevealedKey({ id: row.id, plaintext: row.plaintext });
+      // Refresh the listing.
+      const { data: refreshed } = await supabase
+        .from("genesis_api_keys")
+        .select("*")
+        .order("created_at", { ascending: false });
+      setKeys((refreshed ?? []) as GenesisApiKeyRow[]);
+      setCreateOpen(false);
+      setLabel("Genesis EA key");
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function revoke(id: string) {
+    setError(null);
+    const supabase = createClient();
+    const { error: err } = await supabase
+      .from("genesis_api_keys")
+      .update({ revoked_at: new Date().toISOString() })
+      .eq("id", id);
+    if (err) {
+      setError(err.message);
+      return;
+    }
+    setKeys((prev) =>
+      prev.map((k) => (k.id === id ? { ...k, revoked_at: new Date().toISOString() } : k))
+    );
+  }
+
+  async function remove(id: string) {
+    setError(null);
+    const supabase = createClient();
+    const { error: err } = await supabase.from("genesis_api_keys").delete().eq("id", id);
+    if (err) {
+      setError(err.message);
+      return;
+    }
+    setKeys((prev) => prev.filter((k) => k.id !== id));
+  }
+
+  function copy(value: string, marker: string) {
+    void navigator.clipboard.writeText(value);
+    setCopied(marker);
+    setTimeout(() => setCopied((c) => (c === marker ? null : c)), 1500);
+  }
+
+  const endpoint = supabaseUrl
+    ? `${supabaseUrl.replace(/\/+$/, "")}/functions/v1/receive-trade`
+    : "https://YOUR-PROJECT-REF.supabase.co/functions/v1/receive-trade";
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>MT4 / MT5 Expert Advisor</CardTitle>
+          <Button
+            size="sm"
+            onClick={() => setCreateOpen((o) => !o)}
+            className="gap-1.5"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            New API key
+          </Button>
+        </CardHeader>
+        <CardBody className="space-y-4 text-xs text-fg-muted">
+          <p>
+            Drop the Genesis EA on a chart in any MetaTrader 4 / 5 terminal and trades stream
+            into this account in real time. The same EA works for any broker (HFM, JustMarkets,
+            XM, Exness, IC Markets, Capital Markets, etc.) and any account — your API key
+            identifies you.
+          </p>
+
+          <div className="rounded-xl border border-line bg-bg-soft/50 p-3 text-[11px]">
+            <div className="font-semibold uppercase tracking-wide text-fg-muted">EA inputs</div>
+            <dl className="mt-2 grid gap-1.5 sm:grid-cols-[140px_1fr]">
+              <dt className="text-fg-subtle">SupabaseUrl</dt>
+              <dd className="flex items-center gap-1.5">
+                <code className="truncate rounded bg-bg-elevated px-1.5 py-0.5">
+                  {supabaseUrl || "https://YOUR-PROJECT-REF.supabase.co"}
+                </code>
+                {supabaseUrl && (
+                  <button
+                    type="button"
+                    onClick={() => copy(supabaseUrl, "url")}
+                    className="rounded p-1 hover:bg-bg-elevated"
+                  >
+                    {copied === "url" ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                  </button>
+                )}
+              </dd>
+              <dt className="text-fg-subtle">Endpoint</dt>
+              <dd className="flex items-center gap-1.5">
+                <code className="truncate rounded bg-bg-elevated px-1.5 py-0.5">{endpoint}</code>
+                <button
+                  type="button"
+                  onClick={() => copy(endpoint, "endpoint")}
+                  className="rounded p-1 hover:bg-bg-elevated"
+                >
+                  {copied === "endpoint" ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                </button>
+              </dd>
+              <dt className="text-fg-subtle">GenesisApiKey</dt>
+              <dd>Generate below — the EA only needs one key, even for multiple accounts.</dd>
+            </dl>
+            <div className="mt-3 text-[11px] text-fg-subtle">
+              Whitelist the Supabase URL in MetaTrader → Tools → Options → Expert Advisors →
+              "Allow WebRequest for listed URL" before attaching the EA.
+            </div>
+          </div>
+
+          {createOpen && (
+            <div className="space-y-3 rounded-xl border border-line bg-bg-soft/40 p-3">
+              <Label className="text-[11px]">Key label (only you see this)</Label>
+              <Input
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                placeholder="e.g. Oracle VPS · HFM Live"
+              />
+              <div className="flex items-center gap-2">
+                <Button onClick={generate} disabled={creating} className="gap-1.5">
+                  {creating ? "Generating…" : "Generate API key"}
+                </Button>
+                <Button variant="ghost" onClick={() => setCreateOpen(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {revealedKey && (
+            <div className="space-y-2 rounded-xl border border-amber-300/40 bg-amber-50/10 p-3">
+              <div className="flex items-center gap-2 text-[11px] font-semibold text-amber-300">
+                <Eye className="h-3.5 w-3.5" /> Copy this key now — it won't be shown again
+              </div>
+              <div className="flex items-center gap-2">
+                <code className="min-w-0 flex-1 truncate rounded bg-bg-elevated px-2 py-1 text-xs">
+                  {revealedKey.plaintext}
+                </code>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => copy(revealedKey.plaintext, "new-key")}
+                >
+                  {copied === "new-key" ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setRevealedKey(null)}>
+                  <EyeOff className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {error && <div className="text-[11px] text-red-400">{error}</div>}
+
+          <div>
+            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-fg-muted">
+              API keys
+            </div>
+            {loading ? (
+              <div className="text-[11px] text-fg-subtle">Loading…</div>
+            ) : keys.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-line p-3 text-[11px] text-fg-subtle">
+                No keys yet. Generate one above and paste it into the EA's `GenesisApiKey`
+                input.
+              </div>
+            ) : (
+              <ul className="space-y-1.5">
+                {keys.map((k) => (
+                  <li
+                    key={k.id}
+                    className={cn(
+                      "flex items-center gap-2 rounded-lg border border-line bg-bg-soft/40 px-3 py-2",
+                      k.revoked_at && "opacity-60"
+                    )}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 text-xs font-medium text-fg">
+                        {k.label}
+                        {k.revoked_at && (
+                          <span className="rounded bg-red-500/15 px-1.5 py-0.5 text-[10px] text-red-300">
+                            revoked
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-0.5 text-[10.5px] text-fg-subtle">
+                        {k.key_prefix}…{" · "}
+                        created {shortDate(k.created_at)}
+                        {k.last_used_at ? ` · last used ${shortDate(k.last_used_at)}` : " · never used"}
+                      </div>
+                    </div>
+                    {!k.revoked_at && (
+                      <Button size="sm" variant="ghost" onClick={() => revoke(k.id)}>
+                        Revoke
+                      </Button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => remove(k.id)}
+                      className="rounded p-1 text-fg-muted hover:bg-bg-elevated hover:text-red-400"
+                      aria-label="Delete key"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Connected terminals</CardTitle>
+        </CardHeader>
+        <CardBody className="space-y-2 text-xs text-fg-muted">
+          {eaFiles.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-line p-3 text-[11px] text-fg-subtle">
+              No EA-connected accounts yet. Once your terminal sends its first trade the
+              account appears here and in the top-bar Accounts picker.
+            </div>
+          ) : (
+            <ul className="space-y-1.5">
+              {eaFiles.map((f) => (
+                <li
+                  key={f.id}
+                  className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-line bg-bg-soft/40 px-3 py-2"
+                >
+                  <RefreshCw className="h-3.5 w-3.5 text-emerald-400" />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-medium text-fg">
+                      {f.account_name || f.name}
+                    </div>
+                    <div className="text-[10.5px] text-fg-subtle">
+                      {[f.broker, f.platform, f.account_number && `#${f.account_number}`, f.server]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </div>
+                  </div>
+                  <div className="text-[10.5px] text-fg-subtle">
+                    {f.trade_count} trades
+                    {f.last_synced_at ? ` · synced ${shortDate(f.last_synced_at)}` : ""}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>EA install — quick start</CardTitle>
+        </CardHeader>
+        <CardBody className="space-y-3 text-xs text-fg-muted">
+          <ol className="list-decimal space-y-1.5 pl-4">
+            <li>Generate an API key above and copy it.</li>
+            <li>
+              Open MetaTrader → <span className="font-medium">Tools → Options → Expert Advisors</span>
+              {" "}→ tick "Allow WebRequest for listed URL" → add the Supabase URL shown above.
+            </li>
+            <li>
+              Drop{" "}
+              <code className="rounded bg-bg-elevated px-1 py-0.5">GenesisSync.mq4</code> (MT4) or{" "}
+              <code className="rounded bg-bg-elevated px-1 py-0.5">GenesisSync.mq5</code> (MT5)
+              into the terminal's <code>Experts/</code> folder, compile, drag onto any chart.
+            </li>
+            <li>
+              In the EA inputs paste the Supabase URL and your API key. Set an optional friendly
+              label and OK out — trades start flowing within seconds.
+            </li>
+          </ol>
+          <p className="text-[11px] text-fg-subtle">
+            For an always-on capture (so phone trades sync at 3am) run the terminal on Oracle
+            Cloud's free Windows VPS — see{" "}
+            <code className="rounded bg-bg-elevated px-1 py-0.5">integrations/mt-ea/README.md</code>{" "}
+            in the repo for the full step-by-step.
+          </p>
+        </CardBody>
+      </Card>
+    </div>
+  );
+}
