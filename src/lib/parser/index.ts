@@ -453,12 +453,98 @@ export async function parseXlsx(
   return { rows, headers: rawHeaders, matrix };
 }
 
+/**
+ * Scan an MT5 Trade Report matrix for footer metadata. The footer lives
+ * after the Deals section and looks like:
+ *   Balance:        173.95
+ *   Credit Facility: 0
+ *   Floating P/L:    0
+ *   Equity:          173.95
+ *   Margin:          ...
+ * Deposits / Withdrawals are detected inside the Deals section as rows
+ * with type=="balance" and a Comment of "Deposit" / "Withdrawal".
+ */
+function extractMt5AccountInfo(matrix: unknown[][]): AccountInfo {
+  let balance: number | null = null;
+  let equity: number | null = null;
+  let depositsTotal = 0;
+  let depositsCount = 0;
+  let withdrawalsTotal = 0;
+  let withdrawalsCount = 0;
+  let inDealsSection = false;
+
+  for (const row of matrix) {
+    if (!Array.isArray(row)) continue;
+    const first = row[0];
+    if (typeof first === "string") {
+      const s = first.trim();
+      if (s === "Deals") { inDealsSection = true; continue; }
+      if (s === "Results" || s === "Working") { inDealsSection = false; continue; }
+      // Footer key/value rows: label is in col 0, numeric value usually in col 3.
+      if (s === "Balance:") {
+        balance = toNumber(row[3]) ?? toNumber(row[2]) ?? toNumber(row[1]) ?? balance;
+        continue;
+      }
+      if (s === "Equity:") {
+        equity = toNumber(row[3]) ?? toNumber(row[2]) ?? toNumber(row[1]) ?? equity;
+        continue;
+      }
+    }
+    // Inside the Deals section: type column is col 3, comment is col 13,
+    // and the deposit/withdrawal value is col 12 (Profit) or col 11 (Profit
+    // depending on the column count). Both formats keep the *signed* amount
+    // in the same column as Profit.
+    if (inDealsSection && typeof row[3] === "string" && String(row[3]).trim().toLowerCase() === "balance") {
+      const comment = String(row[13] ?? "").trim().toLowerCase();
+      // Profit/value column: 11 in some templates, 12 in others. Pick the
+      // first non-zero numeric of the two.
+      const v11 = toNumber(row[11]);
+      const v12 = toNumber(row[12]);
+      const value = (v11 != null && v11 !== 0) ? v11 : (v12 ?? 0);
+      if (value > 0 || comment.includes("deposit")) {
+        depositsTotal += Math.abs(value);
+        depositsCount += 1;
+      } else if (value < 0 || comment.includes("withdraw")) {
+        withdrawalsTotal += Math.abs(value);
+        withdrawalsCount += 1;
+      }
+    }
+  }
+
+  return {
+    balance,
+    equity,
+    deposits_total: depositsCount > 0 ? depositsTotal : null,
+    withdrawals_total: withdrawalsCount > 0 ? withdrawalsTotal : null,
+    deposits_count: depositsCount,
+    withdrawals_count: withdrawalsCount
+  };
+}
+
+export type AccountInfo = {
+  /** Closing balance reported in the file footer. */
+  balance: number | null;
+  /** Closing equity reported in the file footer. */
+  equity: number | null;
+  /** Sum of every "balance / Deposit" entry in the Deals section. */
+  deposits_total: number | null;
+  /** Sum of every "balance / Withdrawal" (negative) entry in the Deals section. */
+  withdrawals_total: number | null;
+  /** Number of deposit transactions detected. */
+  deposits_count: number;
+  /** Number of withdrawal transactions detected. */
+  withdrawals_count: number;
+};
+
 export type ParseResult = {
   trades: ParsedTrade[];
   headers: string[];
   mapping: Partial<Record<FieldKey, string>>;
   raw: Record<string, unknown>[];
   format: "metatrader" | "hfm" | "generic";
+  /** Optional account-level metadata (MT5 Trade Report includes a footer
+   *  with Balance / Equity / Deposit history; HFM does not). */
+  accountInfo?: AccountInfo;
 };
 
 /**
@@ -570,10 +656,46 @@ export async function parseFile(file: File): Promise<ParseResult> {
     ext === "xlsx" || ext === "xls" ? await parseXlsx(file) : await parseCsv(file);
 
   if (isMetaTraderHeader(headers)) {
-    const trades = matrix
-      .slice(1)
-      .filter((r) => Array.isArray(r) && r.some((c) => c !== "" && c != null))
-      .map((r) => metaTraderRowToTrade(r as unknown[]));
+    // The MT5 ReportHistory export is a single sheet with THREE stacked
+    // sections — Positions, Orders, Deals — each preceded by its own
+    // section title row and header row. Only the Positions section
+    // represents real trades; rows from Orders / Deals would otherwise
+    // duplicate every trade 3-4× (each fill / cancel becomes a "trade").
+    //
+    // We slice rows 1..N where N is the index of the next non-data row
+    // (a section title like "Orders", a duplicate header, or a row
+    // whose first cell is a non-date string). The footer (rows after
+    // the last data row) is then scanned for Balance / Equity / Deposit
+    // / Withdrawal metadata.
+    const dataRows: unknown[][] = [];
+    let i = 1;
+    for (; i < matrix.length; i++) {
+      const r = matrix[i];
+      if (!Array.isArray(r)) break;
+      const allEmpty = r.every((c) => c === "" || c == null);
+      if (allEmpty) continue;
+      const first = r[0];
+      // Stop the moment we hit a section title or a duplicate header row.
+      if (typeof first === "string") {
+        const s = first.trim();
+        if (s === "Orders" || s === "Deals" || s === "Working" || s === "Results" ||
+            s === "Open Time" || s === "Time" || /^[A-Za-z][A-Za-z ]+:$/.test(s)) {
+          break;
+        }
+      }
+      // Stop if first cell isn't a parsable date — Positions rows always start
+      // with the open timestamp.
+      if (toDateObject(first) == null) break;
+      dataRows.push(r as unknown[]);
+    }
+    const trades = dataRows.map((r) => metaTraderRowToTrade(r));
+
+    // Footer scan — look for "Balance:", "Equity:" rows (label in col 0,
+    // value usually in col 3) and Deposit / Withdrawal entries inside the
+    // Deals section (a "balance" type row with a "Deposit" or "Withdrawal"
+    // comment).
+    const accountInfo = extractMt5AccountInfo(matrix);
+
     const mapping: Partial<Record<FieldKey, string>> = {
       trade_date: "Time",
       pair: "Symbol",
@@ -587,7 +709,7 @@ export async function parseFile(file: File): Promise<ParseResult> {
       spread: "Swap",
       pnl: "Profit"
     };
-    return { trades, headers, mapping, raw: rows, format: "metatrader" };
+    return { trades, headers, mapping, raw: rows, format: "metatrader", accountInfo };
   }
 
   if (isHfmHeader(headers)) {

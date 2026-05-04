@@ -106,8 +106,17 @@ export function TradeLogTable({
     }
   }, [trades.length, pageSize]);
 
-  const visible = pageSize == null ? trades : trades.slice(0, limit);
-  const hidden = trades.length - visible.length;
+  // Display order = latest → oldest, matching how the broker terminal lists
+  // them. We sort by open_time (or trade_date as fallback) descending. The
+  // sort is stable so trades that share a timestamp keep their original
+  // import order.
+  const sorted = [...trades].sort((a, b) => {
+    const ta = new Date(a.open_time ?? a.trade_date ?? 0).getTime();
+    const tb = new Date(b.open_time ?? b.trade_date ?? 0).getTime();
+    return tb - ta;
+  });
+  const visible = pageSize == null ? sorted : sorted.slice(0, limit);
+  const hidden = sorted.length - visible.length;
 
   return (
     <div className={cn("overflow-x-auto", className)}>
@@ -124,6 +133,7 @@ export function TradeLogTable({
             <th className="px-3 py-3 font-medium text-right">Lot</th>
             <th className="px-3 py-3 font-medium text-right">R:R</th>
             <th className="px-3 py-3 font-medium text-right">Pips</th>
+            <th className="px-3 py-3 font-medium text-right">Change %</th>
             <th className="px-3 py-3 font-medium text-right">Duration</th>
             <th className="px-3 py-3 font-medium text-right">Net P&amp;L</th>
             <th className="px-3 py-3 font-medium text-right">Net ROI</th>
@@ -140,6 +150,15 @@ export function TradeLogTable({
             const pips =
               t.pips ??
               computePips({ pair: t.pair, entry: t.entry, exit_price: t.exit_price, side: t.side });
+            // Change % = signed price move relative to entry, in the
+            // direction of the trade. Long: (exit-entry)/entry * 100;
+            // Short: (entry-exit)/entry * 100. Independent of the broker's
+            // pip multiplier so it works the same for FX, indices, metals.
+            const changePct = (() => {
+              if (t.entry == null || t.exit_price == null || t.entry === 0) return null;
+              const raw = ((t.exit_price - t.entry) / t.entry) * 100;
+              return t.side === "short" ? -raw : raw;
+            })();
             return (
               <tr
                 key={t.id}
@@ -174,21 +193,30 @@ export function TradeLogTable({
                 <td className="px-3 py-2.5 text-right tabular-nums">
                   {rr === null ? <span className="text-fg-muted">—</span> : `1:${rr.toFixed(2)}`}
                 </td>
+                {/* Pips: neutral colour. Direction of the price move is
+                    already encoded in the sign of the number, so colouring
+                    the cell green/red duplicates information that's better
+                    served by the Net P&L and Change % columns. */}
+                <td className="px-3 py-2.5 text-right tabular-nums text-fg">
+                  {pips == null
+                    ? <span className="text-fg-muted">—</span>
+                    : `${pips > 0 ? "+" : ""}${pips.toFixed(1)}`}
+                </td>
                 <td
                   className={cn(
                     "px-3 py-2.5 text-right tabular-nums",
-                    pips == null
+                    changePct == null
                       ? "text-fg-muted"
-                      : pips > 0
+                      : changePct > 0
                         ? "text-success"
-                        : pips < 0
+                        : changePct < 0
                           ? "text-danger"
                           : "text-fg-muted"
                   )}
                 >
-                  {pips == null
+                  {changePct == null
                     ? "—"
-                    : `${pips > 0 ? "+" : ""}${pips.toFixed(1)}`}
+                    : `${changePct > 0 ? "+" : ""}${changePct.toFixed(2)}%`}
                 </td>
                 <td className="px-3 py-2.5 text-right tabular-nums text-fg-muted">
                   {formatDuration(t.duration_seconds)}
