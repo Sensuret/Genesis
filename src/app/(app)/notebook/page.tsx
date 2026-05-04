@@ -82,6 +82,19 @@ function resolveEmbed(rawUrl: string): { kind: EmbedKind; src: string; provider:
     }
   }
 
+  // TradingView — only the publish-to-web snapshot URLs (/x/<id>/) and
+  // the symbol-overview embed widgets allow iframing. Chart pages and
+  // ideas don't, so they fall through to the blocked branch below.
+  if (host === "tradingview.com" || host.endsWith(".tradingview.com")) {
+    if (/^\/x\/[a-zA-Z0-9]+/.test(u.pathname)) {
+      return { kind: "iframe", src: u.toString(), provider: "tradingview" };
+    }
+    if (host.startsWith("s.") || u.pathname.startsWith("/embed-widget/")) {
+      return { kind: "iframe", src: u.toString(), provider: "tradingview" };
+    }
+    return { kind: "blocked", src: u.toString(), provider: "tradingview" };
+  }
+
   // Direct image links (Pinterest pins resolve to a page that *contains* an
   // image; we can only inline the page itself which Pinterest blocks. So if
   // the URL ends with an image extension, render as <img>.)
@@ -153,6 +166,14 @@ function readSettings(data: unknown): UserSettingsData {
 
 type TopTab = "general" | "resolutions";
 
+const MAX_EMBEDS = 5;
+
+type DraftEmbed = { id: string; label: string; url: string };
+
+function blankDraft(): DraftEmbed {
+  return { id: newId(), label: "", url: "" };
+}
+
 export default function NotebookPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [embeds, setEmbeds] = useState<NotebookEmbed[]>([]);
@@ -167,8 +188,7 @@ export default function NotebookPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [adderOpen, setAdderOpen] = useState(false);
-  const [newLabel, setNewLabel] = useState("");
-  const [newUrl, setNewUrl] = useState("");
+  const [drafts, setDrafts] = useState<DraftEmbed[]>(() => [blankDraft()]);
   const [tab, setTab] = useState<TopTab>("general");
 
   useEffect(() => {
@@ -218,18 +238,40 @@ export default function NotebookPage() {
     if (err) setError(err.message);
   }
 
-  async function addEmbed() {
-    if (!newLabel.trim() || !newUrl.trim()) return;
-    let url = newUrl.trim();
-    if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
-    const e: NotebookEmbed = { id: newId(), label: newLabel.trim(), url };
-    const next = [...embeds, e];
+  function updateDraft(id: string, patch: Partial<DraftEmbed>) {
+    setDrafts((prev) => prev.map((d) => (d.id === id ? { ...d, ...patch } : d)));
+  }
+
+  function addDraftRow() {
+    setDrafts((prev) =>
+      prev.length + embeds.length >= MAX_EMBEDS ? prev : [...prev, blankDraft()]
+    );
+  }
+
+  function removeDraftRow(id: string) {
+    setDrafts((prev) => (prev.length === 1 ? [blankDraft()] : prev.filter((d) => d.id !== id)));
+  }
+
+  async function saveDrafts() {
+    const valid = drafts
+      .map((d) => ({ id: d.id, label: d.label.trim(), url: d.url.trim() }))
+      .filter((d) => d.label && d.url);
+    if (!valid.length) return;
+    const remaining = MAX_EMBEDS - embeds.length;
+    const accepted = valid.slice(0, Math.max(0, remaining));
+    if (!accepted.length) return;
+    const newEntries: NotebookEmbed[] = accepted.map((d) => {
+      let url = d.url;
+      if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
+      return { id: newId(), label: d.label, url };
+    });
+    const next = [...embeds, ...newEntries];
     setEmbeds(next);
-    setActiveId(e.id);
-    setNewLabel("");
-    setNewUrl("");
+    const newActive = newEntries[0]!.id;
+    setActiveId(newActive);
+    setDrafts([blankDraft()]);
     setAdderOpen(false);
-    await persist({ notebook_embeds: next, notebook_active_id: e.id });
+    await persist({ notebook_embeds: next, notebook_active_id: newActive });
   }
 
   async function removeEmbed(id: string) {
@@ -271,7 +313,6 @@ export default function NotebookPage() {
   }
 
   async function deleteNote(id: string) {
-    if (!confirm("Delete this note?")) return;
     const nextNotes = notes.filter((n) => n.id !== id);
     setNotes(nextNotes);
     if (openNote?.id === id) setOpenNote(null);
@@ -349,43 +390,91 @@ export default function NotebookPage() {
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Embeds</CardTitle>
-          <Button variant="secondary" onClick={() => setAdderOpen((o) => !o)}>
+          <CardTitle>
+            Embeds
+            <span className="ml-2 text-[11px] font-normal text-fg-subtle">
+              {embeds.length}/{MAX_EMBEDS}
+            </span>
+          </CardTitle>
+          <Button
+            variant="secondary"
+            onClick={() => setAdderOpen((o) => !o)}
+            disabled={embeds.length >= MAX_EMBEDS}
+          >
             <Plus className="h-4 w-4" /> Add embed
           </Button>
         </CardHeader>
         <CardBody className="space-y-4">
           {adderOpen && (
-            <div className="grid gap-3 rounded-xl border border-line bg-bg-soft/40 p-4 sm:grid-cols-[1fr_2fr_auto_auto] sm:items-end">
-              <div>
-                <Label>Label</Label>
-                <Input
-                  value={newLabel}
-                  onChange={(e) => setNewLabel(e.target.value)}
-                  placeholder="My Trade Journal"
-                />
+            <div className="space-y-3 rounded-xl border border-line bg-bg-soft/40 p-4">
+              {drafts.map((draft, idx) => {
+                const total = embeds.length + idx;
+                const remaining = MAX_EMBEDS - total;
+                if (remaining <= 0) return null;
+                return (
+                  <div
+                    key={draft.id}
+                    className="grid gap-3 sm:grid-cols-[1fr_2fr_auto] sm:items-end"
+                  >
+                    <div>
+                      <Label>Label</Label>
+                      <Input
+                        value={draft.label}
+                        onChange={(e) => updateDraft(draft.id, { label: e.target.value })}
+                        placeholder="My Trade Journal"
+                      />
+                    </div>
+                    <div>
+                      <Label>URL</Label>
+                      <Input
+                        value={draft.url}
+                        onChange={(e) => updateDraft(draft.id, { url: e.target.value })}
+                        placeholder="YouTube / Vimeo / Loom / Pinterest direct image / TradingView /x/ snapshot"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeDraftRow(draft.id)}
+                      className="inline-flex h-9 w-9 items-center justify-center self-end rounded-xl border border-line bg-bg text-fg-subtle transition hover:border-danger hover:text-danger disabled:opacity-30"
+                      disabled={drafts.length === 1 && !draft.label && !draft.url}
+                      aria-label="Remove row"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                );
+              })}
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                <div className="text-[11px] text-fg-subtle">
+                  {embeds.length + drafts.length >= MAX_EMBEDS
+                    ? `Limit reached (${MAX_EMBEDS}). Delete an existing embed to add more.`
+                    : `Up to ${MAX_EMBEDS} embeds total — add as many rows below as you need.`}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="secondary"
+                    onClick={addDraftRow}
+                    disabled={embeds.length + drafts.length >= MAX_EMBEDS}
+                  >
+                    <Plus className="h-4 w-4" /> Another
+                  </Button>
+                  <Button
+                    onClick={saveDrafts}
+                    disabled={!drafts.some((d) => d.label.trim() && d.url.trim())}
+                  >
+                    Save
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setAdderOpen(false);
+                      setDrafts([blankDraft()]);
+                    }}
+                  >
+                    <X className="h-4 w-4" /> Cancel
+                  </Button>
+                </div>
               </div>
-              <div>
-                <Label>URL</Label>
-                <Input
-                  value={newUrl}
-                  onChange={(e) => setNewUrl(e.target.value)}
-                  placeholder="YouTube / Vimeo / Loom / direct image URL — most public pages"
-                />
-              </div>
-              <Button onClick={addEmbed} disabled={!newLabel.trim() || !newUrl.trim()}>
-                Save
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setAdderOpen(false);
-                  setNewLabel("");
-                  setNewUrl("");
-                }}
-              >
-                <X className="h-4 w-4" /> Cancel
-              </Button>
             </div>
           )}
 
@@ -428,6 +517,7 @@ export default function NotebookPage() {
 
           {active && (() => {
             const resolved = resolveEmbed(active.url);
+            const isVideo = ["youtube", "vimeo", "loom"].includes(resolved.provider);
             return (
               <div className="space-y-2">
                 <div className="flex items-center justify-between rounded-xl border border-line bg-bg-soft/40 px-3 py-2 text-xs">
@@ -446,12 +536,34 @@ export default function NotebookPage() {
                     Open in new tab <ExternalLink className="h-3 w-3" />
                   </a>
                 </div>
-                {resolved.kind === "iframe" && (
+                {resolved.kind === "iframe" && isVideo && (
+                  // Video providers (YouTube / Vimeo / Loom) get a fixed
+                  // 16:9 aspect ratio so the video shows top-to-bottom in
+                  // its natural ratio. Fullscreen toggle is preserved by
+                  // `allowFullScreen`.
+                  <div
+                    className="relative overflow-hidden rounded-xl border border-line bg-black"
+                    style={{ aspectRatio: "16 / 9" }}
+                  >
+                    <iframe
+                      src={resolved.src}
+                      title={active.label}
+                      className="absolute inset-0 h-full w-full"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                      allowFullScreen
+                      referrerPolicy="strict-origin-when-cross-origin"
+                    />
+                  </div>
+                )}
+                {resolved.kind === "iframe" && !isVideo && (
+                  // Documents / TradingView snapshots / generic embeddable
+                  // pages get a tall, scrollable iframe so long content
+                  // (Google Docs, snapshots) is fully readable.
                   <div className="overflow-hidden rounded-xl border border-line bg-black">
                     <iframe
                       src={resolved.src}
                       title={active.label}
-                      className="h-[calc(100vh-380px)] w-full"
+                      className="h-[calc(100vh-300px)] min-h-[480px] w-full"
                       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                       allowFullScreen
                       referrerPolicy="strict-origin-when-cross-origin"
@@ -459,11 +571,15 @@ export default function NotebookPage() {
                   </div>
                 )}
                 {resolved.kind === "image" && (
-                  <div className="overflow-hidden rounded-xl border border-line bg-bg-elevated">
+                  // Direct images sit in a centred container at their
+                  // natural size — `object-contain` keeps them un-zoomed
+                  // so a Pinterest screenshot reads exactly as it does
+                  // on Pinterest.
+                  <div className="flex justify-center overflow-hidden rounded-xl border border-line bg-bg-elevated p-2">
                     <img
                       src={resolved.src}
                       alt={active.label}
-                      className="mx-auto max-h-[calc(100vh-380px)] w-auto object-contain"
+                      className="max-h-[calc(100vh-320px)] w-auto max-w-full object-contain"
                     />
                   </div>
                 )}
@@ -474,11 +590,17 @@ export default function NotebookPage() {
                         ? "Notion pages can't be embedded directly."
                         : resolved.provider === "pinterest"
                         ? "Pinterest pins can't be embedded directly."
+                        : resolved.provider === "tradingview"
+                        ? "TradingView chart pages can't be embedded directly."
                         : "This page refuses to load inside an iframe."}
                     </div>
                     <div className="mt-1 text-xs text-fg-muted">
                       {resolved.provider === "pinterest"
                         ? "Right-click the pin → 'Copy image address', save the embed with that direct image URL, and it'll show inline here."
+                        : resolved.provider === "tradingview"
+                        ? "Use the share menu on a chart → 'Get image link' to publish a snapshot. The snapshot URL (looks like tradingview.com/x/abc123/) embeds inline."
+                        : resolved.provider === "notion"
+                        ? "Notion forces every iframe to fail. Publish the page as a public site, then paste the public URL through a free third-party embed helper (e.g. potion.so / fruitionsite.com) — the resulting URL embeds here."
                         : "Most modern sites block iframe embedding for security. Use the link below to open it in a new tab, or paste a direct image / video URL instead."}
                     </div>
                     <a

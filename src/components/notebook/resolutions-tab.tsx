@@ -107,6 +107,9 @@ export function ResolutionsTab({ resolutions, onChange }: ResolutionsTabProps) {
           emptyDescription="Use the Create tab to define this year's resolutions. They'll appear here once saved."
           onOpen={(id) => setOpenId(id)}
           onDelete={(id) => onChange(resolutions.filter((r) => r.id !== id))}
+          onUpdate={(next) =>
+            onChange(resolutions.map((r) => (r.id === next.id ? next : r)))
+          }
         />
       )}
 
@@ -117,6 +120,9 @@ export function ResolutionsTab({ resolutions, onChange }: ResolutionsTabProps) {
           emptyDescription="Resolutions automatically move here when their year ends."
           onOpen={(id) => setOpenId(id)}
           onDelete={(id) => onChange(resolutions.filter((r) => r.id !== id))}
+          onUpdate={(next) =>
+            onChange(resolutions.map((r) => (r.id === next.id ? next : r)))
+          }
         />
       )}
 
@@ -161,33 +167,87 @@ function ResolutionGrid({
   emptyTitle,
   emptyDescription,
   onOpen,
-  onDelete
+  onDelete,
+  onUpdate
 }: {
   resolutions: Resolution[];
   emptyTitle: string;
   emptyDescription: string;
   onOpen: (id: string) => void;
   onDelete: (id: string) => void;
+  onUpdate: (next: Resolution) => void;
 }) {
   if (!resolutions.length) {
     return <Empty title={emptyTitle} description={emptyDescription} />;
   }
+
+  function toggleItem(
+    r: Resolution,
+    sectionId: string,
+    subId: string,
+    itemId: string,
+    next: boolean
+  ) {
+    onUpdate({
+      ...r,
+      sections: r.sections.map((s) =>
+        s.id !== sectionId
+          ? s
+          : {
+              ...s,
+              subsections: s.subsections.map((ss) =>
+                ss.id !== subId
+                  ? ss
+                  : {
+                      ...ss,
+                      items: ss.items.map((it) =>
+                        it.id === itemId ? { ...it, checked: next } : it
+                      )
+                    }
+              )
+            }
+      )
+    });
+  }
+
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       {resolutions.map((r) => (
         <div key={r.id} className="group relative">
-          <button
-            type="button"
-            onClick={() => onOpen(r.id)}
-            className="block w-full text-left transition hover:scale-[1.01]"
+          {/*
+           * Outer card is no longer a single <button> — that breaks
+           * nested-button semantics for the now-clickable bullet
+           * checkboxes. Click anywhere on the card surface that isn't
+           * a checkbox to open the modal.
+           */}
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={(e) => {
+              if ((e.target as HTMLElement).closest("button[aria-pressed]")) return;
+              onOpen(r.id);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onOpen(r.id);
+              }
+            }}
+            className="block w-full cursor-pointer text-left transition hover:scale-[1.01]"
           >
-            <ResolutionCard resolution={r} variant="preview" />
-          </button>
+            <ResolutionCard
+              resolution={r}
+              variant="preview"
+              onToggleItem={(sectionId, subId, itemId, next) =>
+                toggleItem(r, sectionId, subId, itemId, next)
+              }
+            />
+          </div>
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              if (confirm(`Delete ${r.year} resolutions?`)) onDelete(r.id);
+              onDelete(r.id);
             }}
             className="absolute right-3 top-3 inline-flex h-7 w-7 items-center justify-center rounded-lg border border-line bg-bg/90 text-fg-muted opacity-0 transition group-hover:opacity-100 hover:border-danger hover:text-danger"
             aria-label="Delete"
@@ -230,6 +290,7 @@ function CreateForm({ onSave }: { onSave: (r: Resolution) => void }) {
   const [showYearLabel, setShowYearLabel] = useState(true);
   const [showGenesisLogo, setShowGenesisLogo] = useState(true);
   const [showPreview, setShowPreview] = useState(false);
+  const [bgOpen, setBgOpen] = useState(false);
   const zodiac = chineseZodiacOf(year);
 
   function updateSection(id: string, fn: (s: ResolutionSection) => ResolutionSection) {
@@ -308,10 +369,11 @@ function CreateForm({ onSave }: { onSave: (r: Resolution) => void }) {
                 {
                   id: "ph1-1",
                   label: "Personal account",
-                  target: "$50 → $1000",
+                  target: "$10000 → $100000",
                   items: [
-                    { id: "ph1-i1", text: "Q1: Target $250" },
-                    { id: "ph1-i2", text: "Focus on 9 good trades / month" }
+                    { id: "ph1-i1", text: "Q1: Target $100000" },
+                    { id: "ph1-i2", text: "Monthly target → $35000 / month (3)" },
+                    { id: "ph1-i3", text: "Focus on 10 good trades targeting $1000 / trade" }
                   ]
                 }
               ]
@@ -373,43 +435,64 @@ function CreateForm({ onSave }: { onSave: (r: Resolution) => void }) {
             Year of the <span className="text-fg">{zodiac}</span>
           </div>
 
-          {/* Card decoration controls */}
-          <div className="grid gap-4 rounded-xl border border-line bg-bg-soft/30 p-4 md:grid-cols-[1fr_auto] md:items-start">
-            <div className="space-y-3">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
+          {/* Card decoration controls — foldable so the create form stays
+              compact until the user wants to tweak the look. */}
+          <div className="rounded-xl border border-line bg-bg-soft/30">
+            <div className="flex items-center justify-between gap-3 px-4 py-2.5">
+              <button
+                type="button"
+                onClick={() => setBgOpen((o) => !o)}
+                className="flex flex-1 items-center gap-2 text-left text-[11px] font-semibold uppercase tracking-wide text-fg-subtle hover:text-fg"
+              >
+                {bgOpen ? (
+                  <ChevronDown className="h-3.5 w-3.5" />
+                ) : (
+                  <ChevronRight className="h-3.5 w-3.5" />
+                )}
                 Set background colour
-              </div>
-              <ResolutionBgPicker value={background} onChange={setBackground} />
-              <div className="flex flex-wrap items-center gap-4 pt-2 text-xs text-fg-muted">
-                <label className="inline-flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={showYearLabel}
-                    onChange={(e) => setShowYearLabel(e.target.checked)}
-                    className="h-4 w-4 accent-brand-500"
-                  />
-                  Show "YEAR OF THE {zodiac.toUpperCase()}" label
-                </label>
-                <label className="inline-flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={showGenesisLogo}
-                    onChange={(e) => setShowGenesisLogo(e.target.checked)}
-                    className="h-4 w-4 accent-brand-500"
-                  />
-                  Show Genesis logo
-                </label>
-                <span className="text-[11px] text-fg-subtle">
-                  The {zodiac.toLowerCase()} icon for the year cycle is permanent
-                  and reacts to your selected year.
-                </span>
-              </div>
-            </div>
-            <div className="flex md:justify-end">
+                {!bgOpen && (
+                  <span className="ml-2 rounded-md border border-line bg-bg px-1.5 py-0.5 text-[10px] normal-case tracking-normal text-fg-muted">
+                    {background.kind === "theme"
+                      ? "Default theme"
+                      : background.kind === "solid"
+                      ? `Solid · ${background.color}`
+                      : `Gradient · ${background.preset}`}
+                  </span>
+                )}
+              </button>
               <Button variant="secondary" onClick={() => setShowPreview((p) => !p)}>
                 {showPreview ? "Hide preview" : "Preview"}
               </Button>
             </div>
+            {bgOpen && (
+              <div className="space-y-3 border-t border-line px-4 pb-4 pt-3">
+                <ResolutionBgPicker value={background} onChange={setBackground} />
+                <div className="flex flex-wrap items-center gap-4 pt-2 text-xs text-fg-muted">
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={showYearLabel}
+                      onChange={(e) => setShowYearLabel(e.target.checked)}
+                      className="h-4 w-4 accent-brand-500"
+                    />
+                    Show "YEAR OF THE {zodiac.toUpperCase()}" label
+                  </label>
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={showGenesisLogo}
+                      onChange={(e) => setShowGenesisLogo(e.target.checked)}
+                      className="h-4 w-4 accent-brand-500"
+                    />
+                    Show Genesis logo
+                  </label>
+                  <span className="text-[11px] text-fg-subtle">
+                    The {zodiac.toLowerCase()} icon for the year cycle is permanent
+                    and reacts to your selected year.
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
 
           {showPreview && (
@@ -508,7 +591,7 @@ function SectionEditor({
               <Input
                 value={section.label}
                 onChange={(e) => setField("label", e.target.value)}
-                placeholder="2026 Trading Plan"
+                placeholder="Trading Plan"
               />
             </div>
             <div>
@@ -556,7 +639,7 @@ function SectionEditor({
                     <Input
                       value={sub.target ?? ""}
                       onChange={(e) => updateSub(sub.id, (s) => ({ ...s, target: e.target.value }))}
-                      placeholder="$50 → $1000"
+                      placeholder="$10000 → $100000"
                     />
                   </div>
                   {section.subsections.length > 1 && (
@@ -588,7 +671,7 @@ function SectionEditor({
                       }));
                     }}
                     placeholder={
-                      "Q1: Target $250\nMonthly target → $90 / month (3)\nFocus on 9 good trades targeting $10 / trade"
+                      "Q1: Target $100000\nMonthly target → $35000 / month (3)\nFocus on 10 good trades targeting $1000 / trade"
                     }
                   />
                 </div>
@@ -767,7 +850,32 @@ function ResolutionModal({
         )}
 
         <div ref={cardRef} className="overflow-y-auto">
-          <ResolutionCard resolution={resolution} orientation={orientation} />
+          <ResolutionCard
+            resolution={resolution}
+            orientation={orientation}
+            onToggleItem={(sectionId, subId, itemId, next) =>
+              onUpdate({
+                ...resolution,
+                sections: resolution.sections.map((s) =>
+                  s.id !== sectionId
+                    ? s
+                    : {
+                        ...s,
+                        subsections: s.subsections.map((ss) =>
+                          ss.id !== subId
+                            ? ss
+                            : {
+                                ...ss,
+                                items: ss.items.map((it) =>
+                                  it.id === itemId ? { ...it, checked: next } : it
+                                )
+                              }
+                        )
+                      }
+                )
+              })
+            }
+          />
         </div>
       </div>
     </div>
