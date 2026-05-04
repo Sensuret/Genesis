@@ -61,7 +61,7 @@ export default function PlaybooksPage() {
   }
 
   async function deletePlaybook(id: string) {
-    if (!confirm("Delete this playbook? Trades tagged with it will keep their tag link broken.")) return;
+    // one-click delete for playbooks
     const supabase = createClient();
     await supabase.from("playbooks").delete().eq("id", id);
     load();

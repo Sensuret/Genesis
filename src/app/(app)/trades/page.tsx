@@ -86,7 +86,7 @@ export default function TradesPage() {
   }
 
   async function purgeGhostRows() {
-    if (!confirm(`Delete ${ghostCount} empty / ghost row(s)?`)) return;
+    // one-click delete for ghost rows (non-destructive cleanup)
     const supabase = createClient();
     const ids = trades.filter((t) => !isRealTrade(t)).map((t) => t.id);
     if (ids.length) {

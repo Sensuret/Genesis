@@ -12,6 +12,8 @@ type ResolutionCardProps = {
   orientation?: "portrait" | "landscape";
   /** Used as a tighter preview on the Created/Time-passed lists. */
   variant?: "full" | "preview";
+  /** When provided, checkboxes become clickable and toggling calls this. */
+  onToggleItem?: (sectionId: string, subId: string, itemId: string) => void;
 };
 
 /** Eyebrow colour map — matches the user's reference template. */
@@ -60,7 +62,8 @@ const SECTION_TONES: Record<
 export function ResolutionCard({
   resolution,
   orientation = "portrait",
-  variant = "full"
+  variant = "full",
+  onToggleItem
 }: ResolutionCardProps) {
   const zodiac = chineseZodiacOf(resolution.year);
   const emoji = chineseZodiacEmoji(resolution.year);
@@ -181,16 +184,26 @@ export function ResolutionCard({
                           className={cn("flex items-start gap-2", !bg && "text-fg-muted")}
                           style={bg ? { color: mutedText } : undefined}
                         >
-                          <span
+                          <button
+                            type="button"
+                            onClick={
+                              onToggleItem
+                                ? (e) => {
+                                    e.stopPropagation();
+                                    onToggleItem(section.id, sub.id, item.id);
+                                  }
+                                : undefined
+                            }
                             className={cn(
-                              "mt-0.5 inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border",
+                              "mt-0.5 inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border transition",
                               item.checked
                                 ? "border-emerald-400 bg-emerald-500/30 text-emerald-100"
-                                : "border-line bg-bg-soft/40"
+                                : "border-line bg-bg-soft/40",
+                              onToggleItem && "cursor-pointer hover:border-emerald-400"
                             )}
                           >
                             {item.checked ? "✓" : ""}
-                          </span>
+                          </button>
                           <span>{item.text}</span>
                         </li>
                       ))}
@@ -206,10 +219,23 @@ export function ResolutionCard({
       {/* Checker-finish flag — bottom-left default decoration */}
       <div
         aria-hidden
-        className="pointer-events-none absolute bottom-3 left-3 flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-gradient-to-r from-amber-500/20 via-amber-400/10 to-transparent px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-200"
+        className="pointer-events-none absolute bottom-3 left-3 flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em]"
+        style={
+          bg
+            ? {
+                color: onLight ? "rgb(120 53 15)" : "rgb(252 211 77)",
+                borderColor: onLight ? "rgb(120 53 15 / 0.35)" : "rgb(252 211 77 / 0.4)",
+                background: onLight
+                  ? "rgba(251 191 36 / 0.25)"
+                  : "rgba(245 158 11 / 0.25)"
+              }
+            : undefined
+        }
       >
-        <Flag className="h-3 w-3" />
-        Finish strong
+        <Flag className="h-3 w-3" style={!bg ? { color: "rgb(252 211 77)" } : undefined} />
+        <span className={!bg ? "bg-gradient-to-r from-amber-300 to-amber-500 bg-clip-text text-transparent" : undefined}>
+          Finish strong
+        </span>
       </div>
 
       {/* Genesis brand mark — toggleable per resolution. */}
