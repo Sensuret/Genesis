@@ -688,7 +688,28 @@ export async function parseFile(file: File): Promise<ParseResult> {
       if (toDateObject(first) == null) break;
       dataRows.push(r as unknown[]);
     }
-    const trades = dataRows.map((r) => metaTraderRowToTrade(r));
+    // Filter out non-trade ledger rows that occasionally appear inside the
+    // Positions section (or accidentally captured from an adjacent block):
+    //   - Type column is "balance" / "credit" / "deposit" / "withdrawal"
+    //   - Symbol cell is blank (no instrument means it's not a trade)
+    //   - Both open price and close price are 0 (no fill prices to render)
+    // Without this guard, rows like the broker's deposit ledger inflate the
+    // Trade Log with garbage entries (Entry 0.05, Exit 0, Net P&L = balance).
+    const isTradeRow = (r: unknown[]): boolean => {
+      const type = String(r[3] ?? "").trim().toLowerCase();
+      if (type === "balance" || type === "credit" || type === "deposit" || type === "withdrawal") {
+        return false;
+      }
+      const sym = String(r[2] ?? "").trim();
+      if (!sym) return false;
+      const openPrice = toNumber(r[5]);
+      const closePrice = toNumber(r[9]);
+      if ((openPrice == null || openPrice === 0) && (closePrice == null || closePrice === 0)) {
+        return false;
+      }
+      return true;
+    };
+    const trades = dataRows.filter(isTradeRow).map((r) => metaTraderRowToTrade(r));
 
     // Footer scan — look for "Balance:", "Equity:" rows (label in col 0,
     // value usually in col 3) and Deposit / Withdrawal entries inside the
