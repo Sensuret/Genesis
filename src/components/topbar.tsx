@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, RotateCcw, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -420,20 +420,37 @@ function AccountsPicker({
   onChange: (v: string[]) => void;
 }) {
   const [open, setOpen] = useState(false);
+  // Defensive: dedupe the live selection against the actual account IDs so a
+  // stale ID left over from a deleted file (or a duplicate accidentally
+  // pushed into the filter store) can't make the count read as N+1.
+  const validSelectedIds = useMemo(() => {
+    const known = new Set(accounts.map((a) => a.id));
+    return Array.from(new Set(value.filter((id) => known.has(id))));
+  }, [accounts, value]);
+  const selectedCount = validSelectedIds.length;
   const label =
     accounts.length === 0
       ? "No accounts"
-      : value.length === 0
-        ? `All accounts (${accounts.length})`
-        : value.length === 1
-          ? (accounts.find((a) => a.id === value[0])?.name ?? "Account")
-          : `${value.length} accounts`;
+      : selectedCount === 0
+        ? `All accounts · ${accounts.length}`
+        : selectedCount === 1
+          ? (accounts.find((a) => a.id === validSelectedIds[0])?.name ?? "Account")
+          : `${selectedCount} of ${accounts.length} selected`;
+
+  // Once we know the live filter has stale IDs (e.g. the user deleted a file
+  // somewhere else), self-heal by writing the cleaned list back. Without
+  // this the chip would keep reporting a phantom count after deletes.
+  useEffect(() => {
+    if (validSelectedIds.length !== value.length) {
+      onChange(validSelectedIds);
+    }
+  }, [validSelectedIds, value, onChange]);
 
   function toggle(id: string) {
-    if (value.includes(id)) {
-      onChange(value.filter((x) => x !== id));
+    if (validSelectedIds.includes(id)) {
+      onChange(validSelectedIds.filter((x) => x !== id));
     } else {
-      onChange([...value, id]);
+      onChange([...validSelectedIds, id]);
     }
   }
 
