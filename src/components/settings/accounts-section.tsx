@@ -1,17 +1,27 @@
 "use client";
 
 import { useState } from "react";
+import { Cable, FileSpreadsheet, Workflow } from "lucide-react";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { ImportedFilesCard } from "@/components/settings/imported-files";
 import { EaSyncCard } from "@/components/settings/ea-sync-card";
+import { SyncedBrokersCard } from "@/components/settings/synced-brokers-card";
 import { cn } from "@/lib/utils";
 
-type AccountsSubTab = "manual" | "auto";
+type AccountsSubTab = "manual" | "ea" | "broker";
+
+const TABS: { key: AccountsSubTab; label: string; Icon: typeof Cable }[] = [
+  { key: "manual", label: "Manual Accounts", Icon: FileSpreadsheet },
+  { key: "ea", label: "MT4 / MT5 Expert Advisor", Icon: Workflow },
+  { key: "broker", label: "Synced Brokers", Icon: Cable }
+];
 
 /**
- * Accounts subsection. Hosts the existing ImportedFilesCard under the
- * "Manual Accounts" sub-tab, and the live EA-sync flow (API key issuance
- * + connected terminals) under "Automatically Synced Accounts".
+ * Accounts subsection. Three sub-tabs:
+ *   - Manual Accounts        — CSV / XLSX broker statement uploads (live)
+ *   - MT4 / MT5 Expert Advisor — EA → Edge Function auto-sync (live)
+ *   - Synced Brokers          — direct broker partner-API sync (placeholder
+ *     until each broker's API integration is plumbed in)
  */
 export function AccountsSection() {
   const [tab, setTab] = useState<AccountsSubTab>("manual");
@@ -21,13 +31,13 @@ export function AccountsSection() {
 
   return (
     <div className="space-y-4">
-      <div className="inline-flex rounded-xl border border-line bg-bg-soft p-1">
-        <SubTab active={tab === "manual"} onClick={() => setTab("manual")}>
-          Manual Accounts
-        </SubTab>
-        <SubTab active={tab === "auto"} onClick={() => setTab("auto")}>
-          Automatically Synced Accounts
-        </SubTab>
+      <div className="inline-flex flex-wrap rounded-xl border border-line bg-bg-soft p-1">
+        {TABS.map(({ key, label, Icon }) => (
+          <SubTab key={key} active={tab === key} onClick={() => setTab(key)}>
+            <Icon className="h-3.5 w-3.5" />
+            {label}
+          </SubTab>
+        ))}
       </div>
 
       {tab === "manual" && (
@@ -47,7 +57,9 @@ export function AccountsSection() {
         </div>
       )}
 
-      {tab === "auto" && <EaSyncCard supabaseUrl={supabaseUrl} />}
+      {tab === "ea" && <EaSyncCard supabaseUrl={supabaseUrl} />}
+
+      {tab === "broker" && <SyncedBrokersCard />}
     </div>
   );
 }
@@ -66,7 +78,7 @@ function SubTab({
       type="button"
       onClick={onClick}
       className={cn(
-        "rounded-lg px-3 py-1.5 text-xs font-medium transition",
+        "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition",
         active ? "bg-bg-elevated text-fg shadow-sm" : "text-fg-muted hover:text-fg"
       )}
     >

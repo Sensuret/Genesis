@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Check, Copy, Eye, EyeOff, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { AlertTriangle, Check, Copy, Eye, EyeOff, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
@@ -26,6 +26,10 @@ export function EaSyncCard({ supabaseUrl }: { supabaseUrl: string }) {
   const [revealedKey, setRevealedKey] = useState<{ id: string; plaintext: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  // True once we hit a Postgres "missing relation" / "missing function" error
+  // — means the auto-sync schema migration hasn't been applied to this
+  // Supabase project yet. We swap the whole card for a copy/paste guide.
+  const [schemaMissing, setSchemaMissing] = useState(false);
 
   // EA-synced trade_files come back from the global useTrades() hook so the
   // top-bar Accounts picker stays the source of truth — we just filter to
@@ -44,7 +48,13 @@ export function EaSyncCard({ supabaseUrl }: { supabaseUrl: string }) {
         .select("*")
         .order("created_at", { ascending: false });
       if (cancelled) return;
-      if (err) setError(err.message);
+      if (err) {
+        if (isSchemaMissingError(err.message)) {
+          setSchemaMissing(true);
+        } else {
+          setError(err.message);
+        }
+      }
       setKeys((data ?? []) as GenesisApiKeyRow[]);
       setLoading(false);
     })();
@@ -74,7 +84,12 @@ export function EaSyncCard({ supabaseUrl }: { supabaseUrl: string }) {
       setCreateOpen(false);
       setLabel("Genesis EA key");
     } catch (e) {
-      setError((e as Error).message);
+      const msg = (e as Error).message;
+      if (isSchemaMissingError(msg)) {
+        setSchemaMissing(true);
+      } else {
+        setError(msg);
+      }
     } finally {
       setCreating(false);
     }
@@ -116,6 +131,10 @@ export function EaSyncCard({ supabaseUrl }: { supabaseUrl: string }) {
   const endpoint = supabaseUrl
     ? `${supabaseUrl.replace(/\/+$/, "")}/functions/v1/receive-trade`
     : "https://YOUR-PROJECT-REF.supabase.co/functions/v1/receive-trade";
+
+  if (schemaMissing) {
+    return <SchemaMissingBanner supabaseUrl={supabaseUrl} />;
+  }
 
   return (
     <div className="space-y-4">
@@ -348,5 +367,88 @@ export function EaSyncCard({ supabaseUrl }: { supabaseUrl: string }) {
         </CardBody>
       </Card>
     </div>
+  );
+}
+
+// ---------- helpers ----------
+
+/**
+ * Postgres returns one of these phrasings when the auto-sync schema
+ * migration hasn't been applied to the project yet. We use this to
+ * show a friendly "run the migration" guide instead of the raw error.
+ */
+function isSchemaMissingError(message: string): boolean {
+  if (!message) return false;
+  const m = message.toLowerCase();
+  return (
+    m.includes("genesis_api_keys") &&
+    (m.includes("not found") ||
+      m.includes("does not exist") ||
+      m.includes("schema cache") ||
+      m.includes("not exist"))
+  );
+}
+
+function SchemaMissingBanner({ supabaseUrl }: { supabaseUrl: string }) {
+  const projectRef = (() => {
+    try {
+      return new URL(supabaseUrl).hostname.split(".")[0];
+    } catch {
+      return "YOUR-PROJECT-REF";
+    }
+  })();
+  const sqlEditorUrl = projectRef && projectRef !== "YOUR-PROJECT-REF"
+    ? `https://supabase.com/dashboard/project/${projectRef}/sql/new`
+    : "https://supabase.com/dashboard";
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 text-amber-300" />
+          One-time Supabase setup needed
+        </CardTitle>
+      </CardHeader>
+      <CardBody className="space-y-3 text-xs text-fg-muted">
+        <p>
+          The auto-sync database tables haven't been created on this Supabase project yet —
+          that's why the API key UI can't load. It only takes ~30 seconds:
+        </p>
+        <ol className="list-decimal space-y-2 pl-4">
+          <li>
+            Open{" "}
+            <a
+              href={sqlEditorUrl}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="text-brand-300 underline hover:text-brand-200"
+            >
+              the Supabase SQL Editor
+            </a>
+            .
+          </li>
+          <li>
+            Copy the <code className="rounded bg-bg-elevated px-1 py-0.5">supabase/schema.sql</code>{" "}
+            file from the Genesis repo (everything from the{" "}
+            <em>“Auto-sync (MT4 / MT5 Expert Advisor → Supabase Edge Function)”</em> heading
+            onwards is enough — every statement is{" "}
+            <code className="rounded bg-bg-elevated px-1 py-0.5">if not exists</code>-safe so
+            re-runs are fine).
+          </li>
+          <li>Paste into the SQL Editor and click <span className="font-medium text-fg">Run</span>.</li>
+          <li>
+            Deploy the Edge Function from your local repo:
+            <pre className="mt-1 overflow-x-auto rounded bg-bg-elevated px-2 py-1.5 text-[11px] text-fg">
+              {`supabase functions deploy receive-trade --project-ref ${projectRef} --no-verify-jwt`}
+            </pre>
+          </li>
+          <li>Refresh this page — the API key UI starts working.</li>
+        </ol>
+        <p className="text-[11px] text-fg-subtle">
+          You only do this once per Supabase project. The schema lives in version control so
+          future updates are picked up automatically.
+        </p>
+      </CardBody>
+    </Card>
   );
 }
