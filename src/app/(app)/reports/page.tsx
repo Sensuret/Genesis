@@ -49,53 +49,53 @@ const TABS = ["Overview", "Detailed", "Risk", "Wins vs Losses", "Compare", "Cale
 type Tab = (typeof TABS)[number];
 
 export default function ReportsPage() {
-  const { trades, loading } = useTrades();
+  const { trades, files, loading } = useTrades();
   const { filters } = useFilters();
   const { fmt } = useMoney();
   const [tab, setTab] = useState<Tab>("Overview");
   const [startBalance, setStartBalance] = useState<number | null>(null);
-  const [fileAggregates, setFileAggregates] = useState<{
-    balance: number | null;
-    deposits: number | null;
-    withdrawals: number | null;
-    fileCount: number;
-  }>({ balance: null, deposits: null, withdrawals: null, fileCount: 0 });
 
   useEffect(() => {
     (async () => {
       const supabase = createClient();
       const { data: userData } = await supabase.auth.getUser();
       if (!userData.user) return;
-      const [profileRes, filesRes] = await Promise.all([
-        supabase
-          .from("profiles")
-          .select("starting_balance")
-          .eq("id", userData.user.id)
-          .maybeSingle(),
-        supabase
-          .from("trade_files")
-          .select("account_balance, deposits_total, withdrawals_total")
-          .eq("user_id", userData.user.id)
-      ]);
+      const profileRes = await supabase
+        .from("profiles")
+        .select("starting_balance")
+        .eq("id", userData.user.id)
+        .maybeSingle();
       if (profileRes.data?.starting_balance)
         setStartBalance(Number(profileRes.data.starting_balance));
-      const files = filesRes.data ?? [];
-      let bSum = 0, bAny = false;
-      let dSum = 0, dAny = false;
-      let wSum = 0, wAny = false;
-      for (const f of files) {
-        if (f.account_balance != null) { bSum += f.account_balance; bAny = true; }
-        if (f.deposits_total != null) { dSum += f.deposits_total; dAny = true; }
-        if (f.withdrawals_total != null) { wSum += f.withdrawals_total; wAny = true; }
-      }
-      setFileAggregates({
-        balance: bAny ? bSum : null,
-        deposits: dAny ? dSum : null,
-        withdrawals: wAny ? wSum : null,
-        fileCount: files.length
-      });
     })();
   }, []);
+
+  // Account-info aggregates are scoped to the same accounts the user has
+  // selected in the topbar dropdown — so flipping between files in the
+  // dropdown swaps the Account Balance / Deposits / Withdrawals cards
+  // accordingly. When no account filter is active we show the sum across
+  // every imported file (the "All accounts" aggregate). Reading from the
+  // shared `files` cache keeps this in sync with realtime updates.
+  const fileAggregates = useMemo(() => {
+    const selectedIds = new Set(filters.accountIds);
+    const scope = selectedIds.size === 0
+      ? files
+      : files.filter((f) => selectedIds.has(f.id));
+    let bSum = 0, bAny = false;
+    let dSum = 0, dAny = false;
+    let wSum = 0, wAny = false;
+    for (const f of scope) {
+      if (f.account_balance != null) { bSum += f.account_balance; bAny = true; }
+      if (f.deposits_total != null) { dSum += f.deposits_total; dAny = true; }
+      if (f.withdrawals_total != null) { wSum += f.withdrawals_total; wAny = true; }
+    }
+    return {
+      balance: bAny ? bSum : null,
+      deposits: dAny ? dSum : null,
+      withdrawals: wAny ? wSum : null,
+      fileCount: scope.length
+    };
+  }, [files, filters.accountIds]);
 
   const filtered = useMemo(() => applyAllFilters(trades, filters), [trades, filters]);
   const screenshotRef = useRef<HTMLDivElement>(null);
