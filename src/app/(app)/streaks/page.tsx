@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,9 +23,48 @@ import { formatNumber } from "@/lib/utils";
 import { LogoMark, Wordmark } from "@/components/logo";
 import { useFilters, useMoney } from "@/lib/filters/store";
 import type { TradeRow } from "@/lib/supabase/types";
+import { createClient } from "@/lib/supabase/client";
 
 function resolveSession(t: TradeRow): string | null {
   return t.session ?? detectSession(t.trade_date);
+}
+
+/**
+ * Session windows in UTC, matching `detectSession()` in parser/index.ts.
+ * We surface the local-time equivalent of each window in the Streaks
+ * cards so the user knows when each session is open in their own clock.
+ */
+const SESSION_WINDOWS_UTC: Record<string, { start: number; end: number }> = {
+  Sydney: { start: 21, end: 24 },
+  Asia: { start: 0, end: 7 },
+  London: { start: 7, end: 12 },
+  "New York": { start: 12, end: 21 }
+};
+
+function formatHourMinute(hourFloat: number): string {
+  const wrapped = ((hourFloat % 24) + 24) % 24;
+  const h = Math.floor(wrapped);
+  const m = Math.round((wrapped - h) * 60);
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+function gmtLabel(offsetMinutes: number): string {
+  const sign = offsetMinutes >= 0 ? "+" : "-";
+  const abs = Math.abs(offsetMinutes);
+  const h = Math.floor(abs / 60);
+  const m = abs % 60;
+  return `GMT${sign}${h}${m ? `:${String(m).padStart(2, "0")}` : ""}`;
+}
+
+/** Convert a UTC session window to the local time range string the user
+ *  sees in the bracket — e.g. "10:00–15:00" for London at GMT+3. */
+function sessionRangeLabel(session: string, offsetMinutes: number): string {
+  const win = SESSION_WINDOWS_UTC[session];
+  if (!win) return "";
+  const offHours = offsetMinutes / 60;
+  const startLocal = win.start + offHours;
+  const endLocal = win.end + offHours;
+  return `${formatHourMinute(startLocal)}–${formatHourMinute(endLocal)}`;
 }
 
 export default function StreaksPage() {
@@ -33,6 +72,48 @@ export default function StreaksPage() {
   const { filters } = useFilters();
   const { fmt } = useMoney();
   const captureRef = useRef<HTMLDivElement>(null);
+
+  // Effective timezone offset for the bracket labels:
+  //   1. If every imported file has the same `broker_tz_offset_minutes`,
+  //      use that — the user has explicitly told us what server time the
+  //      trades were recorded in (Settings → Imported files).
+  //   2. Otherwise fall back to the user's local timezone (auto-detect),
+  //      matching how the rest of the app converts UTC → display time.
+  // The offset updates live when the user changes a file's broker timezone
+  // in Settings because we read `trade_files` here on mount + focus.
+  const [tz, setTz] = useState<{ offset: number; source: string }>({
+    offset: -new Date().getTimezoneOffset(),
+    source: "local"
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    async function refresh() {
+      const supabase = createClient();
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) return;
+      const { data: files } = await supabase
+        .from("trade_files")
+        .select("broker_tz_offset_minutes")
+        .eq("user_id", userData.user.id);
+      if (cancelled) return;
+      const offsets = (files ?? [])
+        .map((f) => f.broker_tz_offset_minutes)
+        .filter((o): o is number => o != null);
+      const unique = Array.from(new Set(offsets));
+      if (unique.length === 1) {
+        setTz({ offset: unique[0], source: "broker" });
+      } else {
+        setTz({ offset: -new Date().getTimezoneOffset(), source: "local" });
+      }
+    }
+    refresh();
+    window.addEventListener("focus", refresh);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", refresh);
+    };
+  }, []);
 
   const allAssets = useMemo(() => {
     const set = new Set<string>();
@@ -216,15 +297,25 @@ export default function StreaksPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Session streaks</CardTitle>
+            <CardTitle>
+              Session streaks
+              <span className="ml-2 text-xs font-normal text-fg-subtle">
+                Times shown in {gmtLabel(tz.offset)}
+                {tz.source === "broker" ? " (broker server)" : " (your local zone)"}
+              </span>
+            </CardTitle>
           </CardHeader>
           <CardBody className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
             {["New York", "London", "Asia", "Sydney"].map((s) => {
               const series = sessions[s] ?? [];
               const top = best(series);
+              const range = sessionRangeLabel(s, tz.offset);
               return (
                 <div key={s} className="rounded-xl border border-line bg-bg-elevated p-4">
-                  <div className="text-xs uppercase tracking-wide text-fg-subtle">{s}</div>
+                  <div className="text-xs uppercase tracking-wide text-fg-subtle">
+                    {s.replace(" ", "").toUpperCase()}
+                    <span className="ml-1 normal-case text-fg-muted">({range})</span>
+                  </div>
                   <div className="mt-1 text-2xl font-semibold">{top?.length ?? 0}</div>
                   <div className="mt-0.5 text-xs text-fg-muted">
                     {top ? (
@@ -250,6 +341,47 @@ function best(arr: Streak[]) {
   return arr.filter((s) => s.type === "win").sort((a, b) => b.length - a.length)[0];
 }
 
+/**
+ * Group raw streaks by (type, length) so the card lists each unique
+ * pattern once with an occurrence count + cumulative P&L. This replaces
+ * the old behaviour of spamming "1-day win" three times in a row when
+ * the user had three separate single-day winning runs in a row.
+ */
+type StreakBucket = {
+  type: "win" | "loss";
+  length: number;
+  count: number;
+  pnl: number;
+  lastEndDate: string;
+};
+
+function bucketStreaks(data: Streak[]): StreakBucket[] {
+  const map = new Map<string, StreakBucket>();
+  for (const s of data) {
+    const key = `${s.type}:${s.length}`;
+    const existing = map.get(key);
+    if (existing) {
+      existing.count += 1;
+      existing.pnl += s.pnl;
+      if (s.endDate > existing.lastEndDate) existing.lastEndDate = s.endDate;
+    } else {
+      map.set(key, {
+        type: s.type,
+        length: s.length,
+        count: 1,
+        pnl: s.pnl,
+        lastEndDate: s.endDate
+      });
+    }
+  }
+  // Sort by type (wins first), then by length descending, then by count.
+  return [...map.values()].sort((a, b) => {
+    if (a.type !== b.type) return a.type === "win" ? -1 : 1;
+    if (a.length !== b.length) return b.length - a.length;
+    return b.count - a.count;
+  });
+}
+
 function StreakCard({
   title,
   data,
@@ -261,35 +393,38 @@ function StreakCard({
   unit: string;
   fmt: (usd: number | null | undefined) => string;
 }) {
+  const buckets = useMemo(() => bucketStreaks(data), [data]);
   return (
     <Card>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
       </CardHeader>
       <CardBody>
-        {data.length === 0 ? (
+        {buckets.length === 0 ? (
           <div className="text-sm text-fg-muted">Need more activity to compute.</div>
         ) : (
           <ul className="space-y-2">
-            {data
-              .slice(-6)
-              .reverse()
-              .map((s, i) => (
-                <li
-                  key={i}
-                  className="flex items-center justify-between rounded-xl border border-line bg-bg-soft/40 p-3 text-sm"
-                >
-                  <span className="flex items-center gap-2">
-                    <Flame className={`h-4 w-4 ${s.type === "win" ? "text-success" : "text-danger"}`} />
-                    <span className="font-medium">
-                      {s.length}-{unit} {s.type}
+            {buckets.map((b, i) => (
+              <li
+                key={i}
+                className="flex items-center justify-between rounded-xl border border-line bg-bg-soft/40 p-3 text-sm"
+              >
+                <span className="flex items-center gap-2">
+                  <Flame className={`h-4 w-4 ${b.type === "win" ? "text-success" : "text-danger"}`} />
+                  <span className="font-medium">
+                    {b.length}-{unit} {b.type}
+                  </span>
+                  {b.count > 1 && (
+                    <span className="rounded-md border border-line bg-bg-elevated px-1.5 py-0.5 text-[10px] text-fg-muted">
+                      ×{b.count}
                     </span>
-                  </span>
-                  <span className={s.type === "win" ? "text-success" : "text-danger"}>
-                    {fmt(s.pnl)}
-                  </span>
-                </li>
-              ))}
+                  )}
+                </span>
+                <span className={b.type === "win" ? "text-success" : "text-danger"}>
+                  {fmt(b.pnl)}
+                </span>
+              </li>
+            ))}
           </ul>
         )}
       </CardBody>
