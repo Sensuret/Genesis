@@ -20,11 +20,20 @@ import {
   maxDrawdown,
   recoveryFactor,
   realisedRR,
-  tpBeSl
+  tpBeSl,
+  avgWin,
+  avgLoss,
+  avgWinLoss,
+  expectancy,
+  winners,
+  losers,
+  equityCurve,
+  bestDayStreak
 } from "@/lib/analytics";
 import { detectSession, computePips } from "@/lib/parser";
 import { PerfBar } from "@/components/charts/perf-bar";
 import { DailyPnlChart } from "@/components/charts/daily-pnl";
+import { EquityCurveChart } from "@/components/charts/equity-curve";
 import { DayViewModal } from "@/components/day-view-modal";
 import { Empty } from "@/components/ui/empty";
 import { formatNumber, formatPercent } from "@/lib/utils";
@@ -150,6 +159,9 @@ export default function ReportsPage() {
   );
 }
 
+type OverviewSubTab = "Summary" | "Days" | "Trades";
+const OVERVIEW_SUB_TABS: OverviewSubTab[] = ["Summary", "Days", "Trades"];
+
 function Overview({
   trades,
   currency,
@@ -161,19 +173,117 @@ function Overview({
   fileAggregates: { balance: number | null; deposits: number | null; withdrawals: number | null; fileCount: number };
   fmt: Fmt;
 }) {
-  const breakdown = tpBeSl(trades);
+  const [subTab, setSubTab] = useState<OverviewSubTab>("Summary");
+
+  // Pre-compute the two top charts once per render. The equity curve uses
+  // the same starting balance the rest of the app does (0 by default —
+  // we just want the *shape* of cumulative P&L, not absolute account size).
+  const equityData = useMemo(() => equityCurve(trades, 0), [trades]);
+  const dailyData = useMemo(() => dailyPnl(trades).slice(-60), [trades]);
+
   return (
     <>
-      <div className="grid gap-4 md:grid-cols-4">
-        <Stat label="Net P&L" value={netPnl(trades)} format="currency" positive={netPnl(trades) >= 0} />
-        <Stat label="Trade win %" value={winRate(trades)} format="percent" />
-        <Stat label="Profit factor" value={profitFactor(trades)} format="number" />
-        <Stat label="Total trades" value={trades.length} />
+      {/* Top row: cumulative Net P&L curve + daily P&L bar chart. Mirrors
+          the Tradezella-style header — quick visual read of how the
+          account has grown alongside the volatility of individual days. */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader><CardTitle>Net P&L · cumulative</CardTitle></CardHeader>
+          <CardBody>
+            <EquityCurveChart data={equityData} height="h-72" />
+          </CardBody>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle>Daily net P&L</CardTitle></CardHeader>
+          <CardBody><DailyPnlChart data={dailyData} /></CardBody>
+        </Card>
       </div>
 
-      {/* Account-level metadata extracted from imported broker files. We
-          show "—" when the parser couldn't find these values (HFM exports
-          and most generic CSVs don't include a balance/deposits footer). */}
+      {/* Inner tab strip — Summary / Days / Trades. Cards underneath swap
+          based on selection. Visually echoes the reference design without
+          replacing the higher-level Reports tab strip above. */}
+      <div className="flex flex-wrap gap-2 border-b border-line pb-2">
+        {OVERVIEW_SUB_TABS.map((s) => (
+          <button
+            key={s}
+            onClick={() => setSubTab(s)}
+            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+              subTab === s
+                ? "bg-brand-500/15 text-brand-200"
+                : "text-fg-muted hover:text-fg"
+            }`}
+          >
+            {s}
+          </button>
+        ))}
+      </div>
+
+      {subTab === "Summary" && <SummaryCards trades={trades} fileAggregates={fileAggregates} fmt={fmt} />}
+      {subTab === "Days" && <DaysCards trades={trades} fmt={fmt} />}
+      {subTab === "Trades" && <TradesCards trades={trades} fmt={fmt} />}
+
+      <DisplayCurrencyNote currency={currency} />
+    </>
+  );
+}
+
+/** Average hold time in seconds across all trades that have a duration. */
+function avgHoldSeconds(trades: TradeRow[]): number {
+  const durations: number[] = [];
+  for (const t of trades) {
+    if (t.duration_seconds != null && t.duration_seconds > 0) {
+      durations.push(t.duration_seconds);
+    } else if (t.open_time && t.close_time) {
+      const d = (new Date(t.close_time).getTime() - new Date(t.open_time).getTime()) / 1000;
+      if (d > 0) durations.push(d);
+    }
+  }
+  return durations.length ? durations.reduce((s, x) => s + x, 0) / durations.length : 0;
+}
+
+function formatDuration(seconds: number): string {
+  if (!seconds || !Number.isFinite(seconds)) return "—";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+/** Average realised R-multiple across trades that have a usable RR. */
+function avgRealisedR(trades: TradeRow[]): number | null {
+  const rs: number[] = [];
+  for (const t of trades) {
+    const r = realisedRR(t);
+    if (r != null && Number.isFinite(r)) rs.push(r);
+  }
+  if (!rs.length) return null;
+  return rs.reduce((s, x) => s + x, 0) / rs.length;
+}
+
+function SummaryCards({
+  trades,
+  fileAggregates,
+  fmt
+}: {
+  trades: TradeRow[];
+  fileAggregates: { balance: number | null; deposits: number | null; withdrawals: number | null; fileCount: number };
+  fmt: Fmt;
+}) {
+  const days = dailyPnl(trades);
+  const loggedDays = days.length;
+  const dailyNet = days.length ? days.reduce((s, d) => s + d.pnl, 0) / days.length : 0;
+  const winDays = days.filter((d) => d.pnl > 0);
+  const dailyWinPct = days.length ? (winDays.length / days.length) * 100 : 0;
+  const avgGreenDay = winDays.length ? winDays.reduce((s, d) => s + d.pnl, 0) / winDays.length : 0;
+  const avgDailyVolume = days.length ? days.reduce((s, d) => s + d.trades, 0) / days.length : 0;
+  const dailyDrawdown = days.length ? Math.min(...days.map((d) => d.pnl)) : 0;
+  const avgR = avgRealisedR(trades);
+  const breakdown = tpBeSl(trades);
+
+  return (
+    <div className="space-y-4">
+      {/* Account-level metadata — surfaced from imported broker files
+          (MT4/MT5 export the footer with Balance/Equity/Deposits). For
+          HFM and generic CSVs the parser returns null and we render "—". */}
       <div className="grid gap-4 md:grid-cols-3">
         <Stat
           label="Account balance"
@@ -193,32 +303,180 @@ function Overview({
           valueClassName="text-danger"
         />
       </div>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Stat label="Net P&L" value={netPnl(trades)} format="currency" positive={netPnl(trades) >= 0} />
+        <Stat label="Trade expectancy" value={expectancy(trades)} format="currency" />
+        <Stat label="Avg net trade P&L" value={trades.length ? netPnl(trades) / trades.length : 0} format="currency" />
+        <Stat label="Avg daily volume" value={formatNumber(avgDailyVolume, 1)} format="text" />
+
+        <Stat label="Win %" value={winRate(trades)} format="percent" />
+        <Stat label="Avg daily win/loss" value={formatNumber(avgWinLoss(trades), 2)} format="text" />
+        <Stat label="Avg daily net P&L" value={dailyNet} format="currency" />
+        <Stat label="Logged days" value={loggedDays} />
+
+        <Stat label="Avg daily win %" value={dailyWinPct} format="percent" />
+        <Stat label="Avg trade win/loss" value={formatNumber(avgWinLoss(trades), 2)} format="text" />
+        <Stat
+          label="Avg planned r-multiple"
+          value={avgR == null ? "—" : `${formatNumber(avgR, 2)}R`}
+          format="text"
+        />
+        <Stat
+          label="Max daily net drawdown"
+          value={dailyDrawdown}
+          format="currency"
+          valueClassName="text-danger"
+        />
+
+        <Stat label="Profit factor" value={profitFactor(trades)} format="number" />
+        <Stat label="Avg hold time" value={formatDuration(avgHoldSeconds(trades))} format="text" />
+        <Stat
+          label="Avg realised r-multiple"
+          value={avgR == null ? "—" : `${formatNumber(avgR, 2)}R`}
+          format="text"
+        />
+        <Stat label="Avg green day" value={avgGreenDay} format="currency" valueClassName="text-success" />
+      </div>
+
       <div className="grid gap-4 md:grid-cols-3">
         <Stat
-          label={<span className="text-success">TP</span>}
+          label={<span className="text-success">TP hits</span>}
           value={breakdown.tp}
           format="number"
           valueClassName="text-success"
         />
+        <Stat label={<span>BE</span>} value={breakdown.be} format="number" valueClassName="text-fg" />
         <Stat
-          label={<span>BE</span>}
-          value={breakdown.be}
-          format="number"
-          valueClassName="text-fg"
-        />
-        <Stat
-          label={<span className="text-danger">SL</span>}
+          label={<span className="text-danger">SL hits</span>}
           value={breakdown.sl}
           format="number"
           valueClassName="text-danger"
         />
       </div>
-      <Card>
-        <CardHeader><CardTitle>Daily net P&L</CardTitle></CardHeader>
-        <CardBody><DailyPnlChart data={dailyPnl(trades).slice(-60)} /></CardBody>
-      </Card>
-      <DisplayCurrencyNote currency={currency} />
-    </>
+    </div>
+  );
+}
+
+function DaysCards({ trades, fmt }: { trades: TradeRow[]; fmt: Fmt }) {
+  void fmt;
+  const days = dailyPnl(trades);
+  const winDays = days.filter((d) => d.pnl > 0);
+  const lossDays = days.filter((d) => d.pnl < 0);
+  const bestDay = days.length ? days.reduce((b, d) => (d.pnl > b.pnl ? d : b), days[0]) : null;
+  const worstDay = days.length ? days.reduce((w, d) => (d.pnl < w.pnl ? d : w), days[0]) : null;
+  const winDayPct = days.length ? (winDays.length / days.length) * 100 : 0;
+  const lossDayPct = days.length ? (lossDays.length / days.length) * 100 : 0;
+  const avgGreenDay = winDays.length ? winDays.reduce((s, d) => s + d.pnl, 0) / winDays.length : 0;
+  const avgRedDay = lossDays.length ? lossDays.reduce((s, d) => s + d.pnl, 0) / lossDays.length : 0;
+  const streaks = bestDayStreak(trades);
+  const dailyDrawdown = days.length ? Math.min(...days.map((d) => d.pnl)) : 0;
+
+  // Most-active weekday (count of trades grouped by weekday name).
+  const weekdayCounts = new Map<string, number>();
+  for (const t of trades) {
+    if (!t.trade_date) continue;
+    const k = new Date(t.trade_date).toLocaleDateString("en-US", { weekday: "long" });
+    weekdayCounts.set(k, (weekdayCounts.get(k) ?? 0) + 1);
+  }
+  let mostActive: string | null = null;
+  let mostActiveCount = 0;
+  for (const [k, v] of weekdayCounts) {
+    if (v > mostActiveCount) { mostActive = k; mostActiveCount = v; }
+  }
+
+  return (
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <Stat
+        label="Best day"
+        value={bestDay ? bestDay.pnl : 0}
+        format="currency"
+        valueClassName="text-success"
+        hint={bestDay ? bestDay.date : ""}
+      />
+      <Stat
+        label="Worst day"
+        value={worstDay ? worstDay.pnl : 0}
+        format="currency"
+        valueClassName="text-danger"
+        hint={worstDay ? worstDay.date : ""}
+      />
+      <Stat label="Win days %" value={winDayPct} format="percent" />
+      <Stat label="Loss days %" value={lossDayPct} format="percent" />
+
+      <Stat label="Avg green day" value={avgGreenDay} format="currency" valueClassName="text-success" />
+      <Stat label="Avg red day" value={avgRedDay} format="currency" valueClassName="text-danger" />
+      <Stat label="Best day streak" value={streaks.winDays} hint="Consecutive winning days" />
+      <Stat label="Worst day streak" value={streaks.lossDays} hint="Consecutive losing days" />
+
+      <Stat
+        label="Most active weekday"
+        value={mostActive ?? "—"}
+        format="text"
+        hint={mostActiveCount ? `${mostActiveCount} trades` : ""}
+      />
+      <Stat label="Logged days" value={days.length} />
+      <Stat label="Avg daily P&L" value={days.length ? days.reduce((s, d) => s + d.pnl, 0) / days.length : 0} format="currency" />
+      <Stat
+        label="Max daily drawdown"
+        value={dailyDrawdown}
+        format="currency"
+        valueClassName="text-danger"
+      />
+    </div>
+  );
+}
+
+function TradesCards({ trades, fmt }: { trades: TradeRow[]; fmt: Fmt }) {
+  void fmt;
+  const longs = trades.filter((t) => t.side === "long");
+  const shorts = trades.filter((t) => t.side === "short");
+  const wins = winners(trades);
+  const losses = losers(trades);
+  const largestWin = wins.length ? wins.reduce((m, t) => ((t.pnl ?? 0) > (m.pnl ?? 0) ? t : m), wins[0]) : null;
+  const largestLoss = losses.length ? losses.reduce((m, t) => ((t.pnl ?? 0) < (m.pnl ?? 0) ? t : m), losses[0]) : null;
+
+  // Longest single trade duration in seconds.
+  let longestDur = 0;
+  for (const t of trades) {
+    if (t.duration_seconds != null && t.duration_seconds > longestDur) longestDur = t.duration_seconds;
+    else if (t.open_time && t.close_time) {
+      const d = (new Date(t.close_time).getTime() - new Date(t.open_time).getTime()) / 1000;
+      if (d > longestDur) longestDur = d;
+    }
+  }
+
+  return (
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <Stat label="Win %" value={winRate(trades)} format="percent" />
+      <Stat label="Avg trade win/loss" value={formatNumber(avgWinLoss(trades), 2)} format="text" />
+      <Stat
+        label="Largest profitable trade"
+        value={largestWin?.pnl ?? 0}
+        format="currency"
+        valueClassName="text-success"
+      />
+      <Stat
+        label="Longest trade duration"
+        value={formatDuration(longestDur)}
+        format="text"
+      />
+
+      <Stat label="Longs win %" value={longs.length ? winRate(longs) : 0} format="percent" />
+      <Stat label="Trade expectancy" value={expectancy(trades)} format="currency" />
+      <Stat
+        label="Largest losing trade"
+        value={largestLoss?.pnl ?? 0}
+        format="currency"
+        valueClassName="text-danger"
+      />
+      <Stat label="Shorts win %" value={shorts.length ? winRate(shorts) : 0} format="percent" />
+
+      <Stat label="Avg net trade P&L" value={trades.length ? netPnl(trades) / trades.length : 0} format="currency" />
+      <Stat label="Avg hold time" value={formatDuration(avgHoldSeconds(trades))} format="text" />
+      <Stat label="Avg win" value={avgWin(trades)} format="currency" valueClassName="text-success" />
+      <Stat label="Avg loss" value={avgLoss(trades)} format="currency" valueClassName="text-danger" />
+    </div>
   );
 }
 
