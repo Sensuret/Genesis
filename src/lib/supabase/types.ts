@@ -60,6 +60,14 @@ export type TradeFileRow = {
    *  timezones differ between brokers (FTMO/ICMarkets ≈ GMT+2/+3 with DST,
    *  Pepperstone ≈ UTC). Null = use the parser's auto-detected default. */
   broker_tz_offset_minutes: number | null;
+  /** Closing account balance reported in the broker file footer (MT5). */
+  account_balance: number | null;
+  /** Closing equity reported in the broker file footer (MT5). */
+  account_equity: number | null;
+  /** Sum of every Deposit transaction the broker recorded for this file. */
+  deposits_total: number | null;
+  /** Sum of every Withdrawal transaction the broker recorded for this file. */
+  withdrawals_total: number | null;
   created_at: string;
 };
 
@@ -197,7 +205,27 @@ export type Database = {
       trades: { Row: TradeRow; Insert: Insertable<TradeRow>; Update: Updatable<TradeRow> };
       trade_files: {
         Row: TradeFileRow;
-        Insert: Omit<TradeFileRow, "id" | "created_at" | "trade_count"> & Partial<Pick<TradeFileRow, "id" | "trade_count">>;
+        Insert: Omit<
+          TradeFileRow,
+          | "id"
+          | "created_at"
+          | "trade_count"
+          | "account_balance"
+          | "account_equity"
+          | "deposits_total"
+          | "withdrawals_total"
+        > &
+          Partial<
+            Pick<
+              TradeFileRow,
+              | "id"
+              | "trade_count"
+              | "account_balance"
+              | "account_equity"
+              | "deposits_total"
+              | "withdrawals_total"
+            >
+          >;
         Update: Updatable<TradeFileRow>;
       };
       numerology_profiles: {

@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { computePips, parseFile, type ParsedTrade } from "@/lib/parser";
+import { computePips, parseFile, type ParsedTrade, type AccountInfo } from "@/lib/parser";
 import { createClient } from "@/lib/supabase/client";
 import { CheckCircle2, Upload } from "lucide-react";
 import Link from "next/link";
@@ -64,6 +64,7 @@ function UploadForm({ onDone }: { onDone: () => void }) {
     trades: ParsedTrade[];
     mapping: Record<string, string | undefined>;
     format: "metatrader" | "hfm" | "generic";
+    accountInfo?: AccountInfo;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -74,7 +75,12 @@ function UploadForm({ onDone }: { onDone: () => void }) {
     setBusy(true);
     try {
       const result = await parseFile(f);
-      setPreview({ trades: result.trades, mapping: result.mapping, format: result.format });
+      setPreview({
+        trades: result.trades,
+        mapping: result.mapping,
+        format: result.format,
+        accountInfo: result.accountInfo
+      });
       setFile(f);
       if (!name) setName(f.name.replace(/\.[^.]+$/, ""));
     } catch (e) {
@@ -108,7 +114,15 @@ function UploadForm({ onDone }: { onDone: () => void }) {
           preview.format === "metatrader" ? "MT4/5" :
           preview.format === "hfm" ? "HFM" :
           "Generic",
-        trade_count: preview.trades.length
+        trade_count: preview.trades.length,
+        broker_tz_offset_minutes: null,
+        // Account-level metadata extracted from the broker file footer
+        // (currently only MT5 supplies these; HFM and generic CSVs leave
+        // them null and the Reports Overview cards fall back to "—").
+        account_balance: preview.accountInfo?.balance ?? null,
+        account_equity: preview.accountInfo?.equity ?? null,
+        deposits_total: preview.accountInfo?.deposits_total ?? null,
+        withdrawals_total: preview.accountInfo?.withdrawals_total ?? null
       })
       .select()
       .single();
@@ -176,6 +190,34 @@ function UploadForm({ onDone }: { onDone: () => void }) {
               <CheckCircle2 className="mr-1 inline h-3.5 w-3.5 text-success" />
               {preview.trades.length} trades parsed
             </div>
+            {preview.accountInfo &&
+              (preview.accountInfo.balance != null ||
+                preview.accountInfo.deposits_count > 0 ||
+                preview.accountInfo.withdrawals_count > 0) && (
+                <div className="rounded-xl border border-line bg-bg-soft/40 p-3 text-xs">
+                  <div className="mb-1 font-medium text-fg">Account info detected</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {preview.accountInfo.balance != null && (
+                      <Badge>Balance ${preview.accountInfo.balance.toFixed(2)}</Badge>
+                    )}
+                    {preview.accountInfo.equity != null && (
+                      <Badge>Equity ${preview.accountInfo.equity.toFixed(2)}</Badge>
+                    )}
+                    {preview.accountInfo.deposits_count > 0 && (
+                      <Badge variant="success">
+                        {preview.accountInfo.deposits_count} deposits · $
+                        {(preview.accountInfo.deposits_total ?? 0).toFixed(2)}
+                      </Badge>
+                    )}
+                    {preview.accountInfo.withdrawals_count > 0 && (
+                      <Badge variant="danger">
+                        {preview.accountInfo.withdrawals_count} withdrawals · $
+                        {(preview.accountInfo.withdrawals_total ?? 0).toFixed(2)}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              )}
           </div>
         )}
 

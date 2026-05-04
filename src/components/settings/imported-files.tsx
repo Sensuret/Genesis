@@ -203,6 +203,27 @@ export function ImportedFilesCard() {
                         <div className="text-xs text-fg-muted">
                           {f.source ?? "Generic"} · current: {tzLabel(f.broker_tz_offset_minutes, auto)}
                         </div>
+                        {(f.account_balance != null ||
+                          f.deposits_total != null ||
+                          f.withdrawals_total != null) && (
+                          <div className="mt-1 flex flex-wrap gap-1.5 text-[10px] text-fg-subtle">
+                            {f.account_balance != null && (
+                              <span className="rounded-md border border-line bg-bg-soft/50 px-1.5 py-0.5">
+                                Balance ${f.account_balance.toFixed(2)}
+                              </span>
+                            )}
+                            {f.deposits_total != null && (
+                              <span className="rounded-md border border-success/30 bg-success/10 px-1.5 py-0.5 text-success/80">
+                                Deposits ${f.deposits_total.toFixed(2)}
+                              </span>
+                            )}
+                            {f.withdrawals_total != null && f.withdrawals_total > 0 && (
+                              <span className="rounded-md border border-danger/30 bg-danger/10 px-1.5 py-0.5 text-danger/80">
+                                Withdrawals ${f.withdrawals_total.toFixed(2)}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td className="px-3 py-2.5 text-fg-muted">{shortDate(f.created_at)}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums">

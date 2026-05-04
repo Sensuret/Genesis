@@ -22,7 +22,7 @@ import {
   realisedRR,
   tpBeSl
 } from "@/lib/analytics";
-import { detectSession } from "@/lib/parser";
+import { detectSession, computePips } from "@/lib/parser";
 import { PerfBar } from "@/components/charts/perf-bar";
 import { DailyPnlChart } from "@/components/charts/daily-pnl";
 import { DayViewModal } from "@/components/day-view-modal";
@@ -45,18 +45,46 @@ export default function ReportsPage() {
   const { fmt } = useMoney();
   const [tab, setTab] = useState<Tab>("Overview");
   const [startBalance, setStartBalance] = useState<number | null>(null);
+  const [fileAggregates, setFileAggregates] = useState<{
+    balance: number | null;
+    deposits: number | null;
+    withdrawals: number | null;
+    fileCount: number;
+  }>({ balance: null, deposits: null, withdrawals: null, fileCount: 0 });
 
   useEffect(() => {
     (async () => {
       const supabase = createClient();
       const { data: userData } = await supabase.auth.getUser();
       if (!userData.user) return;
-      const { data } = await supabase
-        .from("profiles")
-        .select("starting_balance")
-        .eq("id", userData.user.id)
-        .maybeSingle();
-      if (data?.starting_balance) setStartBalance(Number(data.starting_balance));
+      const [profileRes, filesRes] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("starting_balance")
+          .eq("id", userData.user.id)
+          .maybeSingle(),
+        supabase
+          .from("trade_files")
+          .select("account_balance, deposits_total, withdrawals_total")
+          .eq("user_id", userData.user.id)
+      ]);
+      if (profileRes.data?.starting_balance)
+        setStartBalance(Number(profileRes.data.starting_balance));
+      const files = filesRes.data ?? [];
+      let bSum = 0, bAny = false;
+      let dSum = 0, dAny = false;
+      let wSum = 0, wAny = false;
+      for (const f of files) {
+        if (f.account_balance != null) { bSum += f.account_balance; bAny = true; }
+        if (f.deposits_total != null) { dSum += f.deposits_total; dAny = true; }
+        if (f.withdrawals_total != null) { wSum += f.withdrawals_total; wAny = true; }
+      }
+      setFileAggregates({
+        balance: bAny ? bSum : null,
+        deposits: dAny ? dSum : null,
+        withdrawals: wAny ? wSum : null,
+        fileCount: files.length
+      });
     })();
   }, []);
 
@@ -100,7 +128,14 @@ export default function ReportsPage() {
         ))}
       </div>
 
-      {tab === "Overview" && <Overview trades={filtered} currency={filters.currency} />}
+      {tab === "Overview" && (
+        <Overview
+          trades={filtered}
+          currency={filters.currency}
+          fileAggregates={fileAggregates}
+          fmt={fmt}
+        />
+      )}
       {tab === "Detailed" && (
         <>
           <ReportsDetailed trades={filtered} fmt={fmt} startBalance={startBalance} />
@@ -115,7 +150,17 @@ export default function ReportsPage() {
   );
 }
 
-function Overview({ trades, currency }: { trades: TradeRow[]; currency: string }) {
+function Overview({
+  trades,
+  currency,
+  fileAggregates,
+  fmt
+}: {
+  trades: TradeRow[];
+  currency: string;
+  fileAggregates: { balance: number | null; deposits: number | null; withdrawals: number | null; fileCount: number };
+  fmt: Fmt;
+}) {
   const breakdown = tpBeSl(trades);
   return (
     <>
@@ -124,6 +169,29 @@ function Overview({ trades, currency }: { trades: TradeRow[]; currency: string }
         <Stat label="Trade win %" value={winRate(trades)} format="percent" />
         <Stat label="Profit factor" value={profitFactor(trades)} format="number" />
         <Stat label="Total trades" value={trades.length} />
+      </div>
+
+      {/* Account-level metadata extracted from imported broker files. We
+          show "—" when the parser couldn't find these values (HFM exports
+          and most generic CSVs don't include a balance/deposits footer). */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Stat
+          label="Account balance"
+          value={fileAggregates.balance == null ? "—" : fmt(fileAggregates.balance)}
+          format="text"
+        />
+        <Stat
+          label="Total deposits"
+          value={fileAggregates.deposits == null ? "—" : fmt(fileAggregates.deposits)}
+          format="text"
+          valueClassName="text-success"
+        />
+        <Stat
+          label="Total withdrawals"
+          value={fileAggregates.withdrawals == null ? "—" : fmt(fileAggregates.withdrawals)}
+          format="text"
+          valueClassName="text-danger"
+        />
       </div>
       <div className="grid gap-4 md:grid-cols-3">
         <Stat
@@ -266,6 +334,57 @@ function Risk({ trades, currency }: { trades: TradeRow[]; currency: string }) {
         <Stat label="R:R on losing trades" value={formatRatio(avgLossRR)} format="text" positive={false} />
         <Stat label="Trades with R:R data" value={allRRs.length} format="number" />
       </div>
+
+      {/* Average SL / TP distances in pips. We measure the *planned* stop
+          and target sizes — not where the trade actually closed — so this
+          is a pure read on the risk profile of the entries you're taking. */}
+      {(() => {
+        const slPips = trades
+          .map((t) =>
+            t.stop_loss != null && t.entry != null
+              ? computePips({ pair: t.pair, entry: t.entry, exit_price: t.stop_loss, side: t.side })
+              : null
+          )
+          .filter((p): p is number => p != null)
+          .map((p) => Math.abs(p));
+        const tpPips = trades
+          .map((t) =>
+            t.take_profit != null && t.entry != null
+              ? computePips({ pair: t.pair, entry: t.entry, exit_price: t.take_profit, side: t.side })
+              : null
+          )
+          .filter((p): p is number => p != null)
+          .map((p) => Math.abs(p));
+        const avgSl = slPips.length ? slPips.reduce((s, x) => s + x, 0) / slPips.length : null;
+        const avgTp = tpPips.length ? tpPips.reduce((s, x) => s + x, 0) / tpPips.length : null;
+        return (
+          <div className="grid gap-4 md:grid-cols-3">
+            <Stat
+              label="Avg SL level (pips)"
+              value={avgSl == null ? "—" : `${formatNumber(avgSl, 1)} pips`}
+              format="text"
+              valueClassName="text-danger"
+              hint={slPips.length ? `Across ${slPips.length} trades with a stop set` : "No trades have a stop loss"}
+            />
+            <Stat
+              label="Avg TP level (pips)"
+              value={avgTp == null ? "—" : `${formatNumber(avgTp, 1)} pips`}
+              format="text"
+              valueClassName="text-success"
+              hint={tpPips.length ? `Across ${tpPips.length} trades with a target set` : "No trades have a take-profit"}
+            />
+            <Stat
+              label="Avg planned SL : TP"
+              value={
+                avgSl == null || avgTp == null || avgSl === 0
+                  ? "—"
+                  : `1 : ${formatNumber(avgTp / avgSl, 2)}`
+              }
+              format="text"
+            />
+          </div>
+        );
+      })()}
       <Card>
         <CardHeader><CardTitle>R:R distribution buckets</CardTitle></CardHeader>
         <CardBody>
