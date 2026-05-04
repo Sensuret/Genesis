@@ -416,8 +416,15 @@ export function ReportsDetailed({
           </Card>
         </div>
 
-        <div className="mt-4 grid gap-4 lg:grid-cols-5">
-          <Card>
+        {/* This row is tight — five cards across at lg+. The Sessions card
+            holds a 4-column table that overflows when individual values
+            ($16,733) are wider than the cell. We span the Sessions card
+            across 2 columns (so it has the same width as 2 Day cards),
+            keep the 4 sibling cards single-width, and bump grid to 6
+            columns total. min-w-0 + overflow-hidden on the card prevents
+            any residual content bleed. */}
+        <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-6">
+          <Card className="min-w-0 overflow-hidden lg:col-span-2">
             <CardHeader>
               <CardTitle>Other Sessions Traded &amp; Performance</CardTitle>
             </CardHeader>
@@ -425,30 +432,46 @@ export function ReportsDetailed({
               {sessionRows.length === 0 ? (
                 <div className="text-sm text-fg-muted">No data.</div>
               ) : (
-                <table className="w-full text-left text-xs">
-                  <thead className="border-b border-line text-fg-subtle">
-                    <tr>
-                      <th className="px-2 py-1.5 font-medium">Session</th>
-                      <th className="px-2 py-1.5 text-right font-medium">Trades</th>
-                      <th className="px-2 py-1.5 text-right font-medium">Total P&amp;L</th>
-                      <th className="px-2 py-1.5 text-right font-medium">Avg P&amp;L</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[...sessionRows].sort((a, b) => b.pnl - a.pnl).map((s) => (
-                      <tr key={s.session} className="border-b border-line/50 last:border-0">
-                        <td className="px-2 py-1.5">{s.session}</td>
-                        <td className="px-2 py-1.5 text-right tabular-nums">{s.trades}</td>
-                        <td className={cn("px-2 py-1.5 text-right tabular-nums", pnlClass(s.pnl))}>
-                          {fmt(s.pnl)}
-                        </td>
-                        <td className={cn("px-2 py-1.5 text-right tabular-nums", pnlClass(s.avg))}>
-                          {fmt(s.avg)}
-                        </td>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-[11px] leading-tight">
+                    <thead className="border-b border-line text-fg-subtle">
+                      <tr>
+                        <th className="px-1.5 py-1 font-medium">Session</th>
+                        <th className="px-1.5 py-1 text-right font-medium">Trades</th>
+                        <th className="whitespace-nowrap px-1.5 py-1 text-right font-medium">
+                          Total P&amp;L
+                        </th>
+                        <th className="whitespace-nowrap px-1.5 py-1 text-right font-medium">
+                          Avg P&amp;L
+                        </th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {[...sessionRows].sort((a, b) => b.pnl - a.pnl).map((s) => (
+                        <tr key={s.session} className="border-b border-line/50 last:border-0">
+                          <td className="whitespace-nowrap px-1.5 py-1">{s.session}</td>
+                          <td className="px-1.5 py-1 text-right tabular-nums">{s.trades}</td>
+                          <td
+                            className={cn(
+                              "whitespace-nowrap px-1.5 py-1 text-right tabular-nums",
+                              pnlClass(s.pnl)
+                            )}
+                          >
+                            {fmt(s.pnl)}
+                          </td>
+                          <td
+                            className={cn(
+                              "whitespace-nowrap px-1.5 py-1 text-right tabular-nums",
+                              pnlClass(s.avg)
+                            )}
+                          >
+                            {fmt(s.avg)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </CardBody>
           </Card>

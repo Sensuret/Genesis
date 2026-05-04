@@ -24,22 +24,15 @@ import { LogoMark, Wordmark } from "@/components/logo";
 import { useFilters, useMoney } from "@/lib/filters/store";
 import type { TradeRow } from "@/lib/supabase/types";
 import { createClient } from "@/lib/supabase/client";
+import {
+  getSessionWindows,
+  useSessionWindowStyle,
+  type SessionWindowSet
+} from "@/lib/preferences/session-window";
 
 function resolveSession(t: TradeRow): string | null {
   return t.session ?? detectSession(t.trade_date);
 }
-
-/**
- * Session windows in UTC, matching `detectSession()` in parser/index.ts.
- * We surface the local-time equivalent of each window in the Streaks
- * cards so the user knows when each session is open in their own clock.
- */
-const SESSION_WINDOWS_UTC: Record<string, { start: number; end: number }> = {
-  Sydney: { start: 21, end: 24 },
-  Asia: { start: 0, end: 7 },
-  London: { start: 7, end: 12 },
-  "New York": { start: 12, end: 21 }
-};
 
 function formatHourMinute(hourFloat: number): string {
   const wrapped = ((hourFloat % 24) + 24) % 24;
@@ -58,8 +51,12 @@ function gmtLabel(offsetMinutes: number): string {
 
 /** Convert a UTC session window to the local time range string the user
  *  sees in the bracket — e.g. "10:00–15:00" for London at GMT+3. */
-function sessionRangeLabel(session: string, offsetMinutes: number): string {
-  const win = SESSION_WINDOWS_UTC[session];
+function sessionRangeLabel(
+  session: string,
+  offsetMinutes: number,
+  windows: SessionWindowSet
+): string {
+  const win = windows[session];
   if (!win) return "";
   const offHours = offsetMinutes / 60;
   const startLocal = win.start + offHours;
@@ -72,6 +69,11 @@ export default function StreaksPage() {
   const { filters } = useFilters();
   const { fmt } = useMoney();
   const captureRef = useRef<HTMLDivElement>(null);
+
+  // User-selected session-window style — "forex" (default) or "nyse".
+  // Toggled in Settings → Session windows. Updates live via storage event.
+  const [sessionStyle] = useSessionWindowStyle();
+  const sessionWindows = getSessionWindows(sessionStyle);
 
   // Effective timezone offset for the bracket labels:
   //   1. If every imported file has the same `broker_tz_offset_minutes`,
@@ -302,6 +304,8 @@ export default function StreaksPage() {
               <span className="ml-2 text-xs font-normal text-fg-subtle">
                 Times shown in {gmtLabel(tz.offset)}
                 {tz.source === "broker" ? " (broker server)" : " (your local zone)"}
+                {" · "}
+                {sessionStyle === "nyse" ? "NYSE hours" : "forex hours"}
               </span>
             </CardTitle>
           </CardHeader>
@@ -309,7 +313,7 @@ export default function StreaksPage() {
             {["New York", "London", "Asia", "Sydney"].map((s) => {
               const series = sessions[s] ?? [];
               const top = best(series);
-              const range = sessionRangeLabel(s, tz.offset);
+              const range = sessionRangeLabel(s, tz.offset, sessionWindows);
               return (
                 <div key={s} className="rounded-xl border border-line bg-bg-elevated p-4">
                   <div className="text-xs uppercase tracking-wide text-fg-subtle">

@@ -595,24 +595,45 @@ function Risk({ trades, currency }: { trades: TradeRow[]; currency: string }) {
 
       {/* Average SL / TP distances in pips. We measure the *planned* stop
           and target sizes — not where the trade actually closed — so this
-          is a pure read on the risk profile of the entries you're taking. */}
+          is a pure read on the risk profile of the entries you're taking.
+          Filters mirror realisedRR(): drop rows where the stored SL or TP
+          is the MetaTrader "no level set" placeholder (0), and cap any
+          individual distance > 100,000 pips as a corrupt-data sentinel. */}
       {(() => {
+        const SANE_PIP_CAP = 100_000;
+        const distanceInPips = (
+          entry: number,
+          target: number,
+          pair: string | null | undefined,
+          side: "long" | "short" | null | undefined
+        ): number | null => {
+          const p = computePips({ pair, entry, exit_price: target, side });
+          if (p == null || !Number.isFinite(p)) return null;
+          const abs = Math.abs(p);
+          if (abs > SANE_PIP_CAP) return null;
+          return abs;
+        };
+
         const slPips = trades
           .map((t) =>
-            t.stop_loss != null && t.entry != null
-              ? computePips({ pair: t.pair, entry: t.entry, exit_price: t.stop_loss, side: t.side })
+            t.stop_loss != null &&
+            t.stop_loss !== 0 &&
+            t.entry != null &&
+            t.entry !== 0
+              ? distanceInPips(t.entry, t.stop_loss, t.pair, t.side)
               : null
           )
-          .filter((p): p is number => p != null)
-          .map((p) => Math.abs(p));
+          .filter((p): p is number => p != null);
         const tpPips = trades
           .map((t) =>
-            t.take_profit != null && t.entry != null
-              ? computePips({ pair: t.pair, entry: t.entry, exit_price: t.take_profit, side: t.side })
+            t.take_profit != null &&
+            t.take_profit !== 0 &&
+            t.entry != null &&
+            t.entry !== 0
+              ? distanceInPips(t.entry, t.take_profit, t.pair, t.side)
               : null
           )
-          .filter((p): p is number => p != null)
-          .map((p) => Math.abs(p));
+          .filter((p): p is number => p != null);
         const avgSl = slPips.length ? slPips.reduce((s, x) => s + x, 0) / slPips.length : null;
         const avgTp = tpPips.length ? tpPips.reduce((s, x) => s + x, 0) / tpPips.length : null;
         return (

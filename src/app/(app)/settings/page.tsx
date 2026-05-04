@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { ProfileRow } from "@/lib/supabase/types";
 import { ThemePicker } from "@/components/theme-picker";
 import { ImportedFilesCard } from "@/components/settings/imported-files";
+import { useSessionWindowStyle } from "@/lib/preferences/session-window";
 
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
@@ -133,6 +134,8 @@ export default function SettingsPage() {
 
       <ImportedFilesCard />
 
+      <SessionWindowsCard />
+
       <Card>
         <CardHeader>
           <CardTitle>Appearance</CardTitle>
@@ -159,5 +162,75 @@ export default function SettingsPage() {
         </CardBody>
       </Card>
     </div>
+  );
+}
+
+/**
+ * Session windows preference. Controls how the Streaks page brackets the
+ * four trading sessions:
+ *   - "forex" (default): when each region's interbank desks are open and
+ *     FX prices are most liquid. Matches detectSession() in the parser.
+ *   - "nyse":  when the major stock exchanges in each region are open.
+ *     Useful for index / equity CFD traders.
+ * The selection is stored in localStorage (no DB column needed) so it
+ * applies per-device — flips immediately on the Streaks page via a
+ * `genesis-session-style-change` event.
+ */
+function SessionWindowsCard() {
+  const [style, setStyle] = useSessionWindowStyle();
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Session windows</CardTitle>
+      </CardHeader>
+      <CardBody className="space-y-3">
+        <p className="text-xs text-fg-muted">
+          Controls the time ranges shown in the Streaks page session brackets
+          (NEWYORK / LONDON / ASIA / SYDNEY). Forex hours reflect when
+          interbank desks are open and FX prices move; NYSE hours reflect the
+          underlying stock exchanges.
+        </p>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <label
+            className={`cursor-pointer rounded-xl border p-3 text-xs transition ${
+              style === "forex"
+                ? "border-brand-400 bg-brand-500/10 text-fg"
+                : "border-line bg-bg-soft text-fg-muted hover:text-fg"
+            }`}
+          >
+            <input
+              type="radio"
+              name="session-style"
+              checked={style === "forex"}
+              onChange={() => setStyle("forex")}
+              className="mr-2"
+            />
+            <span className="font-medium">Forex hours</span>
+            <span className="ml-2 text-fg-subtle">
+              NY 12:00–21:00 UTC · London 07:00–12:00 · Asia 00:00–07:00 · Sydney 21:00–24:00
+            </span>
+          </label>
+          <label
+            className={`cursor-pointer rounded-xl border p-3 text-xs transition ${
+              style === "nyse"
+                ? "border-brand-400 bg-brand-500/10 text-fg"
+                : "border-line bg-bg-soft text-fg-muted hover:text-fg"
+            }`}
+          >
+            <input
+              type="radio"
+              name="session-style"
+              checked={style === "nyse"}
+              onChange={() => setStyle("nyse")}
+              className="mr-2"
+            />
+            <span className="font-medium">NYSE hours</span>
+            <span className="ml-2 text-fg-subtle">
+              NYSE 13:30–20:00 UTC · LSE 07:00–15:30 · Tokyo/ASX 00:00–06:00
+            </span>
+          </label>
+        </div>
+      </CardBody>
+    </Card>
   );
 }
