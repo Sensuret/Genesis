@@ -12,6 +12,13 @@ type ResolutionCardProps = {
   orientation?: "portrait" | "landscape";
   /** Used as a tighter preview on the Created/Time-passed lists. */
   variant?: "full" | "preview";
+  /**
+   * Optional click handler for individual bullet checkboxes. When
+   * provided, each bullet renders as a clickable button that flips its
+   * `checked` flag — used in Created / Time-passed lists and in the
+   * detail modal so users can mark progress on goals.
+   */
+  onToggleItem?: (sectionId: string, subId: string, itemId: string, next: boolean) => void;
 };
 
 /** Eyebrow colour map — matches the user's reference template. */
@@ -60,7 +67,8 @@ const SECTION_TONES: Record<
 export function ResolutionCard({
   resolution,
   orientation = "portrait",
-  variant = "full"
+  variant = "full",
+  onToggleItem
 }: ResolutionCardProps) {
   const zodiac = chineseZodiacOf(resolution.year);
   const emoji = chineseZodiacEmoji(resolution.year);
@@ -175,25 +183,48 @@ export function ResolutionCard({
                       </div>
                     )}
                     <ul className="space-y-1 pl-1">
-                      {sub.items.map((item) => (
-                        <li
-                          key={item.id}
-                          className={cn("flex items-start gap-2", !bg && "text-fg-muted")}
-                          style={bg ? { color: mutedText } : undefined}
-                        >
-                          <span
-                            className={cn(
-                              "mt-0.5 inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border",
-                              item.checked
-                                ? "border-emerald-400 bg-emerald-500/30 text-emerald-100"
-                                : "border-line bg-bg-soft/40"
-                            )}
+                      {sub.items.map((item) => {
+                        const interactive = !!onToggleItem;
+                        return (
+                          <li
+                            key={item.id}
+                            className={cn("flex items-start gap-2", !bg && "text-fg-muted")}
+                            style={bg ? { color: mutedText } : undefined}
                           >
-                            {item.checked ? "✓" : ""}
-                          </span>
-                          <span>{item.text}</span>
-                        </li>
-                      ))}
+                            <button
+                              type="button"
+                              tabIndex={interactive ? 0 : -1}
+                              disabled={!interactive}
+                              onClick={(e) => {
+                                if (!interactive) return;
+                                e.preventDefault();
+                                e.stopPropagation();
+                                onToggleItem!(section.id, sub.id, item.id, !item.checked);
+                              }}
+                              className={cn(
+                                "mt-0.5 inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border text-[10px] leading-none",
+                                item.checked
+                                  ? "border-emerald-400 bg-emerald-500/30 text-emerald-100"
+                                  : "border-line bg-bg-soft/40 text-transparent",
+                                interactive && "cursor-pointer hover:border-emerald-400/80",
+                                !interactive && "cursor-default"
+                              )}
+                              aria-label={item.checked ? "Mark as not done" : "Mark as done"}
+                              aria-pressed={!!item.checked}
+                            >
+                              {item.checked ? "✓" : ""}
+                            </button>
+                            <span
+                              className={cn(
+                                "flex-1",
+                                item.checked && "line-through opacity-70"
+                              )}
+                            >
+                              {item.text}
+                            </span>
+                          </li>
+                        );
+                      })}
                     </ul>
                   </div>
                 ))}
@@ -203,10 +234,17 @@ export function ResolutionCard({
         })}
       </div>
 
-      {/* Checker-finish flag — bottom-left default decoration */}
+      {/* Checker-finish flag — bottom-left default decoration. On a light
+          background the amber-on-cream gradient washes out, so we swap to
+          a contrast-safe deep-amber tone with a darker chip. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute bottom-3 left-3 flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-gradient-to-r from-amber-500/20 via-amber-400/10 to-transparent px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-200"
+        className={cn(
+          "pointer-events-none absolute bottom-3 left-3 flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em]",
+          onLight
+            ? "border-amber-700/40 bg-amber-500/25 text-amber-900"
+            : "border-amber-500/30 bg-gradient-to-r from-amber-500/20 via-amber-400/10 to-transparent text-amber-200"
+        )}
       >
         <Flag className="h-3 w-3" />
         Finish strong
