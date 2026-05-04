@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { LogoMark, Wordmark } from "@/components/logo";
@@ -21,6 +21,20 @@ export default function RegisterPage() {
   const [otpError, setOtpError] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
   const hydrated = useHydrated();
+
+  // If the user lands on /register with a leftover session (logged in on the
+  // same device, or a stale cookie from a previous account), sign them out
+  // immediately. Without this, navigating to /register after a partial logout
+  // would silently hand them a fresh dashboard tied to whoever the cookie
+  // belonged to.
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) {
+        supabase.auth.signOut({ scope: "local" });
+      }
+    });
+  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -129,11 +143,15 @@ export default function RegisterPage() {
         {otpStep ? (
           <form onSubmit={verifyOtp} className="space-y-4" noValidate>
             <p className="text-center text-sm text-fg">
-              We sent a 6-digit code to <span className="font-medium">{email}</span>. Enter it below
-              to confirm your account — no need to click any link.
+              A confirmation link has been sent to{" "}
+              <span className="font-medium">{email}</span>. Open your Gmail and click the link to
+              finish signing up.
+            </p>
+            <p className="text-center text-xs text-fg-muted">
+              Or, if the email also includes a 6-digit code, you can paste it below instead.
             </p>
             <div>
-              <Label>Confirmation code</Label>
+              <Label>Confirmation code (optional)</Label>
               <Input
                 inputMode="numeric"
                 autoComplete="one-time-code"

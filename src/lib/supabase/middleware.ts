@@ -28,13 +28,28 @@ export async function updateSession(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  const isAuthRoute = pathname.startsWith("/login") || pathname.startsWith("/register");
+  const isAuthRoute =
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/register") ||
+    pathname.startsWith("/forgot-password") ||
+    pathname.startsWith("/reset-password") ||
+    pathname.startsWith("/auth/");
   const isPublic =
     pathname === "/" ||
     pathname.startsWith("/api/health") ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon") ||
     pathname.startsWith("/logo");
+
+  // /reset-password and /register need to be reachable even when a session
+  // cookie is present:
+  //   - /reset-password: Supabase exchanges the recovery code for a session,
+  //     so we'd otherwise bounce the user back to /dashboard mid-flow.
+  //   - /register: a user who's still signed in (or has a stale cookie) on a
+  //     shared device must be able to land on the signup form, sign out
+  //     there, and create a fresh account. The form handles the sign-out.
+  const allowSessionThrough =
+    pathname.startsWith("/reset-password") || pathname.startsWith("/register");
 
   // Performance: every page navigation runs through this middleware (incl.
   // prefetch RSC requests). We use `getSession()` which reads from cookies
@@ -53,7 +68,7 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (hasSession && isAuthRoute) {
+  if (hasSession && isAuthRoute && !allowSessionThrough) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     url.search = "";
