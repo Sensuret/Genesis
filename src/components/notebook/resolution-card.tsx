@@ -2,6 +2,7 @@
 
 import { Flag } from "lucide-react";
 import { chineseZodiacEmoji, chineseZodiacOf } from "@/lib/zodiac";
+import { resolveBackgroundCss } from "@/lib/notebook/resolution-backgrounds";
 import type { Resolution, ResolutionSection } from "@/lib/supabase/types";
 import { cn } from "@/lib/utils";
 
@@ -64,39 +65,72 @@ export function ResolutionCard({
   const zodiac = chineseZodiacOf(resolution.year);
   const emoji = chineseZodiacEmoji(resolution.year);
   const isLandscape = orientation === "landscape";
+  const bg = resolveBackgroundCss(resolution.background);
+  const showYearLabel = resolution.show_year_label !== false;
+  const showGenesisLogo = resolution.show_genesis_logo !== false;
+
+  // When a custom background is applied we want to anchor text colour to a
+  // tone that always reads against the chosen colour. "light" → soft white
+  // body text + warm-amber accents (works on dark or saturated grounds).
+  // "dark" → near-black body text (works on cream / pastel gradients).
+  const onLight = bg?.text === "dark";
+  const bodyText = onLight ? "rgb(15 23 42)" : "rgb(248 250 252)";
+  const mutedText = onLight ? "rgb(71 85 105)" : "rgba(248,250,252,0.78)";
 
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-2xl border border-line bg-bg-elevated text-fg shadow-card",
+        "relative overflow-hidden rounded-2xl border border-line shadow-card",
+        !bg && "bg-bg-elevated text-fg",
         isLandscape ? "aspect-[1.41/1]" : "aspect-[1/1.41]",
         variant === "preview" && "max-h-[420px]"
       )}
+      style={bg ? { background: bg.css, color: bodyText } : undefined}
     >
       {/* Year banner */}
-      <div className="relative flex items-start justify-between gap-4 border-b border-line bg-gradient-to-br from-amber-500/15 via-bg-elevated to-bg-elevated p-5">
+      <div
+        className={cn(
+          "relative flex items-start justify-between gap-4 border-b p-5",
+          bg ? "border-white/10" : "border-line bg-gradient-to-br from-amber-500/15 via-bg-elevated to-bg-elevated"
+        )}
+      >
         <div>
-          <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-300/80">
-            Year of the {zodiac}
-          </div>
+          {showYearLabel && (
+            <div
+              className="text-[10px] font-semibold uppercase tracking-[0.2em]"
+              style={bg ? { color: onLight ? "rgb(120 53 15)" : "rgba(252 211 77 / 0.95)" } : undefined}
+            >
+              {!bg && (
+                <span className="text-amber-300/80">Year of the {zodiac}</span>
+              )}
+              {bg && <span>Year of the {zodiac}</span>}
+            </div>
+          )}
           <h2
             className={cn(
               "font-extrabold tracking-tight",
               variant === "preview" ? "text-3xl" : "text-5xl",
-              "bg-gradient-to-br from-amber-300 via-amber-400 to-amber-600 bg-clip-text text-transparent"
+              !bg && "bg-gradient-to-br from-amber-300 via-amber-400 to-amber-600 bg-clip-text text-transparent"
             )}
+            style={bg ? { color: onLight ? "rgb(120 53 15)" : "rgb(252 211 77)" } : undefined}
           >
             {resolution.year}
           </h2>
           {resolution.title && (
-            <div className="mt-1 text-xs text-fg-muted">{resolution.title}</div>
+            <div className="mt-1 text-xs" style={bg ? { color: mutedText } : undefined}>
+              <span className={!bg ? "text-fg-muted" : undefined}>{resolution.title}</span>
+            </div>
           )}
         </div>
 
+        {/* Year-cycle animal — always rendered, not togglable, reacts to year. */}
         <div
           aria-hidden
           className={cn(
-            "flex shrink-0 items-center justify-center rounded-2xl border border-amber-500/30 bg-gradient-to-br from-amber-500/20 via-amber-400/10 to-transparent",
+            "flex shrink-0 items-center justify-center rounded-2xl border",
+            bg
+              ? "border-white/20 bg-white/10"
+              : "border-amber-500/30 bg-gradient-to-br from-amber-500/20 via-amber-400/10 to-transparent",
             variant === "preview" ? "h-16 w-16 text-3xl" : "h-24 w-24 text-5xl"
           )}
           title={zodiac}
@@ -133,16 +167,20 @@ export function ResolutionCard({
                       </span>
                     </div>
                     {sub.target && (
-                      <div className="text-xs text-fg-muted">
+                      <div className="text-xs" style={bg ? { color: mutedText } : undefined}>
                         <span className={cn("rounded-md border px-1.5 py-0.5", tone.chip)}>
                           Target
                         </span>{" "}
-                        {sub.target}
+                        <span className={!bg ? "text-fg-muted" : undefined}>{sub.target}</span>
                       </div>
                     )}
                     <ul className="space-y-1 pl-1">
                       {sub.items.map((item) => (
-                        <li key={item.id} className="flex items-start gap-2 text-fg-muted">
+                        <li
+                          key={item.id}
+                          className={cn("flex items-start gap-2", !bg && "text-fg-muted")}
+                          style={bg ? { color: mutedText } : undefined}
+                        >
                           <span
                             className={cn(
                               "mt-0.5 inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border",
@@ -173,6 +211,25 @@ export function ResolutionCard({
         <Flag className="h-3 w-3" />
         Finish strong
       </div>
+
+      {/* Genesis brand mark — toggleable per resolution. */}
+      {showGenesisLogo && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute bottom-3 right-3 inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.18em]"
+          style={
+            bg
+              ? {
+                  color: onLight ? "rgb(15 23 42 / 0.7)" : "rgba(255,255,255,0.78)",
+                  borderColor: onLight ? "rgb(15 23 42 / 0.2)" : "rgba(255,255,255,0.25)",
+                  background: onLight ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.18)"
+                }
+              : undefined
+          }
+        >
+          <span className={!bg ? "text-fg-muted" : undefined}>Genesis</span>
+        </div>
+      )}
     </div>
   );
 }

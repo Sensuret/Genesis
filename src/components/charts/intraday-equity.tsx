@@ -104,7 +104,9 @@ export function IntradayEquityChart({ trades }: { trades: TradeRow[] }) {
             stroke="url(#day-eq-stroke)"
             fill="url(#day-eq-fill)"
             strokeWidth={2}
-            isAnimationActive={false}
+            isAnimationActive={true}
+            animationDuration={800}
+            animationEasing="ease-out"
             name={`Equity (${currency})`}
           />
         </AreaChart>
