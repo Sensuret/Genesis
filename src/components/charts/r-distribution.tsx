@@ -3,6 +3,7 @@
 import { BarChart, Bar, ResponsiveContainer, XAxis, YAxis, Cell, Tooltip } from "recharts";
 import type { TradeRow } from "@/lib/supabase/types";
 import { rDistribution } from "@/lib/analytics";
+import { chartTooltipProps } from "./chart-tooltip";
 
 function fillFor(bucket: string): string {
   if (bucket === "<1:1") return "url(#rr-down)";
@@ -38,14 +39,8 @@ export function RDistributionChart({ trades }: { trades: TradeRow[] }) {
           <XAxis dataKey="bucket" stroke="rgb(130 130 150)" fontSize={11} tickLine={false} axisLine={false} />
           <YAxis allowDecimals={false} stroke="rgb(130 130 150)" fontSize={11} tickLine={false} axisLine={false} />
           <Tooltip
+            {...chartTooltipProps}
             cursor={{ fill: "transparent" }}
-            contentStyle={{
-              background: "rgb(15 14 26 / 0.95)",
-              border: "1px solid rgb(168 102 255 / 0.4)",
-              borderRadius: 12,
-              color: "white",
-              fontSize: 12
-            }}
           />
           <Bar dataKey="count" radius={[6, 6, 0, 0]}>
             {data.map((d) => (

@@ -12,6 +12,7 @@ import {
 } from "recharts";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
+import { chartTooltipProps } from "@/components/charts/chart-tooltip";
 import { Empty } from "@/components/ui/empty";
 import { ScreenshotButton } from "@/components/ui/screenshot-button";
 import { GsScoreTriangle } from "@/components/charts/gs-score-triangle";
@@ -586,13 +587,7 @@ function PurpleArea({
             width={40}
           />
           <Tooltip
-            contentStyle={{
-              background: "rgb(20 18 32)",
-              border: "1px solid rgba(168, 102, 255, 0.35)",
-              borderRadius: 12,
-              fontSize: 12
-            }}
-            labelStyle={{ color: "rgb(168 102 255)" }}
+            {...chartTooltipProps}
             formatter={(v) => [formatY(Number(v)), valueLabel]}
           />
           <Area

@@ -8,6 +8,7 @@ import type { EquityPoint } from "@/lib/analytics";
 import { Empty } from "@/components/ui/empty";
 import { useMoney } from "@/lib/filters/store";
 import { formatMoney, formatMoneyCompact } from "@/lib/fx";
+import { chartTooltipProps } from "./chart-tooltip";
 
 /**
  * Cumulative equity area chart with a glossy split-coloured fill —
@@ -91,9 +92,8 @@ export function EquityCurveChart({
             tickFormatter={(v: number) => formatMoneyCompact(v, currency)}
           />
           <Tooltip
+            {...chartTooltipProps}
             formatter={(v: number) => formatMoney(v, currency)}
-            labelStyle={{ color: "rgb(130 130 150)" }}
-            wrapperStyle={{ outline: "none" }}
           />
           <ReferenceLine y={0} stroke="rgba(127,127,150,0.45)" strokeDasharray="2 4" />
           <Area
