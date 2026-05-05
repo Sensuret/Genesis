@@ -326,7 +326,9 @@ export function ResolutionCard({
                               : undefined
                           }
                           mutedText={mutedText}
+                          bodyText={bodyText}
                           hasBg={!!bg}
+                          onLight={onLight}
                         />
                       ))}
                     </div>
@@ -404,13 +406,17 @@ function ResolutionBlock({
   numberedIndex,
   onToggle,
   mutedText,
-  hasBg
+  bodyText,
+  hasBg,
+  onLight
 }: {
   item: ResolutionItem;
   numberedIndex: number | null;
   onToggle?: (next: boolean) => void;
   mutedText: string;
+  bodyText: string;
   hasBg: boolean;
+  onLight: boolean;
 }) {
   const kind = blockKindOf(item);
   const interactive = !!onToggle;
@@ -418,7 +424,10 @@ function ResolutionBlock({
 
   if (kind === "divider") {
     return (
-      <hr className="my-2 border-line/70" style={hasBg ? { borderColor: "rgba(255,255,255,0.25)" } : undefined} />
+      <hr
+        className="my-2 border-line/70"
+        style={hasBg ? { borderColor: onLight ? "rgba(15,23,42,0.2)" : "rgba(255,255,255,0.25)" } : undefined}
+      />
     );
   }
 
@@ -429,8 +438,14 @@ function ResolutionBlock({
 
   if (kind === "h1" || kind === "h2" || kind === "h3") {
     const sizeClass = kind === "h1" ? "text-base font-bold" : kind === "h2" ? "text-sm font-semibold" : "text-[13px] font-semibold";
+    // Use the same `bodyText` colour the rest of the card uses for
+    // primary content. Headings need to stay distinct from the muted
+    // body lines on every theme — including the cream / white
+    // backgrounds where `mutedText` is `rgb(71 85 105)` (no "0.78"
+    // substring to swap), so a naive .replace() leaves headings the
+    // exact same colour as body text.
     return (
-      <div className={cn(sizeClass, !hasBg && "text-fg")} style={hasBg ? { color: hasBg ? mutedText.replace("0.78", "0.95") : undefined } : undefined}>
+      <div className={cn(sizeClass, !hasBg && "text-fg")} style={hasBg ? { color: bodyText } : undefined}>
         {item.text}
       </div>
     );

@@ -131,7 +131,13 @@ export function BlockEditor({ blocks, onChange, placeholder, className }: BlockE
     const idx = blocks.findIndex((b) => b.id === id);
     if (idx < 0) return;
     if (blocks.length <= 1) {
-      onChange([{ id: newId(), text: "", kind: "todo" }]);
+      // Replace the only block with a fresh empty todo and refocus it,
+      // otherwise the cursor disappears entirely after Backspace on the
+      // last remaining block (the old DOM node is unmounted and the new
+      // one has a brand new id with no focus tracker).
+      const freshId = newId();
+      onChange([{ id: freshId, text: "", kind: "todo" }]);
+      setPendingFocus(freshId);
       return;
     }
     const next = blocks.filter((b) => b.id !== id);
