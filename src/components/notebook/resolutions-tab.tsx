@@ -139,6 +139,7 @@ export function ResolutionsTab({
       {open && (
         <ResolutionModal
           resolution={open}
+          defaultOwnerName={defaultOwnerName}
           onClose={() => setOpenId(null)}
           // Resolutions whose year has already ended are frozen — the modal
           // shows the card for viewing + downloading but every editing
@@ -837,7 +838,8 @@ function ResolutionModal({
   resolution,
   onClose,
   onUpdate,
-  readOnly = false
+  readOnly = false,
+  defaultOwnerName
 }: {
   resolution: Resolution;
   onClose: () => void;
@@ -845,6 +847,10 @@ function ResolutionModal({
   /** Time-passed view → only screenshot + close are exposed; everything
    *  else (edit pencil, BG picker, toggles, tick-boxes) is hidden. */
   readOnly?: boolean;
+  /** Profile full-name fallback used when the user toggles the
+   *  Name display on for the first time on an older resolution
+   *  that was never personalised. */
+  defaultOwnerName?: string;
 }) {
   const [orientation, setOrientation] = useState<"portrait" | "landscape">("portrait");
   const [editMode, setEditMode] = useState(false);
@@ -854,8 +860,23 @@ function ResolutionModal({
     onUpdate({ ...resolution, background: bg });
   const toggleYearLabel = () =>
     onUpdate({ ...resolution, show_year_label: !(resolution.show_year_label !== false) });
-  const toggleOwnerName = () =>
-    onUpdate({ ...resolution, show_owner_name: !resolution.show_owner_name });
+  const toggleOwnerName = () => {
+    const turningOn = !resolution.show_owner_name;
+    // If the user is enabling the Name banner for the first time on a
+    // resolution that doesn't yet have one stored (e.g. an older
+    // resolution created before PR V), seed it from their profile so
+    // there's something visible to render. They can still edit or clear
+    // the value from the Display name input afterwards.
+    const seededName =
+      turningOn && !resolution.owner_name?.trim() && defaultOwnerName?.trim()
+        ? defaultOwnerName.trim()
+        : resolution.owner_name;
+    onUpdate({
+      ...resolution,
+      show_owner_name: turningOn,
+      owner_name: seededName
+    });
+  };
   const toggleTimestamp = () =>
     onUpdate({ ...resolution, show_created_timestamp: !resolution.show_created_timestamp });
   const toggleProgress = () =>

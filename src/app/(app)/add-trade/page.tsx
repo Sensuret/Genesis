@@ -9,6 +9,10 @@ import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { computePips, parseFile, type ParsedTrade, type AccountInfo } from "@/lib/parser";
 import { createClient } from "@/lib/supabase/client";
+import {
+  insertManyWithFallback,
+  insertOneWithFallback
+} from "@/lib/supabase/insert-with-fallback";
 import { AUDIT_EVENT, logAuditEvent } from "@/lib/audit/log";
 import { CheckCircle2, Upload } from "lucide-react";
 import Link from "next/link";
@@ -68,6 +72,10 @@ function UploadForm({ onDone }: { onDone: () => void }) {
     accountInfo?: AccountInfo;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // List of column names that the Supabase schema cache rejected during
+  // the last save. Surfaces a friendly "apply schema for full features"
+  // hint instead of leaving the user staring at the raw PostgREST error.
+  const [missingCols, setMissingCols] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const input = useRef<HTMLInputElement>(null);
 
@@ -107,6 +115,7 @@ function UploadForm({ onDone }: { onDone: () => void }) {
     if (!file || !preview) return;
     setBusy(true);
     setError(null);
+    setMissingCols([]);
     const supabase = createClient();
     const { data: userData } = await supabase.auth.getUser();
     const user = userData.user;
@@ -118,39 +127,37 @@ function UploadForm({ onDone }: { onDone: () => void }) {
 
     const a = preview.accountInfo;
     const isMt5 = preview.format === "metatrader";
-    const { data: created, error: fileErr } = await supabase
-      .from("trade_files")
-      .insert({
+    type CreatedFile = { id: string; source: string };
+    // Schema-resilient insert: the helper tries the full payload first
+    // and on a "column not in schema cache" error, drops the offending
+    // key and retries. This means an imperfectly-migrated Supabase
+    // project still succeeds at the core insert; the broker / account
+    // chips just won't show on the file row until the migration is
+    // applied. The list of dropped columns is surfaced as a banner.
+    const { data: created, error: fileErr, missingColumns: missingFile } =
+      await insertOneWithFallback<CreatedFile>(supabase, "trade_files", {
         user_id: user.id,
         name: name || file.name,
-        // Tag with the detected parser format so the Settings Imported-files
-        // card can show "MT4/5" vs "HFM" vs "Generic" at a glance.
         source:
           preview.format === "metatrader" ? "MT4/5" :
           preview.format === "hfm" ? "HFM" :
           "Generic",
         trade_count: preview.trades.length,
         broker_tz_offset_minutes: null,
-        // Account-level metadata extracted from the broker file footer
-        // (currently only MT5 supplies these; HFM and generic CSVs leave
-        // them null and the Reports Overview cards fall back to "—").
         account_balance: a?.balance ?? null,
         account_equity: a?.equity ?? null,
         deposits_total: a?.deposits_total ?? null,
         withdrawals_total: a?.withdrawals_total ?? null,
-        // ReportHistory preamble metadata — when present, lets analytics
-        // group by account, display the broker chip on the imported file
-        // row, and prevents two MT5 files for the same login colliding
-        // (the unique index on (user_id, account_number) already guards).
+        // The columns below are added by the PR #35 / PR #37 migrations.
+        // If the user's project hasn't run them yet, the helper drops
+        // them transparently so the import still goes through.
         sync_kind: "manual",
         account_number: a?.account_number ?? null,
         account_name: a?.account_holder ?? null,
         broker: a?.broker ?? a?.company ?? null,
         server: a?.broker_server ?? null,
         platform: isMt5 ? "MT5" : null
-      })
-      .select()
-      .single();
+      });
     if (fileErr || !created) {
       setError(fileErr?.message ?? "Failed to create file record.");
       setBusy(false);
@@ -170,12 +177,19 @@ function UploadForm({ onDone }: { onDone: () => void }) {
       platform: isMt5 ? "MT5" : null,
       source: "manual" as const
     }));
-    const { error: tradesErr } = await supabase.from("trades").insert(rows);
+    const { error: tradesErr, missingColumns: missingTrades } =
+      await insertManyWithFallback(supabase, "trades", rows);
     if (tradesErr) {
       setError(tradesErr.message);
       setBusy(false);
       return;
     }
+
+    // Aggregate the dropped column names from the two inserts so the
+    // user can see (once the save succeeds) what they'd unlock by
+    // applying the schema.
+    const allMissing = Array.from(new Set([...missingFile, ...missingTrades]));
+    if (allMissing.length) setMissingCols(allMissing);
     await logAuditEvent(
       AUDIT_EVENT.TRADE_FILE_IMPORTED,
       `Imported ${preview.trades.length} trades from ${name || file.name}`,
@@ -294,7 +308,68 @@ function UploadForm({ onDone }: { onDone: () => void }) {
           </div>
         )}
 
-        {error && <div className="rounded-lg bg-danger/10 p-3 text-xs text-danger">{error}</div>}
+        {error && (
+          <div className="rounded-lg bg-danger/10 p-3 text-xs text-danger">
+            {error}
+            {/^Could not find the/i.test(error) && (
+              <div className="mt-1.5 text-[11px] leading-relaxed text-danger/80">
+                Your Supabase project is missing the latest schema. Run the
+                steps in the banner below — once. Then try again.
+              </div>
+            )}
+          </div>
+        )}
+
+        {(missingCols.length > 0 || /schema cache/i.test(error ?? "")) && (
+          <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-xs text-amber-200">
+            <div className="mb-1 font-semibold uppercase tracking-wide">
+              Apply the latest Supabase schema
+            </div>
+            <p className="text-amber-100/80">
+              {missingCols.length > 0
+                ? `The following columns aren't in your project yet: ${missingCols
+                    .map((c) => `"${c}"`)
+                    .join(", ")}. The import still saved without them — but broker
+                / account chips, deposit totals and analytics grouping won't
+                work until you apply the migration.`
+                : "Your import failed because Supabase doesn't have the latest columns yet."}
+            </p>
+            <ol className="mt-1.5 list-inside list-decimal space-y-0.5 text-amber-100/85">
+              <li>
+                Open the{" "}
+                <a
+                  className="underline"
+                  href="https://supabase.com/dashboard/project/muwntpqblrxfhaahaczd/sql/new"
+                  target="_blank"
+                  rel="noreferrer noopener"
+                >
+                  Supabase SQL editor
+                </a>
+                .
+              </li>
+              <li>
+                Copy the entire{" "}
+                <a
+                  className="underline"
+                  href="https://raw.githubusercontent.com/Sensuret/Genesis/main/supabase/schema.sql"
+                  target="_blank"
+                  rel="noreferrer noopener"
+                >
+                  schema.sql
+                </a>{" "}
+                file (Ctrl+A, Ctrl+C).
+              </li>
+              <li>Paste into the editor and click Run.</li>
+              <li>
+                Run a second statement to refresh the cache:{" "}
+                <code className="rounded bg-amber-500/15 px-1 py-0.5">
+                  notify pgrst, &apos;reload schema&apos;;
+                </code>
+              </li>
+              <li>Refresh Genesis. Re-upload to get the broker / account chips.</li>
+            </ol>
+          </div>
+        )}
 
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={() => { setFile(null); setPreview(null); }}>Reset</Button>
