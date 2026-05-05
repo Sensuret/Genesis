@@ -10,6 +10,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { GenesisApiKeyRow, TradeFileRow } from "@/lib/supabase/types";
 import { AUDIT_EVENT, logAuditEvent } from "@/lib/audit/log";
 import { shortDate, cn } from "@/lib/utils";
+import { EaSetupWizard } from "@/components/settings/ea-setup-wizard";
 
 /**
  * MT4 / MT5 Expert Advisor key issuance + connected-terminal list.
@@ -39,6 +40,8 @@ export function EaSyncCard({ supabaseUrl }: { supabaseUrl: string }) {
     () => files.filter((f) => f.sync_kind === "ea"),
     [files]
   );
+
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -155,13 +158,31 @@ export function EaSyncCard({ supabaseUrl }: { supabaseUrl: string }) {
     return <SchemaMissingBanner supabaseUrl={supabaseUrl} />;
   }
 
+  async function refreshKeys() {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("genesis_api_keys")
+      .select("*")
+      .order("created_at", { ascending: false });
+    setKeys((data ?? []) as GenesisApiKeyRow[]);
+  }
+
   return (
     <div className="space-y-4">
+      <EaSetupWizard
+        supabaseUrl={supabaseUrl}
+        eaFiles={eaFiles}
+        open={wizardOpen}
+        onOpenChange={setWizardOpen}
+        onKeyCreated={() => void refreshKeys()}
+      />
+
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>MT4 / MT5 Expert Advisor</CardTitle>
           <Button
             size="sm"
+            variant="ghost"
             onClick={() => setCreateOpen((o) => !o)}
             className="gap-1.5"
           >
@@ -329,26 +350,7 @@ export function EaSyncCard({ supabaseUrl }: { supabaseUrl: string }) {
           ) : (
             <ul className="space-y-1.5">
               {eaFiles.map((f) => (
-                <li
-                  key={f.id}
-                  className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-line bg-bg-soft/40 px-3 py-2"
-                >
-                  <RefreshCw className="h-3.5 w-3.5 text-emerald-400" />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-xs font-medium text-fg">
-                      {f.account_name || f.name}
-                    </div>
-                    <div className="text-[10.5px] text-fg-subtle">
-                      {[f.broker, f.platform, f.account_number && `#${f.account_number}`, f.server]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </div>
-                  </div>
-                  <div className="text-[10.5px] text-fg-subtle">
-                    {f.trade_count} trades
-                    {f.last_synced_at ? ` · synced ${shortDate(f.last_synced_at)}` : ""}
-                  </div>
-                </li>
+                <ConnectedTerminalRow key={f.id} file={f} />
               ))}
             </ul>
           )}
@@ -387,6 +389,91 @@ export function EaSyncCard({ supabaseUrl }: { supabaseUrl: string }) {
       </Card>
     </div>
   );
+}
+
+// ---------- ConnectedTerminalRow ----------
+
+/**
+ * One row in the "Connected terminals" list. Shows live "last seen
+ * X seconds/minutes/hours ago" so the user knows whether the EA is
+ * still pinging — re-renders every 10 seconds via a tiny tick state.
+ */
+function ConnectedTerminalRow({ file }: { file: TradeFileRow }) {
+  // Re-render every 10s so "last seen" stays fresh while the user
+  // watches the page after attaching the EA.
+  const [, force] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => force((n) => n + 1), 10_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const status = liveStatus(file.last_synced_at);
+
+  return (
+    <li className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-line bg-bg-soft/40 px-3 py-2">
+      <span
+        className={cn(
+          "inline-flex h-2 w-2 shrink-0 rounded-full",
+          status.tone === "live" && "animate-pulse bg-emerald-400 ring-2 ring-emerald-400/30",
+          status.tone === "idle" && "bg-amber-400 ring-2 ring-amber-400/30",
+          status.tone === "stale" && "bg-fg-subtle ring-2 ring-fg-subtle/20",
+          status.tone === "never" && "bg-fg-subtle ring-2 ring-fg-subtle/20"
+        )}
+        aria-hidden
+      />
+      <RefreshCw className={cn("h-3.5 w-3.5", status.tone === "live" ? "text-emerald-400" : "text-fg-subtle")} />
+      <div className="min-w-0 flex-1">
+        <div className="text-xs font-medium text-fg">
+          {file.account_name || file.name}
+        </div>
+        <div className="text-[10.5px] text-fg-subtle">
+          {[file.broker, file.platform, file.account_number && `#${file.account_number}`, file.server]
+            .filter(Boolean)
+            .join(" · ")}
+        </div>
+      </div>
+      <div className="flex flex-col items-end gap-0.5 text-[10.5px]">
+        <span
+          className={cn(
+            "font-medium",
+            status.tone === "live" && "text-emerald-300",
+            status.tone === "idle" && "text-amber-300",
+            status.tone === "stale" && "text-fg-subtle",
+            status.tone === "never" && "text-fg-subtle"
+          )}
+        >
+          {status.label}
+        </span>
+        <span className="text-fg-subtle">{file.trade_count} trades</span>
+      </div>
+    </li>
+  );
+}
+
+/** Bucket the "last seen" gap into live / idle / stale tiers so the
+ *  pulse colour matches reality. */
+function liveStatus(lastSyncedAt: string | null | undefined): {
+  tone: "live" | "idle" | "stale" | "never";
+  label: string;
+} {
+  if (!lastSyncedAt) return { tone: "never", label: "Never synced" };
+  const t = new Date(lastSyncedAt).getTime();
+  if (!Number.isFinite(t)) return { tone: "never", label: "Never synced" };
+  const ageMs = Date.now() - t;
+  if (ageMs < 0) return { tone: "live", label: "Live · just now" };
+  if (ageMs < 90_000) return { tone: "live", label: "Live · just now" };
+  if (ageMs < 5 * 60_000) return { tone: "live", label: `Live · ${Math.round(ageMs / 60_000)}m ago` };
+  if (ageMs < 60 * 60_000) return { tone: "idle", label: `Idle · ${Math.round(ageMs / 60_000)}m ago` };
+  if (ageMs < 24 * 60 * 60_000)
+    return { tone: "idle", label: `Idle · ${Math.round(ageMs / (60 * 60_000))}h ago` };
+  // Older than a day — show absolute date.
+  const d = new Date(lastSyncedAt);
+  const hh = d.getHours().toString().padStart(2, "0");
+  const mm = d.getMinutes().toString().padStart(2, "0");
+  return {
+    tone: "stale",
+    label: `Last seen ${shortDate(lastSyncedAt)} ${hh}:${mm}`
+  };
 }
 
 // ---------- helpers ----------
