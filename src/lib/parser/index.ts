@@ -425,16 +425,72 @@ export async function parseCsv(
   });
 }
 
+/**
+ * MetaTrader 5 "Trade History Report" XLSX exports start with a 5-row
+ * header strip followed by a "Positions" section title and the actual
+ * column headers:
+ *
+ *   row 0: "Trade History Report"
+ *   row 1: "Name:"     ...   "James Mutinda Masila"
+ *   row 2: "Account:"  ...   "2001900944 (USD, JustMarkets-Demo, demo, Hedge)"
+ *   row 3: "Company:"  ...   "Just Global Markets Ltd."
+ *   row 4: "Date:"     ...   "2026.05.05 12:58"
+ *   row 5: "Positions"
+ *   row 6: "Time" "Position" "Symbol" "Type" "Volume" "Price" "S / L" ...
+ *
+ * The naive `matrix[0]` header read picks up "Trade History Report" and
+ * misses the actual columns, so detection downstream fails. This helper
+ * sniffs the first 25 rows for the "Trade History Report" marker, finds
+ * the row that looks like a real MT trade-header row, and returns the
+ * row index to use as the header. Returns -1 when the preamble isn't
+ * present (regular flat XLSX exports).
+ */
+function findMt5ReportHeaderRow(matrix: unknown[][]): number {
+  if (matrix.length < 8) return -1;
+  // Cheap sniff: any of the first ~10 rows starts with "Trade History Report".
+  let hasReportTitle = false;
+  for (let i = 0; i < Math.min(10, matrix.length); i++) {
+    const first = matrix[i]?.[0];
+    if (typeof first === "string" && /trade history report/i.test(first)) {
+      hasReportTitle = true;
+      break;
+    }
+  }
+  if (!hasReportTitle) return -1;
+  // Find the row that is the actual MT column header (Time + duplicated
+  // Time + Symbol + Volume + Profit). Scan 0..25.
+  for (let i = 0; i < Math.min(25, matrix.length); i++) {
+    const row = matrix[i];
+    if (!Array.isArray(row)) continue;
+    const headers = row.map((c) => String(c ?? ""));
+    if (isMetaTraderHeader(headers)) return i;
+  }
+  return -1;
+}
+
 export async function parseXlsx(
   file: File
-): Promise<{ rows: Record<string, unknown>[]; headers: string[]; matrix: unknown[][] }> {
+): Promise<{
+  rows: Record<string, unknown>[];
+  headers: string[];
+  matrix: unknown[][];
+  preamble?: unknown[][];
+}> {
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, { type: "array", cellDates: true });
   const sheet = wb.Sheets[wb.SheetNames[0]];
   // header:1 → 2D array preserving duplicate column names
   const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "" });
-  const rawHeaders = (matrix[0] ?? []).map((h) => String(h ?? ""));
-  const dataMatrix = matrix.slice(1);
+
+  // MT5 ReportHistory: skip the 5-row preamble + "Positions" title and
+  // start the matrix from the real column-header row, so downstream
+  // detection (`isMetaTraderHeader`) and parsing both work unchanged.
+  const headerRow = findMt5ReportHeaderRow(matrix);
+  const slicedMatrix = headerRow > 0 ? matrix.slice(headerRow) : matrix;
+  const preamble = headerRow > 0 ? matrix.slice(0, headerRow) : undefined;
+
+  const rawHeaders = (slicedMatrix[0] ?? []).map((h) => String(h ?? ""));
+  const dataMatrix = slicedMatrix.slice(1);
   // Build a uniqued headers list for the keyed parse path. Duplicates get a
   // " (2)" suffix so the keyed map doesn't lose data.
   const seen = new Map<string, number>();
@@ -450,7 +506,12 @@ export async function parseXlsx(
     });
     return r;
   });
-  return { rows, headers: rawHeaders, matrix };
+  // Return the SLICED matrix (preamble dropped). matrix[0] is now the
+  // canonical column-header row — `parseFile` walks from index 1 onward
+  // to gather trade rows, and the MT5 footer scanner ("Balance:" /
+  // "Equity:" / "Deposits") still finds its rows because they sit
+  // AFTER the data rows in the sheet, so they survive the slice.
+  return { rows, headers: rawHeaders, matrix: slicedMatrix, preamble };
 }
 
 /**
@@ -534,7 +595,82 @@ export type AccountInfo = {
   deposits_count: number;
   /** Number of withdrawal transactions detected. */
   withdrawals_count: number;
+  /** Account login number from "Account: 1234567 (...)" preamble row. */
+  account_number?: string | null;
+  /** Broker name from the "Account: 1234567 (USD, JustMarkets-Demo, ...)"
+   *  parenthetical, normalised to a friendly form (e.g. JustMarkets). */
+  broker?: string | null;
+  /** Server label as it appears in the parenthetical (e.g. "JustMarkets-Demo"). */
+  broker_server?: string | null;
+  /** Currency code shown in the parenthetical (USD / EUR / KES…). */
+  currency?: string | null;
+  /** Demo / real / contest flag from the parenthetical. */
+  account_kind?: string | null;
+  /** Account holder full name from the "Name:" preamble row. */
+  account_holder?: string | null;
+  /** Company / dealing-firm name from the "Company:" row. */
+  company?: string | null;
+  /** Report-generated timestamp from the "Date:" row. */
+  reported_at?: string | null;
 };
+
+/**
+ * Pull account-level metadata from the MT5 ReportHistory preamble:
+ *   row 0: "Trade History Report"
+ *   row 1: "Name:"     "<full name>"
+ *   row 2: "Account:"  "<login> (<currency>, <server>, <kind>, <hedge|netting>)"
+ *   row 3: "Company:"  "<broker company>"
+ *   row 4: "Date:"     "<YYYY.MM.DD HH:MM>"
+ * The label cell is in column 0, the value cell sits anywhere from
+ * column 1 to column 4 depending on the column-merge style — we scan
+ * the whole row for the first non-empty string after the label.
+ */
+function extractMt5Preamble(preamble: unknown[][]): Partial<AccountInfo> {
+  const out: Partial<AccountInfo> = {};
+  if (!preamble?.length) return out;
+  function findValue(row: unknown[]): string | null {
+    for (let i = 1; i < row.length; i++) {
+      const c = row[i];
+      if (c == null || c === "") continue;
+      const s = String(c).trim();
+      if (s) return s;
+    }
+    return null;
+  }
+  for (const row of preamble) {
+    if (!Array.isArray(row)) continue;
+    const label = String(row[0] ?? "").trim().toLowerCase().replace(/:$/, "");
+    if (!label) continue;
+    if (label === "name") {
+      out.account_holder = findValue(row);
+    } else if (label === "account") {
+      const raw = findValue(row);
+      if (raw) {
+        const m = raw.match(/^(\S+)\s*\(([^)]+)\)\s*$/);
+        if (m) {
+          out.account_number = m[1];
+          const parts = m[2].split(",").map((s) => s.trim()).filter(Boolean);
+          // [currency, server, kind, hedge|netting] — order is stable in MT5 builds.
+          if (parts[0]) out.currency = parts[0];
+          if (parts[1]) {
+            out.broker_server = parts[1];
+            // "JustMarkets-Demo" → "JustMarkets". Strip "-Demo" / "-Real" / "-Live"
+            // / "-Contest" suffixes (case-insensitive) so the broker chip is clean.
+            out.broker = parts[1].replace(/-(demo|real|live|contest|server)\d*$/i, "").trim();
+          }
+          if (parts[2]) out.account_kind = parts[2].toLowerCase();
+        } else {
+          out.account_number = raw;
+        }
+      }
+    } else if (label === "company") {
+      out.company = findValue(row);
+    } else if (label === "date") {
+      out.reported_at = findValue(row);
+    }
+  }
+  return out;
+}
 
 export type ParseResult = {
   trades: ParsedTrade[];
@@ -652,8 +788,24 @@ function parseHfmRows(rows: Record<string, unknown>[]): ParsedTrade[] {
 
 export async function parseFile(file: File): Promise<ParseResult> {
   const ext = file.name.toLowerCase().split(".").pop() ?? "";
-  const { rows, headers, matrix } =
-    ext === "xlsx" || ext === "xls" ? await parseXlsx(file) : await parseCsv(file);
+  // The preamble field only exists on the XLSX path (and only when the
+  // MT5 ReportHistory marker was detected). CSV imports don't have it.
+  let preamble: unknown[][] | undefined;
+  let rows: Record<string, unknown>[];
+  let headers: string[];
+  let matrix: unknown[][];
+  if (ext === "xlsx" || ext === "xls") {
+    const parsedXlsx = await parseXlsx(file);
+    rows = parsedXlsx.rows;
+    headers = parsedXlsx.headers;
+    matrix = parsedXlsx.matrix;
+    preamble = parsedXlsx.preamble;
+  } else {
+    const parsedCsv = await parseCsv(file);
+    rows = parsedCsv.rows;
+    headers = parsedCsv.headers;
+    matrix = parsedCsv.matrix;
+  }
 
   if (isMetaTraderHeader(headers)) {
     // The MT5 ReportHistory export is a single sheet with THREE stacked
@@ -714,8 +866,12 @@ export async function parseFile(file: File): Promise<ParseResult> {
     // Footer scan — look for "Balance:", "Equity:" rows (label in col 0,
     // value usually in col 3) and Deposit / Withdrawal entries inside the
     // Deals section (a "balance" type row with a "Deposit" or "Withdrawal"
-    // comment).
-    const accountInfo = extractMt5AccountInfo(matrix);
+    // comment). Then fold in the preamble metadata (account number,
+    // broker, currency, holder) when the ReportHistory header strip was
+    // detected upstream.
+    const footerInfo = extractMt5AccountInfo(matrix);
+    const preambleInfo = preamble ? extractMt5Preamble(preamble) : {};
+    const accountInfo: AccountInfo = { ...footerInfo, ...preambleInfo };
 
     const mapping: Partial<Record<FieldKey, string>> = {
       trade_date: "Time",
