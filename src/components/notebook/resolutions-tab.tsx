@@ -388,7 +388,10 @@ function CreateForm({
             target: ss.target?.trim() || undefined,
             items: ss.items
               .map((it) => ({ ...it, text: it.text.trim() }))
-              .filter((it) => it.text)
+              // Keep blocks that have text OR are intentionally empty
+              // structural kinds (divider). Drop the rest so the saved
+              // card doesn't render blank rows.
+              .filter((it) => it.text || it.kind === "divider")
           }))
       }))
       .filter((s) => s.subsections.length);

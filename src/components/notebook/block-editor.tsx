@@ -141,7 +141,12 @@ export function BlockEditor({ blocks, onChange, placeholder, className }: BlockE
   }
 
   function changeKind(id: string, kind: ResolutionBlockKind) {
-    patch(id, (b) => ({ ...b, kind, text: kind === "divider" ? "" : b.text }));
+    // The slash menu only opens when the entire input is a slash command
+    // (e.g. "/h1", "/callout"), so the block's text at this point is the
+    // command itself. Always clear it after selection — otherwise the
+    // newly-typed Heading-1 block would render with the literal "/h1"
+    // as its visible content.
+    patch(id, (b) => ({ ...b, kind, text: "" }));
     setMenu(null);
     if (kind !== "divider") setPendingFocus(id);
   }
