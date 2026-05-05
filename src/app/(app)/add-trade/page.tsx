@@ -9,6 +9,7 @@ import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { computePips, parseFile, type ParsedTrade, type AccountInfo } from "@/lib/parser";
 import { createClient } from "@/lib/supabase/client";
+import { AUDIT_EVENT, logAuditEvent } from "@/lib/audit/log";
 import { CheckCircle2, Upload } from "lucide-react";
 import Link from "next/link";
 
@@ -139,6 +140,16 @@ function UploadForm({ onDone }: { onDone: () => void }) {
       setBusy(false);
       return;
     }
+    await logAuditEvent(
+      AUDIT_EVENT.TRADE_FILE_IMPORTED,
+      `Imported ${preview.trades.length} trades from ${name || file.name}`,
+      {
+        file_id: created.id,
+        file_name: name || file.name,
+        source: created.source,
+        trade_count: preview.trades.length
+      }
+    );
     onDone();
   }
 

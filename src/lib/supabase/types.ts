@@ -106,8 +106,34 @@ export type ProfileRow = {
   dob: string | null;
   default_currency: string | null;
   starting_balance: number | null;
+  /** IANA timezone name (e.g. "Africa/Nairobi"). Null = auto-detect from browser. */
+  timezone: string | null;
+  /** BCP-47 locale (e.g. "en-US"). Null = auto-detect from browser. */
+  locale: string | null;
+  /** First day of the week shown in calendars / weekly recaps. */
+  week_starts_on: "monday" | "sunday" | "saturday" | null;
+  /** How distance is shown across the app — pips (1.00010 → 1) vs points (1.00010 → 10). */
+  pip_units: "pips" | "points" | null;
+  /** User's primary broker — used as a hint for new imports. */
+  preferred_broker: string | null;
   created_at: string;
   updated_at: string;
+};
+
+/**
+ * Audit-log entries surfaced under Settings → Log history.
+ * Written by the `log_audit_event` RPC (security definer) so RLS allows
+ * the row but timestamps + user_id stay trustworthy.
+ */
+export type AuditLogRow = {
+  id: string;
+  user_id: string;
+  event_type: string;
+  summary: string;
+  metadata: Record<string, unknown>;
+  ip: string | null;
+  user_agent: string | null;
+  created_at: string;
 };
 
 export type NumerologyProfileRow = {
@@ -314,6 +340,12 @@ export type Database = {
           Partial<Pick<GenesisApiKeyRow, "id" | "label" | "created_at" | "last_used_at" | "revoked_at">>;
         Update: Partial<GenesisApiKeyRow>;
       };
+      audit_log: {
+        Row: AuditLogRow;
+        Insert: Pick<AuditLogRow, "user_id" | "event_type" | "summary"> &
+          Partial<Pick<AuditLogRow, "id" | "metadata" | "ip" | "user_agent" | "created_at">>;
+        Update: Partial<AuditLogRow>;
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -325,6 +357,10 @@ export type Database = {
           key_prefix: string;
           created_at: string;
         }[];
+      };
+      log_audit_event: {
+        Args: { p_event_type: string; p_summary: string; p_metadata?: Record<string, unknown> };
+        Returns: string;
       };
     };
     Enums: Record<string, never>;

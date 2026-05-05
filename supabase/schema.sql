@@ -609,3 +609,79 @@ grant execute on function public.ingest_ea_trade(
 
 grant execute on function public.generate_genesis_api_key(text)
   to authenticated;
+
+-- =====================================================================
+-- Global preferences (Settings → Global settings)
+-- =====================================================================
+-- App-wide preferences live on the existing `profiles` row so they're
+-- 1:1 with the user. Auto-detect timezone is the default — leaving the
+-- column null tells the client to use the viewer's local IANA zone.
+alter table public.profiles
+  add column if not exists timezone text;
+alter table public.profiles
+  add column if not exists locale text;
+alter table public.profiles
+  add column if not exists week_starts_on text default 'monday'
+    check (week_starts_on in ('monday', 'sunday', 'saturday'));
+alter table public.profiles
+  add column if not exists pip_units text default 'pips'
+    check (pip_units in ('pips', 'points'));
+alter table public.profiles
+  add column if not exists preferred_broker text;
+
+-- =====================================================================
+-- Audit log (Settings → Log history)
+-- =====================================================================
+-- Compact event trail: sign-ins, password changes, profile / setting
+-- updates, file imports / deletes. Written from client + server with
+-- the helper `log_audit_event()` below. RLS scopes reads to the user.
+create table if not exists public.audit_log (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  event_type text not null,
+  summary text not null,
+  metadata jsonb not null default '{}'::jsonb,
+  ip text,
+  user_agent text,
+  created_at timestamptz not null default now()
+);
+create index if not exists audit_log_user_created_idx
+  on public.audit_log(user_id, created_at desc);
+create index if not exists audit_log_event_type_idx
+  on public.audit_log(event_type);
+
+alter table public.audit_log enable row level security;
+
+drop policy if exists "audit_log: read own" on public.audit_log;
+create policy "audit_log: read own" on public.audit_log
+  for select using (auth.uid() = user_id);
+
+drop policy if exists "audit_log: write own" on public.audit_log;
+create policy "audit_log: write own" on public.audit_log
+  for insert with check (auth.uid() = user_id);
+
+-- Helper for inserting audit entries from client / server actions.
+-- Returns the inserted row id so callers can correlate.
+create or replace function public.log_audit_event(
+  p_event_type text,
+  p_summary text,
+  p_metadata jsonb default '{}'::jsonb
+) returns uuid
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_id uuid;
+begin
+  if v_uid is null then
+    raise exception 'log_audit_event: no auth.uid()';
+  end if;
+  insert into public.audit_log (user_id, event_type, summary, metadata)
+    values (v_uid, p_event_type, p_summary, coalesce(p_metadata, '{}'::jsonb))
+    returning id into v_id;
+  return v_id;
+end;
+$$;
+
+grant execute on function public.log_audit_event(text, text, jsonb)
+  to authenticated;
