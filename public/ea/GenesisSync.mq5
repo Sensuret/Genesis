@@ -202,7 +202,10 @@ void ScanHistory()
   {
     ulong dealTicket = HistoryDealGetTicket(i);
     if(dealTicket == 0) continue;
-    if(!m_deal.Ticket(dealTicket)) continue;
+    // CDealInfo::Ticket(ulong) is a setter that returns void in newer
+    // MT5 builds — selecting via the index keeps the boolean check we
+    // need to skip rows that fail to load.
+    if(!m_deal.SelectByIndex(i)) continue;
     if(m_deal.Entry() != DEAL_ENTRY_OUT && m_deal.Entry() != DEAL_ENTRY_OUT_BY) continue; // only closes
     if(m_deal.DealType() != DEAL_TYPE_BUY && m_deal.DealType() != DEAL_TYPE_SELL) continue;
 
