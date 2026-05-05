@@ -1,9 +1,14 @@
 "use client";
 
-import { Flag } from "lucide-react";
+import { ChevronRight, Flag, Megaphone, Quote as QuoteIcon } from "lucide-react";
 import { chineseZodiacEmoji, chineseZodiacOf } from "@/lib/zodiac";
 import { resolveBackgroundCss } from "@/lib/notebook/resolution-backgrounds";
-import type { Resolution, ResolutionSection } from "@/lib/supabase/types";
+import type {
+  Resolution,
+  ResolutionBlockKind,
+  ResolutionItem,
+  ResolutionSection
+} from "@/lib/supabase/types";
 import { cn } from "@/lib/utils";
 
 type ResolutionCardProps = {
@@ -81,6 +86,12 @@ export function computeResolutionProgress(resolution: Resolution): {
       }
       for (const item of sub.items) {
         if (!item.text.trim()) continue;
+        // Only count checkbox-style blocks toward the progress meter.
+        // Headings, dividers, callouts, quotes, plain text, bullets,
+        // numbered list items, and toggles aren't tickable, so they
+        // shouldn't pull the percentage down.
+        const kind = item.kind ?? "todo";
+        if (kind !== "todo" && kind !== "bigbox") continue;
         total += 1;
         if (item.checked) done += 1;
       }
@@ -303,50 +314,24 @@ export function ResolutionCard({
                         </span>
                       </div>
                     )}
-                    <ul className="space-y-1 pl-1">
-                      {sub.items.map((item) => {
-                        const interactive = !!onToggleItem;
-                        return (
-                          <li
-                            key={item.id}
-                            className={cn("flex items-start gap-2", !bg && "text-fg-muted")}
-                            style={bg ? { color: mutedText } : undefined}
-                          >
-                            <button
-                              type="button"
-                              tabIndex={interactive ? 0 : -1}
-                              disabled={!interactive}
-                              onClick={(e) => {
-                                if (!interactive) return;
-                                e.preventDefault();
-                                e.stopPropagation();
-                                onToggleItem!(section.id, sub.id, item.id, !item.checked);
-                              }}
-                              className={cn(
-                                "mt-0.5 inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border text-[10px] leading-none",
-                                item.checked
-                                  ? "border-emerald-400 bg-emerald-500/30 text-emerald-100"
-                                  : "border-line bg-bg-soft/40 text-transparent",
-                                interactive && "cursor-pointer hover:border-emerald-400/80",
-                                !interactive && "cursor-default"
-                              )}
-                              aria-label={item.checked ? "Mark as not done" : "Mark as done"}
-                              aria-pressed={!!item.checked}
-                            >
-                              {item.checked ? "✓" : ""}
-                            </button>
-                            <span
-                              className={cn(
-                                "flex-1",
-                                item.checked && "line-through opacity-70"
-                              )}
-                            >
-                              {item.text}
-                            </span>
-                          </li>
-                        );
-                      })}
-                    </ul>
+                    <div className="space-y-1 pl-1">
+                      {sub.items.map((item, idx) => (
+                        <ResolutionBlock
+                          key={item.id}
+                          item={item}
+                          numberedIndex={numberedIndexFor(sub.items, idx)}
+                          onToggle={
+                            onToggleItem
+                              ? (next) => onToggleItem(section.id, sub.id, item.id, next)
+                              : undefined
+                          }
+                          mutedText={mutedText}
+                          bodyText={bodyText}
+                          hasBg={!!bg}
+                          onLight={onLight}
+                        />
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -388,6 +373,189 @@ export function ResolutionCard({
           GƎNƎSIS
         </span>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Per-block renderer.
+//
+// Resolutions used to be a flat list of tickable bullets. They're now a
+// Notion-style block list with mixed kinds: text, h1/h2/h3, todo,
+// bigbox, bullet, numbered, toggle, callout, quote, divider. Each kind
+// gets its own visual treatment but the wrapper container is the same.
+// ---------------------------------------------------------------------------
+
+function blockKindOf(item: ResolutionItem): ResolutionBlockKind {
+  return item.kind ?? "todo";
+}
+
+/** Returns the 1-based ordinal of a "numbered" block among other
+ *  numbered blocks in the same sub-section. Other kinds return null. */
+function numberedIndexFor(items: ResolutionItem[], idx: number): number | null {
+  if (blockKindOf(items[idx]) !== "numbered") return null;
+  let n = 0;
+  for (let i = 0; i <= idx; i++) {
+    if (blockKindOf(items[i]) === "numbered") n += 1;
+  }
+  return n;
+}
+
+function ResolutionBlock({
+  item,
+  numberedIndex,
+  onToggle,
+  mutedText,
+  bodyText,
+  hasBg,
+  onLight
+}: {
+  item: ResolutionItem;
+  numberedIndex: number | null;
+  onToggle?: (next: boolean) => void;
+  mutedText: string;
+  bodyText: string;
+  hasBg: boolean;
+  onLight: boolean;
+}) {
+  const kind = blockKindOf(item);
+  const interactive = !!onToggle;
+  const baseColor = hasBg ? { color: mutedText } : undefined;
+
+  if (kind === "divider") {
+    return (
+      <hr
+        className="my-2 border-line/70"
+        style={hasBg ? { borderColor: onLight ? "rgba(15,23,42,0.2)" : "rgba(255,255,255,0.25)" } : undefined}
+      />
+    );
+  }
+
+  if (!item.text.trim()) {
+    // Empty non-divider block — render nothing on the saved card.
+    return null;
+  }
+
+  if (kind === "h1" || kind === "h2" || kind === "h3") {
+    const sizeClass = kind === "h1" ? "text-base font-bold" : kind === "h2" ? "text-sm font-semibold" : "text-[13px] font-semibold";
+    // Use the same `bodyText` colour the rest of the card uses for
+    // primary content. Headings need to stay distinct from the muted
+    // body lines on every theme — including the cream / white
+    // backgrounds where `mutedText` is `rgb(71 85 105)` (no "0.78"
+    // substring to swap), so a naive .replace() leaves headings the
+    // exact same colour as body text.
+    return (
+      <div className={cn(sizeClass, !hasBg && "text-fg")} style={hasBg ? { color: bodyText } : undefined}>
+        {item.text}
+      </div>
+    );
+  }
+
+  if (kind === "callout") {
+    // On light card backgrounds (cream / white) `text-amber-100` is literally
+    // the same colour as the cream swatch, so the callout text vanishes.
+    // Flip to a dark amber tone whenever we're on a light background.
+    return (
+      <div
+        className={cn(
+          "flex items-start gap-2 rounded-md border border-amber-400/40 bg-amber-500/10 px-2 py-1.5 text-xs",
+          onLight ? "text-amber-900" : "text-amber-100"
+        )}
+      >
+        <Megaphone className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        <span className="flex-1">{item.text}</span>
+      </div>
+    );
+  }
+
+  if (kind === "quote") {
+    return (
+      <div className="flex items-start gap-2 border-l-2 border-brand-400/60 pl-2 text-xs italic" style={baseColor}>
+        <QuoteIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-300" />
+        <span className="flex-1">{item.text}</span>
+      </div>
+    );
+  }
+
+  if (kind === "toggle") {
+    return (
+      <details className="group rounded-md text-xs" style={baseColor}>
+        <summary className="flex cursor-pointer list-none items-start gap-2">
+          <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-90" />
+          <span className="flex-1 font-medium">{item.text}</span>
+        </summary>
+      </details>
+    );
+  }
+
+  if (kind === "bullet") {
+    return (
+      <div className={cn("flex items-start gap-2 text-xs", !hasBg && "text-fg-muted")} style={baseColor}>
+        <span className="mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-70" />
+        <span className="flex-1">{item.text}</span>
+      </div>
+    );
+  }
+
+  if (kind === "numbered") {
+    return (
+      <div className={cn("flex items-start gap-2 text-xs", !hasBg && "text-fg-muted")} style={baseColor}>
+        <span className="mt-0.5 inline-flex min-w-[1.1rem] shrink-0 justify-end text-[11px] font-medium">
+          {numberedIndex ?? "•"}.
+        </span>
+        <span className="flex-1">{item.text}</span>
+      </div>
+    );
+  }
+
+  if (kind === "text") {
+    return (
+      <div className={cn("text-xs", !hasBg && "text-fg-muted")} style={baseColor}>
+        {item.text}
+      </div>
+    );
+  }
+
+  // bigbox & todo (and any legacy untyped row) — both are tickable.
+  const isBig = kind === "bigbox";
+  return (
+    <div className={cn("flex items-start gap-2 text-xs", !hasBg && "text-fg-muted")} style={baseColor}>
+      <button
+        type="button"
+        tabIndex={interactive ? 0 : -1}
+        disabled={!interactive}
+        onClick={(e) => {
+          if (!interactive) return;
+          e.preventDefault();
+          e.stopPropagation();
+          onToggle?.(!item.checked);
+        }}
+        className={cn(
+          "shrink-0 inline-flex items-center justify-center leading-none",
+          isBig
+            ? "mt-0.5 h-5 w-5 rounded-md border-2 text-[12px]"
+            : "mt-0.5 h-3.5 w-3.5 rounded-sm border text-[10px]",
+          item.checked
+            ? isBig
+              ? "border-brand-400 bg-brand-500/40 text-brand-50 ring-1 ring-brand-300/40"
+              : "border-emerald-400 bg-emerald-500/30 text-emerald-100"
+            : isBig
+              ? "border-brand-400/60 bg-brand-500/10 text-transparent"
+              : "border-line bg-bg-soft/40 text-transparent",
+          interactive
+            ? isBig
+              ? "cursor-pointer hover:border-brand-300"
+              : "cursor-pointer hover:border-emerald-400/80"
+            : "cursor-default"
+        )}
+        aria-label={item.checked ? "Mark as not done" : "Mark as done"}
+        aria-pressed={!!item.checked}
+      >
+        {item.checked ? "✓" : ""}
+      </button>
+      <span className={cn("flex-1", item.checked && "line-through opacity-70", isBig && "text-sm font-medium")}>
+        {item.text}
+      </span>
     </div>
   );
 }

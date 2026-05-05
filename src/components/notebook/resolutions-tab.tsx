@@ -4,7 +4,8 @@ import { useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, Pencil, Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input, Label, Textarea } from "@/components/ui/input";
+import { Input, Label } from "@/components/ui/input";
+import { BlockEditor } from "@/components/notebook/block-editor";
 import { Empty } from "@/components/ui/empty";
 import { ScreenshotButton } from "@/components/ui/screenshot-button";
 import { chineseZodiacOf } from "@/lib/zodiac";
@@ -387,7 +388,10 @@ function CreateForm({
             target: ss.target?.trim() || undefined,
             items: ss.items
               .map((it) => ({ ...it, text: it.text.trim() }))
-              .filter((it) => it.text)
+              // Keep blocks that have text OR are intentionally empty
+              // structural kinds (divider). Drop the rest so the saved
+              // card doesn't render blank rows.
+              .filter((it) => it.text || it.kind === "divider")
           }))
       }))
       .filter((s) => s.subsections.length);
@@ -792,29 +796,20 @@ function SectionEditor({
                 </div>
 
                 <div>
-                  <Label>Bullets (one per line)</Label>
-                  <Textarea
-                    rows={4}
-                    value={sub.items.map((i) => i.text).join("\n")}
-                    onChange={(e) => {
-                      const lines = e.target.value.split("\n");
-                      updateSub(sub.id, (s) => ({
-                        ...s,
-                        items: lines.map((text, i) => ({
-                          id: s.items[i]?.id ?? newId(),
-                          text,
-                          checked: s.items[i]?.checked
-                        }))
-                      }));
-                    }}
-                    placeholder={
-                      "Q1: Target $100000\nMonthly target → $35000 / month (3)\nFocus on 10 good trades targeting $1000 / trade"
-                    }
-                  />
+                  <Label>Goals & notes</Label>
+                  <div className="rounded-xl border border-line bg-bg-soft/40 px-9 py-2">
+                    <BlockEditor
+                      blocks={sub.items}
+                      onChange={(items) => updateSub(sub.id, (s) => ({ ...s, items }))}
+                      placeholder="Type '/' for commands"
+                    />
+                  </div>
                   <p className="mt-1 text-[11px] text-fg-subtle">
-                    Each line becomes a tickable bullet. A richer slash-command editor (
-                    <code>/text</code>, <code>/heading</code>, <code>/bigbox</code>, <code>/toggle</code>,
-                    etc.) is coming next.
+                    Type <code>/</code> on any line for commands — <code>/text</code>,{" "}
+                    <code>/h1</code>/<code>/h2</code>/<code>/h3</code>, <code>/todo</code>,{" "}
+                    <code>/bigbox</code>, <code>/bullet</code>, <code>/numbered</code>,{" "}
+                    <code>/toggle</code>, <code>/callout</code>, <code>/quote</code>,{" "}
+                    <code>/divider</code>. Enter creates the next block of the same kind.
                   </p>
                 </div>
               </div>
