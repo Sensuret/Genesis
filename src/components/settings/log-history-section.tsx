@@ -65,6 +65,11 @@ const EVENT_META: Record<string, EventMeta> = {
     tone: "text-success",
     label: "File imported"
   },
+  "trade_file.refreshed": {
+    Icon: FileSpreadsheet,
+    tone: "text-brand-300",
+    label: "File refreshed"
+  },
   "trade_file.deleted": {
     Icon: Trash2,
     tone: "text-danger",
@@ -95,7 +100,7 @@ const EVENT_META: Record<string, EventMeta> = {
 const EVENT_GROUPS: { label: string; types: string[] }[] = [
   { label: "All events", types: [] },
   { label: "Auth", types: ["auth.sign_in", "auth.sign_out", "auth.password_changed"] },
-  { label: "Imports", types: ["trade_file.imported", "trade_file.deleted", "trade_file.timezone_updated"] },
+  { label: "Imports", types: ["trade_file.imported", "trade_file.refreshed", "trade_file.deleted", "trade_file.timezone_updated"] },
   { label: "Settings", types: ["profile.updated", "settings.global_updated"] },
   { label: "API keys", types: ["api_key.created", "api_key.revoked", "api_key.deleted"] }
 ];

@@ -43,6 +43,7 @@ export const AUDIT_EVENT = {
   PROFILE_UPDATED: "profile.updated",
   GLOBAL_SETTINGS_UPDATED: "settings.global_updated",
   TRADE_FILE_IMPORTED: "trade_file.imported",
+  TRADE_FILE_REFRESHED: "trade_file.refreshed",
   TRADE_FILE_DELETED: "trade_file.deleted",
   TRADE_FILE_TZ_UPDATED: "trade_file.timezone_updated",
   API_KEY_CREATED: "api_key.created",

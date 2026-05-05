@@ -5,8 +5,12 @@
 -- Idempotent: safe to re-run.
 -- =====================================================================
 
-create extension if not exists "pgcrypto";
-create extension if not exists "uuid-ossp";
+-- pgcrypto powers `gen_random_bytes()` + `digest()` used by the EA-token
+-- generator (`public.generate_genesis_api_key`). On Supabase this lives
+-- in the `extensions` schema, so we install it there explicitly and
+-- include `extensions` on the function's search_path further down.
+create extension if not exists "pgcrypto" with schema extensions;
+create extension if not exists "uuid-ossp" with schema extensions;
 
 -- ---------------------------------------------------------------------
 -- Helper trigger: keep updated_at in sync.
@@ -450,7 +454,12 @@ create policy "genesis_api_keys: delete own" on public.genesis_api_keys
 -- Plaintext format: `gs_<32-hex-chars>` so users can paste it into EA inputs.
 create or replace function public.generate_genesis_api_key(p_label text default 'Genesis EA key')
 returns table (id uuid, plaintext text, key_prefix text, created_at timestamptz)
-language plpgsql security definer set search_path = public, pg_temp as $$
+language plpgsql security definer
+-- `extensions` is on the search_path so unqualified `gen_random_bytes()` /
+-- `digest()` references still resolve on projects where pgcrypto lives in
+-- the `extensions` schema (Supabase's default), AND the calls below are
+-- additionally schema-qualified for belt-and-braces safety.
+set search_path = public, extensions, pg_temp as $$
 declare
   v_user uuid := auth.uid();
   v_raw text;
@@ -464,10 +473,10 @@ begin
     raise exception 'Not authenticated';
   end if;
 
-  v_raw := encode(gen_random_bytes(16), 'hex');
+  v_raw := encode(extensions.gen_random_bytes(16), 'hex');
   v_plain := 'gs_' || v_raw;
   v_prefix := substring(v_plain from 1 for 7); -- 'gs_xxxx'
-  v_hash := encode(digest(v_plain, 'sha256'), 'hex');
+  v_hash := encode(extensions.digest(v_plain, 'sha256'), 'hex');
 
   insert into public.genesis_api_keys (user_id, label, key_hash, key_prefix)
   values (v_user, coalesce(nullif(p_label, ''), 'Genesis EA key'), v_hash, v_prefix)
