@@ -16,6 +16,17 @@
 
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
+import { translateHeaders, detectMtLanguage } from "./i18n-headers";
+import { readHtmFile, type HtmParseOutput } from "./htm";
+import {
+  brokerFromFilename,
+  brokerFromServer,
+  isCTraderHeader,
+  isTradingViewHeader,
+  platformFromText
+} from "./broker";
+import { parseCtraderRows } from "./ctrader";
+import { parseTradingViewRows } from "./tradingview";
 
 export type ParsedTrade = {
   pair: string | null;
@@ -292,7 +303,10 @@ export function detectSession(
  */
 function isMetaTraderHeader(h: string[]): boolean {
   if (h.length < 13) return false;
-  const norm = h.map((x) => normalize(String(x ?? "")));
+  // Accept both English and localised MetaTrader headers by normalising
+  // foreign terms back to English first.
+  const translated = translateHeaders(h);
+  const norm = translated.map((x) => normalize(String(x ?? "")));
   const hits =
     norm.indexOf("time") >= 0 &&
     norm.lastIndexOf("time") > norm.indexOf("time") &&
@@ -302,6 +316,16 @@ function isMetaTraderHeader(h: string[]): boolean {
     norm.includes("volume") &&
     norm.includes("profit");
   return hits;
+}
+
+/** MT4 HTM trade-table header — matches translated headers too. */
+function isMetaTraderHtmHeader(h: string[]): boolean {
+  if (h.length < 8) return false;
+  const translated = translateHeaders(h);
+  const norm = translated.map((x) => normalize(String(x ?? "")));
+  const dupTime = norm.indexOf("time") >= 0 && norm.lastIndexOf("time") > norm.indexOf("time");
+  const dupPrice = norm.indexOf("price") >= 0 && norm.lastIndexOf("price") > norm.indexOf("price");
+  return dupTime && dupPrice && norm.includes("profit");
 }
 
 function metaTraderRowToTrade(row: unknown[]): ParsedTrade {
@@ -677,10 +701,16 @@ export type ParseResult = {
   headers: string[];
   mapping: Partial<Record<FieldKey, string>>;
   raw: Record<string, unknown>[];
-  format: "metatrader" | "hfm" | "generic";
+  format: "metatrader" | "metatrader-htm" | "hfm" | "ctrader" | "tradingview" | "generic";
   /** Optional account-level metadata (MT5 Trade Report includes a footer
    *  with Balance / Equity / Deposit history; HFM does not). */
   accountInfo?: AccountInfo;
+  /** Friendly broker name resolved from server / filename / company. */
+  broker?: string | null;
+  /** Source platform ("MT4" / "MT5" / "cTrader" / "TradingView"). */
+  platform?: string | null;
+  /** Detected MetaTrader localisation ("en", "es", "ru", ...). */
+  language?: string | null;
 };
 
 /**
@@ -786,15 +816,153 @@ function parseHfmRows(rows: Record<string, unknown>[]): ParsedTrade[] {
   return trades;
 }
 
+/** Parse an MT4 / MT5 HTM Statement trade table by mapping translated
+ *  headers to the underlying matrix columns. Robust to either the MT4
+ *  layout (Ticket first) or the MT5 layout (Time first). */
+function parseMtHtmRows(matrix: unknown[][]): ParsedTrade[] {
+  if (matrix.length < 2) return [];
+  const header = matrix[0].map((h) => translateHeaders([String(h ?? "")])[0]);
+  const lower = header.map((h) => normalize(String(h ?? "")));
+  // Locate canonical columns. Time appears twice (open + close) — first
+  // is open, second is close. Same for Price.
+  const openTimeIdx = lower.indexOf("time");
+  const closeTimeIdx = lower.lastIndexOf("time");
+  const openPriceIdx = lower.indexOf("price");
+  const closePriceIdx = lower.lastIndexOf("price");
+  const symbolIdx = lower.findIndex((h) => h === "symbol");
+  const typeIdx = lower.findIndex((h) => h === "type");
+  const volumeIdx = lower.findIndex((h) => h === "volume");
+  const slIdx = lower.findIndex((h) => h === "s l" || h === "sl" || h === "stop loss");
+  const tpIdx = lower.findIndex((h) => h === "t p" || h === "tp" || h === "take profit");
+  const commissionIdx = lower.findIndex((h) => h === "commission");
+  const swapIdx = lower.findIndex((h) => h === "swap");
+  const profitIdx = lower.findIndex((h) => h === "profit");
+
+  const trades: ParsedTrade[] = [];
+  for (let r = 1; r < matrix.length; r++) {
+    const row = matrix[r];
+    if (!Array.isArray(row)) continue;
+    const sym = symbolIdx >= 0 ? String(row[symbolIdx] ?? "").trim() : "";
+    const typ = typeIdx >= 0 ? String(row[typeIdx] ?? "").trim().toLowerCase() : "";
+    // Skip ledger rows: balance / credit / deposit / withdrawal.
+    if (!sym) continue;
+    if (/^(balance|credit|deposit|withdraw)/.test(typ)) continue;
+    const open_time = openTimeIdx >= 0 ? toIsoTimestamp(row[openTimeIdx]) : null;
+    const close_time = closeTimeIdx >= 0 && closeTimeIdx !== openTimeIdx
+      ? toIsoTimestamp(row[closeTimeIdx]) : null;
+    const entry = openPriceIdx >= 0 ? toNumber(row[openPriceIdx]) : null;
+    const exit_price = closePriceIdx >= 0 && closePriceIdx !== openPriceIdx
+      ? toNumber(row[closePriceIdx]) : null;
+    const sideVal = toSide(typ);
+    const slV = slIdx >= 0 ? toNumber(row[slIdx]) : null;
+    const tpV = tpIdx >= 0 ? toNumber(row[tpIdx]) : null;
+    trades.push({
+      pair: sym,
+      trade_date: openTimeIdx >= 0 ? toDate(row[openTimeIdx]) : null,
+      open_time,
+      close_time,
+      duration_seconds: computeDurationSeconds(open_time, close_time),
+      pips: computePips({ pair: sym, entry, exit_price, side: sideVal }),
+      session: detectSession(open_time),
+      side: sideVal,
+      entry,
+      stop_loss: slV === 0 ? null : slV,
+      take_profit: tpV === 0 ? null : tpV,
+      exit_price,
+      lot_size: volumeIdx >= 0 ? toNumber(row[volumeIdx]) : null,
+      result_r: null,
+      pnl: profitIdx >= 0 ? toNumber(row[profitIdx]) : null,
+      commissions: commissionIdx >= 0 ? toNumber(row[commissionIdx]) : null,
+      spread: swapIdx >= 0 ? toNumber(row[swapIdx]) : null,
+      account_balance: null,
+      setup_tag: null,
+      mistake_tag: null,
+      emotions: null,
+      notes: null
+    });
+  }
+  return trades;
+}
+
+/** Pull broker / account info out of MT4-style HTM preamble pairs and
+ *  the raw HTML title (which usually carries broker name + login). */
+function htmPreambleToAccountInfo(
+  preamble: string[][] | undefined,
+  rawText: string | undefined
+): AccountInfo {
+  const out: AccountInfo = {
+    balance: null,
+    equity: null,
+    deposits_total: null,
+    withdrawals_total: null,
+    deposits_count: 0,
+    withdrawals_count: 0
+  };
+  if (!preamble) return out;
+  for (const pair of preamble) {
+    const label = String(pair[0] ?? "").trim().toLowerCase().replace(/:$/, "").trim();
+    const value = String(pair[1] ?? "").trim();
+    if (!label || !value) continue;
+    if (label === "account") {
+      // MT4 HTM Account row may be just "1234567" or "1234567 (Demo)"
+      // or "1234567 — JustMarkets-Demo".
+      const m = value.match(/^(\S+)/);
+      if (m) out.account_number = m[1];
+      // Try to pick out a server label "JustMarkets-Demo".
+      const sm = value.match(/([A-Za-z][A-Za-z0-9]*-(?:Demo|Real|Live|Contest|Server)\d*)/i);
+      if (sm) {
+        out.broker_server = sm[1];
+        out.broker = sm[1].replace(/-(demo|real|live|contest|server)\d*$/i, "").trim();
+      }
+    } else if (label === "name") {
+      out.account_holder = value;
+    } else if (label === "currency") {
+      out.currency = value;
+    } else if (label === "company" || label === "broker") {
+      out.company = value;
+    }
+  }
+  // Title fallback: <title>Statement: 1234567 - JustMarkets-Demo</title>
+  if (rawText && (!out.broker || !out.account_number)) {
+    const tm = rawText.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    const title = tm ? tm[1].replace(/\s+/g, " ").trim() : "";
+    if (title) {
+      if (!out.account_number) {
+        const am = title.match(/(\d{5,})/);
+        if (am) out.account_number = am[1];
+      }
+      if (!out.broker) {
+        const sm = title.match(/([A-Za-z][A-Za-z0-9 ]*?)-(Demo|Real|Live|Contest)/i);
+        if (sm) {
+          out.broker = sm[1].trim();
+          out.broker_server = `${sm[1].trim()}-${sm[2]}`;
+        }
+      }
+    }
+  }
+  return out;
+}
+
 export async function parseFile(file: File): Promise<ParseResult> {
   const ext = file.name.toLowerCase().split(".").pop() ?? "";
-  // The preamble field only exists on the XLSX path (and only when the
+  // The preamble field only exists on the XLSX/HTM path (and only when the
   // MT5 ReportHistory marker was detected). CSV imports don't have it.
   let preamble: unknown[][] | undefined;
+  let htmPreamble: string[][] | undefined;
   let rows: Record<string, unknown>[];
   let headers: string[];
   let matrix: unknown[][];
-  if (ext === "xlsx" || ext === "xls") {
+  let rawText: string | undefined;
+
+  if (ext === "htm" || ext === "html") {
+    // MT4 / MT5 HTM Statement: parse via tolerant <tr>/<td> extraction.
+    const parsedHtm: HtmParseOutput = await readHtmFile(file);
+    rows = parsedHtm.rows;
+    headers = parsedHtm.headers;
+    matrix = parsedHtm.matrix;
+    htmPreamble = parsedHtm.preamble;
+    rawText = await file.text().catch(() => undefined);
+  } else if (ext === "xlsx" || ext === "xls") {
     const parsedXlsx = await parseXlsx(file);
     rows = parsedXlsx.rows;
     headers = parsedXlsx.headers;
@@ -805,6 +973,53 @@ export async function parseFile(file: File): Promise<ParseResult> {
     rows = parsedCsv.rows;
     headers = parsedCsv.headers;
     matrix = parsedCsv.matrix;
+  }
+
+  // ---- Universal broker fingerprint -------------------------------------
+  // Captured up front so every return branch can stamp it on the result.
+  const fingerprint = (() => {
+    const platform = platformFromText(rawText, file.name);
+    const broker = brokerFromFilename(file.name);
+    const language = detectMtLanguage(headers);
+    return { platform, broker, language };
+  })();
+
+  // MT4 / MT5 HTM Statement path. The HTM trade table has its own column
+  // order (Ticket | Open Time | Type | Size | Item | Price | S/L | T/P |
+  // Close Time | Price | Commission | Taxes | Swap | Profit) so we map
+  // by translated-header name rather than hardcoded MT5 indices.
+  if ((ext === "htm" || ext === "html") && isMetaTraderHtmHeader(headers)) {
+    const trades = parseMtHtmRows(matrix);
+    const accountInfo: AccountInfo = htmPreambleToAccountInfo(htmPreamble, rawText);
+    const broker =
+      brokerFromServer(accountInfo.broker_server ?? accountInfo.company ?? null) ??
+      fingerprint.broker ??
+      accountInfo.broker ??
+      null;
+    const platform = fingerprint.platform ?? (rawText && /metatrader\s*5/i.test(rawText) ? "MT5" : "MT4");
+    const mapping: Partial<Record<FieldKey, string>> = {
+      trade_date: "Time",
+      pair: "Symbol",
+      side: "Type",
+      lot_size: "Volume",
+      entry: "Price",
+      stop_loss: "S / L",
+      take_profit: "T / P",
+      pnl: "Profit",
+      commissions: "Commission",
+      spread: "Swap"
+    };
+    return {
+      trades,
+      headers,
+      mapping,
+      raw: rows,
+      format: "metatrader-htm",
+      accountInfo: { ...accountInfo, broker },
+      broker,
+      platform,
+      language: fingerprint.language
+    };
   }
 
   if (isMetaTraderHeader(headers)) {
@@ -872,6 +1087,11 @@ export async function parseFile(file: File): Promise<ParseResult> {
     const footerInfo = extractMt5AccountInfo(matrix);
     const preambleInfo = preamble ? extractMt5Preamble(preamble) : {};
     const accountInfo: AccountInfo = { ...footerInfo, ...preambleInfo };
+    const broker =
+      brokerFromServer(accountInfo.broker_server ?? accountInfo.company ?? null) ??
+      fingerprint.broker ??
+      accountInfo.broker ??
+      null;
 
     const mapping: Partial<Record<FieldKey, string>> = {
       trade_date: "Time",
@@ -886,7 +1106,17 @@ export async function parseFile(file: File): Promise<ParseResult> {
       spread: "Swap",
       pnl: "Profit"
     };
-    return { trades, headers, mapping, raw: rows, format: "metatrader", accountInfo };
+    return {
+      trades,
+      headers,
+      mapping,
+      raw: rows,
+      format: "metatrader",
+      accountInfo: { ...accountInfo, broker },
+      broker,
+      platform: fingerprint.platform ?? "MT5",
+      language: fingerprint.language
+    };
   }
 
   if (isHfmHeader(headers)) {
@@ -904,7 +1134,68 @@ export async function parseFile(file: File): Promise<ParseResult> {
       pips: "Pips",
       duration_seconds: "Duration"
     };
-    return { trades, headers, mapping, raw: rows, format: "hfm" };
+    return {
+      trades,
+      headers,
+      mapping,
+      raw: rows,
+      format: "hfm",
+      broker: "HFM",
+      platform: fingerprint.platform ?? "MT4",
+      language: fingerprint.language
+    };
+  }
+
+  if (isCTraderHeader(headers)) {
+    const trades = parseCtraderRows(rows);
+    const mapping: Partial<Record<FieldKey, string>> = {
+      pair: "Symbol",
+      side: "Direction",
+      lot_size: "Volume",
+      entry: "Entry price",
+      exit_price: "Exit price",
+      pnl: "Net USD",
+      open_time: "Entry time",
+      close_time: "Exit time",
+      stop_loss: "Stop loss",
+      take_profit: "Take profit",
+      commissions: "Commission",
+      spread: "Swap"
+    };
+    return {
+      trades,
+      headers,
+      mapping,
+      raw: rows,
+      format: "ctrader",
+      broker: fingerprint.broker ?? "cTrader",
+      platform: "cTrader",
+      language: fingerprint.language
+    };
+  }
+
+  if (isTradingViewHeader(headers)) {
+    const trades = parseTradingViewRows(rows);
+    const mapping: Partial<Record<FieldKey, string>> = {
+      trade_date: "Date/Time",
+      open_time: "Date/Time",
+      close_time: "Date/Time",
+      side: "Type",
+      entry: "Price",
+      exit_price: "Price",
+      pnl: "Net Profit",
+      lot_size: "Position size"
+    };
+    return {
+      trades,
+      headers,
+      mapping,
+      raw: rows,
+      format: "tradingview",
+      broker: "TradingView",
+      platform: "TradingView",
+      language: fingerprint.language
+    };
   }
 
   const mapping = buildColumnMap(headers);
@@ -913,5 +1204,14 @@ export async function parseFile(file: File): Promise<ParseResult> {
     if (!t.session) t.session = detectSession(t.open_time ?? t.trade_date);
     return t;
   });
-  return { trades, headers, mapping, raw: rows, format: "generic" };
+  return {
+    trades,
+    headers,
+    mapping,
+    raw: rows,
+    format: "generic",
+    broker: fingerprint.broker,
+    platform: fingerprint.platform,
+    language: fingerprint.language
+  };
 }
