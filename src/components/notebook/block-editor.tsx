@@ -287,6 +287,7 @@ function BlockRow(props: BlockRowProps) {
           ref={inputRef}
           type="text"
           value=""
+          readOnly
           aria-label="Divider"
           className="sr-only"
           onKeyDown={(e) => {
