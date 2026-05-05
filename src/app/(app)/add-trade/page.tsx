@@ -27,7 +27,7 @@ export default function AddTradePage() {
     <div className="space-y-6">
       <PageHeader
         title="Add Trade"
-        description="Upload a CSV/XLSX from any broker or add a trade by hand."
+        description="Upload a CSV / XLSX / HTML from any broker (MT4, MT5, HFM, cTrader, etc.) or add a trade by hand."
         actions={
           <div className="rounded-xl border border-line bg-bg-soft p-1">
             <button
@@ -69,6 +69,7 @@ function UploadForm({ onDone }: { onDone: () => void }) {
     trades: ParsedTrade[];
     mapping: Record<string, string | undefined>;
     format: "metatrader" | "hfm" | "generic";
+    formatFlavor?: string;
     accountInfo?: AccountInfo;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -88,6 +89,7 @@ function UploadForm({ onDone }: { onDone: () => void }) {
         trades: result.trades,
         mapping: result.mapping,
         format: result.format,
+        formatFlavor: result.formatFlavor,
         accountInfo: result.accountInfo
       });
       setFile(f);
@@ -127,6 +129,15 @@ function UploadForm({ onDone }: { onDone: () => void }) {
 
     const a = preview.accountInfo;
     const isMt5 = preview.format === "metatrader";
+    // Distinguish MT4 vs MT5 for the platform chip on the file row.
+    // The detector's flavor string starts with "MT4" / "MT5" so a prefix
+    // match is enough — falls back to MT5 when flavor wasn't set (e.g.
+    // older preview state) so the existing chip behaviour is preserved.
+    const platformLabel = preview.formatFlavor?.startsWith("MT4")
+      ? "MT4"
+      : preview.formatFlavor?.startsWith("MT5") || isMt5
+        ? "MT5"
+        : null;
     type CreatedFile = { id: string; source: string };
     // Schema-resilient insert: the helper tries the full payload first
     // and on a "column not in schema cache" error, drops the offending
@@ -156,7 +167,7 @@ function UploadForm({ onDone }: { onDone: () => void }) {
         account_name: a?.account_holder ?? null,
         broker: a?.broker ?? a?.company ?? null,
         server: a?.broker_server ?? null,
-        platform: isMt5 ? "MT5" : null
+        platform: platformLabel
       });
     if (fileErr || !created) {
       setError(fileErr?.message ?? "Failed to create file record.");
@@ -174,7 +185,7 @@ function UploadForm({ onDone }: { onDone: () => void }) {
       account_number: a?.account_number ?? null,
       broker: a?.broker ?? a?.company ?? null,
       server: a?.broker_server ?? null,
-      platform: isMt5 ? "MT5" : null,
+      platform: platformLabel,
       source: "manual" as const
     }));
     const { error: tradesErr, missingColumns: missingTrades } =
@@ -206,7 +217,7 @@ function UploadForm({ onDone }: { onDone: () => void }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Upload your CSV / XLSX</CardTitle>
+        <CardTitle>Upload your CSV / XLSX / HTML</CardTitle>
       </CardHeader>
       <CardBody className="space-y-4">
         <div>
@@ -221,13 +232,13 @@ function UploadForm({ onDone }: { onDone: () => void }) {
         >
           <Upload className="h-6 w-6 text-brand-300" />
           <div className="text-sm font-medium">{file ? file.name : "Drag & drop or click to select"}</div>
-          <div className="text-xs text-fg-subtle">CSV, XLSX — flexible column names supported</div>
+          <div className="text-xs text-fg-subtle">CSV, XLSX, HTML — MT4 / MT5 / HFM / generic — flexible column names supported</div>
         </button>
 
         <input
           ref={input}
           type="file"
-          accept=".csv,.xlsx,.xls"
+          accept=".csv,.xlsx,.xls,.htm,.html"
           className="hidden"
           onChange={(e) => {
             const f = e.target.files?.[0];
@@ -259,9 +270,11 @@ function UploadForm({ onDone }: { onDone: () => void }) {
                 preview.accountInfo.broker) && (
                 <div className="rounded-xl border border-line bg-bg-soft/40 p-3 text-xs">
                   <div className="mb-1 font-medium text-fg">
-                    {preview.format === "metatrader" && preview.accountInfo.account_number
-                      ? "MT5 ReportHistory detected"
-                      : "Account info detected"}
+                    {preview.formatFlavor
+                      ? `${preview.formatFlavor} detected`
+                      : preview.format === "metatrader" && preview.accountInfo.account_number
+                        ? "MT5 ReportHistory detected"
+                        : "Account info detected"}
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {preview.accountInfo.account_number && (

@@ -16,6 +16,14 @@
 
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
+import {
+  classifyMtLabel,
+  detectFileKind,
+  hasMtReportTitle,
+  htmlReportToMatrix,
+  isMt4Header,
+  mt4RowToMt5Layout
+} from "./broker-formats";
 
 export type ParsedTrade = {
   pair: string | null;
@@ -447,23 +455,23 @@ export async function parseCsv(
  */
 function findMt5ReportHeaderRow(matrix: unknown[][]): number {
   if (matrix.length < 8) return -1;
-  // Cheap sniff: any of the first ~10 rows starts with "Trade History Report".
-  let hasReportTitle = false;
-  for (let i = 0; i < Math.min(10, matrix.length); i++) {
-    const first = matrix[i]?.[0];
-    if (typeof first === "string" && /trade history report/i.test(first)) {
-      hasReportTitle = true;
-      break;
-    }
-  }
-  if (!hasReportTitle) return -1;
-  // Find the row that is the actual MT column header (Time + duplicated
-  // Time + Symbol + Volume + Profit). Scan 0..25.
+  // Sniff the first ~10 rows for a MetaTrader report title in any of the
+  // supported languages (English, Spanish, Portuguese, French, German,
+  // Italian, Russian, Chinese, Japanese, Arabic, Polish, Vietnamese,
+  // Indonesian). Includes MT4's "Account History" / "Statement Report" too.
+  if (!hasMtReportTitle(matrix)) return -1;
+  // Find the row that is the actual MT column header. We accept either
+  // layout because MT4 and MT5 differ:
+  //   - MT5 leads with "Time" and has duplicated Time+Price columns
+  //   - MT4 leads with "Ticket" and uses "Item" instead of "Symbol"
+  // Both `isMetaTraderHeader` (MT5) and `isMt4Header` (MT4) return true on
+  // exactly one of those layouts; the dispatcher downstream branches on
+  // which one matched.
   for (let i = 0; i < Math.min(25, matrix.length); i++) {
     const row = matrix[i];
     if (!Array.isArray(row)) continue;
     const headers = row.map((c) => String(c ?? ""));
-    if (isMetaTraderHeader(headers)) return i;
+    if (isMetaTraderHeader(headers) || isMt4Header(headers)) return i;
   }
   return -1;
 }
@@ -639,11 +647,15 @@ function extractMt5Preamble(preamble: unknown[][]): Partial<AccountInfo> {
   }
   for (const row of preamble) {
     if (!Array.isArray(row)) continue;
-    const label = String(row[0] ?? "").trim().toLowerCase().replace(/:$/, "");
-    if (!label) continue;
-    if (label === "name") {
+    // Classify the label cell across all 13 supported MetaTrader UI
+    // languages. `classifyMtLabel` returns one of: "name" / "account" /
+    // "company" / "date" / null. So a Spanish "Cuenta:" cell maps to
+    // "account" and the value-extraction logic below runs unchanged.
+    const kind = classifyMtLabel(row[0]);
+    if (!kind || kind === "report_title") continue;
+    if (kind === "name") {
       out.account_holder = findValue(row);
-    } else if (label === "account") {
+    } else if (kind === "account") {
       const raw = findValue(row);
       if (raw) {
         const m = raw.match(/^(\S+)\s*\(([^)]+)\)\s*$/);
@@ -660,12 +672,14 @@ function extractMt5Preamble(preamble: unknown[][]): Partial<AccountInfo> {
           }
           if (parts[2]) out.account_kind = parts[2].toLowerCase();
         } else {
+          // MT4 layout: account number is on its own line with no parens
+          // metadata. Just store the login.
           out.account_number = raw;
         }
       }
-    } else if (label === "company") {
+    } else if (kind === "company") {
       out.company = findValue(row);
-    } else if (label === "date") {
+    } else if (kind === "date") {
       out.reported_at = findValue(row);
     }
   }
@@ -681,7 +695,50 @@ export type ParseResult = {
   /** Optional account-level metadata (MT5 Trade Report includes a footer
    *  with Balance / Equity / Deposit history; HFM does not). */
   accountInfo?: AccountInfo;
+  /** Friendly format label for the import-preview chip — e.g. "MT5
+   *  ReportHistory · XLSX" / "MT4 Statement · HTML" / "HFM History".
+   *  Distinguishes MT4 vs MT5 and XLSX vs HTML so the user sees what was
+   *  detected. Empty for unmatched generic CSV/XLSX. */
+  formatFlavor?: string;
 };
+
+/** Parse a MetaTrader-exported HTML report (`.htm` / `.html`) into the same
+ *  matrix shape `parseXlsx` returns, so the rest of the pipeline doesn't
+ *  need to know the source format. MT writes one big `<table>` containing
+ *  the preamble + the trade rows, so a row-by-row text extract is enough. */
+export async function parseHtml(
+  file: File
+): Promise<{
+  rows: Record<string, unknown>[];
+  headers: string[];
+  matrix: unknown[][];
+  preamble?: unknown[][];
+}> {
+  const html = await file.text();
+  const fullMatrix = htmlReportToMatrix(html);
+
+  // Same preamble-strip as the XLSX path.
+  const headerRow = findMt5ReportHeaderRow(fullMatrix);
+  const slicedMatrix = headerRow > 0 ? fullMatrix.slice(headerRow) : fullMatrix;
+  const preamble = headerRow > 0 ? fullMatrix.slice(0, headerRow) : undefined;
+
+  const rawHeaders = (slicedMatrix[0] ?? []).map((h) => String(h ?? ""));
+  const dataMatrix = slicedMatrix.slice(1);
+  const seen = new Map<string, number>();
+  const uniqueHeaders = rawHeaders.map((h) => {
+    const n = (seen.get(h) ?? 0) + 1;
+    seen.set(h, n);
+    return n === 1 ? h : `${h} (${n})`;
+  });
+  const rows = dataMatrix.map((row) => {
+    const r: Record<string, unknown> = {};
+    uniqueHeaders.forEach((h, i) => {
+      r[h] = row[i];
+    });
+    return r;
+  });
+  return { rows, headers: rawHeaders, matrix: slicedMatrix, preamble };
+}
 
 /**
  * HFM / HotForex exports: each trade is represented as TWO rows sharing a
@@ -787,19 +844,29 @@ function parseHfmRows(rows: Record<string, unknown>[]): ParsedTrade[] {
 }
 
 export async function parseFile(file: File): Promise<ParseResult> {
-  const ext = file.name.toLowerCase().split(".").pop() ?? "";
-  // The preamble field only exists on the XLSX path (and only when the
-  // MT5 ReportHistory marker was detected). CSV imports don't have it.
+  // The preamble field only exists on the XLSX/HTML path (and only when
+  // the MetaTrader ReportHistory marker was detected). CSV imports don't
+  // have it.
   let preamble: unknown[][] | undefined;
   let rows: Record<string, unknown>[];
   let headers: string[];
   let matrix: unknown[][];
-  if (ext === "xlsx" || ext === "xls") {
+  // `kind` drives the format-flavor chip ("XLSX" vs "HTML" suffix). The
+  // upstream UI doesn't care which of XLSX/HTML carried the data — both
+  // flow through the identical row-mapper pipeline below.
+  const kind = detectFileKind(file);
+  if (kind === "xlsx" || kind === "xls") {
     const parsedXlsx = await parseXlsx(file);
     rows = parsedXlsx.rows;
     headers = parsedXlsx.headers;
     matrix = parsedXlsx.matrix;
     preamble = parsedXlsx.preamble;
+  } else if (kind === "html") {
+    const parsedHtml = await parseHtml(file);
+    rows = parsedHtml.rows;
+    headers = parsedHtml.headers;
+    matrix = parsedHtml.matrix;
+    preamble = parsedHtml.preamble;
   } else {
     const parsedCsv = await parseCsv(file);
     rows = parsedCsv.rows;
@@ -807,7 +874,48 @@ export async function parseFile(file: File): Promise<ParseResult> {
     matrix = parsedCsv.matrix;
   }
 
-  if (isMetaTraderHeader(headers)) {
+  // MT4 files use a different column layout from MT5 (Ticket-first vs
+  // Time-first, "Item" vs "Symbol", and a separate Taxes column). Detect
+  // BEFORE the layout shuffle (because the shuffle replaces the headers).
+  const isMt4 = isMt4Header(headers);
+  if (isMt4) {
+    // Synthesise a canonical MT5-shaped header row so downstream code
+    // (footer scanner, isMetaTraderHeader on the next pass, key-mapped
+    // row consumers) sees the MT5 layout. The actual values come from
+    // `mt4RowToMt5Layout`, which reorders MT4 columns into the MT5
+    // index positions and folds the MT4-only Taxes column into Commission.
+    const mt5Headers = [
+      "Time",
+      "Position",
+      "Symbol",
+      "Type",
+      "Volume",
+      "Price",
+      "S / L",
+      "T / P",
+      "Time",
+      "Price",
+      "Commission",
+      "Swap",
+      "Profit"
+    ];
+    const dataMatrix = matrix
+      .slice(1)
+      .map((row) => (Array.isArray(row) ? mt4RowToMt5Layout(row as unknown[]) : row));
+    matrix = [mt5Headers, ...dataMatrix];
+    headers = mt5Headers;
+    // Re-key rows off the new headers so consumers that read by header
+    // name (rather than by column index) still see the right values.
+    rows = dataMatrix.map((row) => {
+      const r: Record<string, unknown> = {};
+      mt5Headers.forEach((h, i) => {
+        r[h] = (row as unknown[])[i];
+      });
+      return r;
+    });
+  }
+
+  if (isMetaTraderHeader(headers) || isMt4) {
     // The MT5 ReportHistory export is a single sheet with THREE stacked
     // sections — Positions, Orders, Deals — each preceded by its own
     // section title row and header row. Only the Positions section
@@ -886,7 +994,22 @@ export async function parseFile(file: File): Promise<ParseResult> {
       spread: "Swap",
       pnl: "Profit"
     };
-    return { trades, headers, mapping, raw: rows, format: "metatrader", accountInfo };
+    // Friendly chip for the import preview. Tells the user exactly which
+    // MetaTrader format was detected (MT4 vs MT5, XLSX vs HTML).
+    const sourceLabel =
+      kind === "html" ? "HTML" : kind === "xlsx" || kind === "xls" ? "XLSX" : "CSV";
+    const formatFlavor = isMt4
+      ? `MT4 Statement · ${sourceLabel}`
+      : `MT5 ReportHistory · ${sourceLabel}`;
+    return {
+      trades,
+      headers,
+      mapping,
+      raw: rows,
+      format: "metatrader",
+      accountInfo,
+      formatFlavor
+    };
   }
 
   if (isHfmHeader(headers)) {
@@ -904,7 +1027,7 @@ export async function parseFile(file: File): Promise<ParseResult> {
       pips: "Pips",
       duration_seconds: "Duration"
     };
-    return { trades, headers, mapping, raw: rows, format: "hfm" };
+    return { trades, headers, mapping, raw: rows, format: "hfm", formatFlavor: "HFM History" };
   }
 
   const mapping = buildColumnMap(headers);
@@ -913,5 +1036,10 @@ export async function parseFile(file: File): Promise<ParseResult> {
     if (!t.session) t.session = detectSession(t.open_time ?? t.trade_date);
     return t;
   });
-  return { trades, headers, mapping, raw: rows, format: "generic" };
+  // Friendly chip even for unmatched files — tells the user the column
+  // guesser ran. Empty when we couldn't detect the source kind at all.
+  const sourceLabel =
+    kind === "html" ? "HTML" : kind === "xlsx" || kind === "xls" ? "XLSX" : kind === "csv" ? "CSV" : "";
+  const formatFlavor = sourceLabel ? `Generic ${sourceLabel}` : undefined;
+  return { trades, headers, mapping, raw: rows, format: "generic", formatFlavor };
 }
