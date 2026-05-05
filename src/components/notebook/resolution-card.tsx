@@ -452,8 +452,16 @@ function ResolutionBlock({
   }
 
   if (kind === "callout") {
+    // On light card backgrounds (cream / white) `text-amber-100` is literally
+    // the same colour as the cream swatch, so the callout text vanishes.
+    // Flip to a dark amber tone whenever we're on a light background.
     return (
-      <div className="flex items-start gap-2 rounded-md border border-amber-400/40 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-100">
+      <div
+        className={cn(
+          "flex items-start gap-2 rounded-md border border-amber-400/40 bg-amber-500/10 px-2 py-1.5 text-xs",
+          onLight ? "text-amber-900" : "text-amber-100"
+        )}
+      >
         <Megaphone className="mt-0.5 h-3.5 w-3.5 shrink-0" />
         <span className="flex-1">{item.text}</span>
       </div>
