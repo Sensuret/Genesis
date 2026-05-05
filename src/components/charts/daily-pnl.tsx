@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from "recharts";
 import { useMoney } from "@/lib/filters/store";
 import { formatMoney, formatMoneyCompact } from "@/lib/fx";
+import { chartTooltipProps } from "./chart-tooltip";
 
 /**
  * Daily P&L bar chart with glossy green/red gradient bars — bright
@@ -46,14 +47,8 @@ export function DailyPnlChart({ data }: { data: Array<{ date: string; pnl: numbe
             tickFormatter={(v: number) => formatMoneyCompact(v, currency)}
           />
           <Tooltip
+            {...chartTooltipProps}
             cursor={{ fill: "transparent" }}
-            contentStyle={{
-              background: "rgb(15 14 26 / 0.95)",
-              border: "1px solid rgb(168 102 255 / 0.4)",
-              borderRadius: 12,
-              color: "white",
-              fontSize: 12
-            }}
             formatter={(v: number) => formatMoney(v, currency)}
           />
           <Bar dataKey="pnl" radius={[6, 6, 0, 0]}>

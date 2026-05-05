@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
+import { chartTooltipProps } from "@/components/charts/chart-tooltip";
 import { Empty } from "@/components/ui/empty";
 import {
   compatibility,
@@ -208,13 +209,7 @@ function DistributionPie<T extends string | number>({
                 ))}
               </Pie>
               <Tooltip
-                contentStyle={{
-                  background: "rgb(15 14 26 / 0.95)",
-                  border: "1px solid rgb(168 102 255 / 0.4)",
-                  borderRadius: 12,
-                  color: "white",
-                  fontSize: 12
-                }}
+                {...chartTooltipProps}
                 formatter={(value: number, name) => [
                   `${value} (${total ? Math.round((value / total) * 100) : 0}%)`,
                   String(name)

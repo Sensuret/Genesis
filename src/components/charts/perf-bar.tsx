@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useMoney } from "@/lib/filters/store";
 import { formatMoney } from "@/lib/fx";
+import { chartTooltipProps } from "./chart-tooltip";
 
 export function PerfBar({
   data
@@ -45,14 +46,8 @@ export function PerfBar({
           />
           <YAxis dataKey="key" type="category" stroke="rgb(130 130 150)" fontSize={11} width={120} />
           <Tooltip
+            {...chartTooltipProps}
             cursor={{ fill: "transparent" }}
-            contentStyle={{
-              background: "rgb(15 14 26 / 0.95)",
-              border: "1px solid rgb(168 102 255 / 0.4)",
-              borderRadius: 12,
-              color: "white",
-              fontSize: 12
-            }}
             formatter={(v: number) => formatMoney(v, currency)}
           />
           <Bar dataKey="pnl" radius={[0, 6, 6, 0]}>

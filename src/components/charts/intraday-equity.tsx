@@ -7,6 +7,7 @@ import { useMemo } from "react";
 import type { TradeRow } from "@/lib/supabase/types";
 import { useMoney } from "@/lib/filters/store";
 import { formatMoney, formatMoneyCompact } from "@/lib/fx";
+import { chartTooltipProps } from "./chart-tooltip";
 
 /**
  * Intraday equity curve for a single day — plots cumulative P&L across
@@ -93,9 +94,9 @@ export function IntradayEquityChart({ trades }: { trades: TradeRow[] }) {
             tickFormatter={(v: number) => formatMoneyCompact(v, currency)}
           />
           <Tooltip
+            {...chartTooltipProps}
             formatter={(v: number) => formatMoney(v, currency)}
             labelFormatter={(_, payload) => payload?.[0]?.payload?.label ?? ""}
-            wrapperStyle={{ outline: "none" }}
           />
           <ReferenceLine y={0} stroke="rgba(127,127,150,0.45)" strokeDasharray="2 4" />
           <Area
