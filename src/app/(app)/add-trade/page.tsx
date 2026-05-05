@@ -137,7 +137,9 @@ function UploadForm({ onDone }: { onDone: () => void }) {
         preview.format === "metatrader-htm" ? "MT4" :
         preview.format === "ctrader" ? "cTrader" :
         preview.format === "tradingview" ? "TradingView" :
-        preview.format === "hfm" ? "MT4" :
+        // HFM: column shape is shared across MT4 and MT5; preview.platform
+        // is the trustworthy source (filename hint + position-ID heuristic).
+        // Don't guess here — leave null if the parser couldn't decide.
         null);
     const sourceLabel =
       preview.format === "metatrader" ? "MT5" :
@@ -147,37 +149,102 @@ function UploadForm({ onDone }: { onDone: () => void }) {
       preview.format === "tradingview" ? "TradingView" :
       "Generic";
     type CreatedFile = { id: string; source: string };
+    const accountNumber = a?.account_number ?? null;
+
+    // Re-upload detection: if this account has been imported before
+    // (same user_id + account_number) we don't want to fail with a
+    // `trade_files_user_account_uniq` violation — we want to refresh
+    // the existing file in place. Look up the existing row first,
+    // delete its trades, then reuse the same file_id for the new rows.
+    let existingFileId: string | null = null;
+    let replaced = false;
+    if (accountNumber) {
+      const { data: existing } = await supabase
+        .from("trade_files")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("account_number", accountNumber)
+        .maybeSingle();
+      if (existing?.id) {
+        // Confirm before destructive replace so a stray re-upload of the
+        // wrong account can't silently wipe out months of trades.
+        const ok = window.confirm(
+          `An import already exists for account ${accountNumber}. ` +
+            `Saving will REPLACE its trades with this file's contents. ` +
+            `Continue?`
+        );
+        if (!ok) {
+          setBusy(false);
+          return;
+        }
+        existingFileId = existing.id;
+        const { error: delErr } = await supabase
+          .from("trades")
+          .delete()
+          .eq("file_id", existing.id);
+        if (delErr) {
+          setError(`Couldn't clear old trades on existing import: ${delErr.message}`);
+          setBusy(false);
+          return;
+        }
+        replaced = true;
+      }
+    }
+
     // Schema-resilient insert: the helper tries the full payload first
     // and on a "column not in schema cache" error, drops the offending
     // key and retries. This means an imperfectly-migrated Supabase
     // project still succeeds at the core insert; the broker / account
     // chips just won't show on the file row until the migration is
     // applied. The list of dropped columns is surfaced as a banner.
-    const { data: created, error: fileErr, missingColumns: missingFile } =
-      await insertOneWithFallback<CreatedFile>(supabase, "trade_files", {
-        user_id: user.id,
-        name: name || file.name,
-        source: sourceLabel,
-        trade_count: preview.trades.length,
-        broker_tz_offset_minutes: null,
-        account_balance: a?.balance ?? null,
-        account_equity: a?.equity ?? null,
-        deposits_total: a?.deposits_total ?? null,
-        withdrawals_total: a?.withdrawals_total ?? null,
-        // The columns below are added by the PR #35 / PR #37 migrations.
-        // If the user's project hasn't run them yet, the helper drops
-        // them transparently so the import still goes through.
-        sync_kind: "manual",
-        account_number: a?.account_number ?? null,
-        account_name: a?.account_holder ?? null,
-        broker: preview.broker ?? a?.broker ?? a?.company ?? null,
-        server: a?.broker_server ?? null,
-        platform
-      });
-    if (fileErr || !created) {
-      setError(fileErr?.message ?? "Failed to create file record.");
-      setBusy(false);
-      return;
+    const filePayload = {
+      user_id: user.id,
+      name: name || file.name,
+      source: sourceLabel,
+      trade_count: preview.trades.length,
+      broker_tz_offset_minutes: null,
+      account_balance: a?.balance ?? null,
+      account_equity: a?.equity ?? null,
+      deposits_total: a?.deposits_total ?? null,
+      withdrawals_total: a?.withdrawals_total ?? null,
+      // The columns below are added by the PR #35 / PR #37 migrations.
+      // If the user's project hasn't run them yet, the helper drops
+      // them transparently so the import still goes through.
+      sync_kind: "manual" as const,
+      account_number: accountNumber,
+      account_name: a?.account_holder ?? null,
+      broker: preview.broker ?? a?.broker ?? a?.company ?? null,
+      server: a?.broker_server ?? null,
+      platform
+    };
+
+    let createdId: string;
+    let createdSource: string;
+    let missingFile: string[] = [];
+    if (existingFileId) {
+      // Refresh path — update the existing row's metadata in place.
+      const { error: updErr } = await supabase
+        .from("trade_files")
+        .update(filePayload)
+        .eq("id", existingFileId);
+      if (updErr) {
+        setError(updErr.message);
+        setBusy(false);
+        return;
+      }
+      createdId = existingFileId;
+      createdSource = sourceLabel;
+    } else {
+      const { data: created, error: fileErr, missingColumns } =
+        await insertOneWithFallback<CreatedFile>(supabase, "trade_files", filePayload);
+      if (fileErr || !created) {
+        setError(fileErr?.message ?? "Failed to create file record.");
+        setBusy(false);
+        return;
+      }
+      createdId = created.id;
+      createdSource = created.source;
+      missingFile = missingColumns;
     }
 
     // Stamp every trade row with the same broker / account / platform
@@ -186,8 +253,8 @@ function UploadForm({ onDone }: { onDone: () => void }) {
     const rows = preview.trades.map((t) => ({
       ...t,
       user_id: user.id,
-      file_id: created.id,
-      account_number: a?.account_number ?? null,
+      file_id: createdId,
+      account_number: accountNumber,
       broker: preview.broker ?? a?.broker ?? a?.company ?? null,
       server: a?.broker_server ?? null,
       platform,
@@ -207,13 +274,16 @@ function UploadForm({ onDone }: { onDone: () => void }) {
     const allMissing = Array.from(new Set([...missingFile, ...missingTrades]));
     if (allMissing.length) setMissingCols(allMissing);
     await logAuditEvent(
-      AUDIT_EVENT.TRADE_FILE_IMPORTED,
-      `Imported ${preview.trades.length} trades from ${name || file.name}`,
+      replaced ? AUDIT_EVENT.TRADE_FILE_IMPORTED : AUDIT_EVENT.TRADE_FILE_IMPORTED,
+      replaced
+        ? `Refreshed ${preview.trades.length} trades on ${name || file.name} (re-upload)`
+        : `Imported ${preview.trades.length} trades from ${name || file.name}`,
       {
-        file_id: created.id,
+        file_id: createdId,
         file_name: name || file.name,
-        source: created.source,
-        trade_count: preview.trades.length
+        source: createdSource,
+        trade_count: preview.trades.length,
+        replaced
       }
     );
     onDone();

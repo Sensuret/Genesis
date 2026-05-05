@@ -751,6 +751,32 @@ function parseHfmDuration(value: unknown): number | null {
   return matched ? total : null;
 }
 
+/**
+ * HFM's myHFM web-portal export uses the same column shape for both MT4
+ * and MT5 accounts (no `Platform` column, no preamble). The only signal
+ * we have left after the filename / fingerprint fallbacks is the
+ * Position ID length distribution: MT4 tickets are 6–9 digits, MT5
+ * position IDs are typically 10+ digits. We sample up to 50 rows and
+ * pick the dominant bucket.
+ */
+function guessPlatformFromHfmRows(rows: Record<string, unknown>[]): "MT4" | "MT5" | null {
+  let mt4 = 0;
+  let mt5 = 0;
+  let scanned = 0;
+  for (const r of rows) {
+    if (scanned >= 50) break;
+    const pid = String(r["Position ID"] ?? "").trim();
+    if (!/^\d+$/.test(pid)) continue;
+    scanned += 1;
+    if (pid.length >= 10) mt5 += 1;
+    else if (pid.length >= 6) mt4 += 1;
+  }
+  if (scanned < 5) return null;
+  if (mt5 > mt4 * 2) return "MT5";
+  if (mt4 > mt5 * 2) return "MT4";
+  return null;
+}
+
 function parseHfmRows(rows: Record<string, unknown>[]): ParsedTrade[] {
   // Group by Position ID. Opener = row where profit == 0 and close == open
   // time. Closer = the other row for that position.
@@ -1134,6 +1160,15 @@ export async function parseFile(file: File): Promise<ParseResult> {
       pips: "Pips",
       duration_seconds: "Duration"
     };
+    // HFM's web-portal export uses the same column shape for MT4 and MT5
+    // accounts, so we can't tell from the header alone. Use these fallbacks
+    // in order:
+    //   1. fingerprint.platform — set when filename or text contains
+    //      "mt4"/"mt5" / "metatrader 4" / "metatrader 5".
+    //   2. Position-ID length heuristic — MT4 tickets are typically
+    //      6-9 digits; MT5 position IDs are 10+ digits.
+    //   3. null — show no platform pill rather than a wrong one.
+    const heuristic = guessPlatformFromHfmRows(rows);
     return {
       trades,
       headers,
@@ -1141,7 +1176,7 @@ export async function parseFile(file: File): Promise<ParseResult> {
       raw: rows,
       format: "hfm",
       broker: "HFM",
-      platform: fingerprint.platform ?? "MT4",
+      platform: fingerprint.platform ?? heuristic,
       language: fingerprint.language
     };
   }
