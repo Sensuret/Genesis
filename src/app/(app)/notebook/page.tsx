@@ -190,6 +190,8 @@ export default function NotebookPage() {
   const [adderOpen, setAdderOpen] = useState(false);
   const [drafts, setDrafts] = useState<DraftEmbed[]>(() => [blankDraft()]);
   const [tab, setTab] = useState<TopTab>("general");
+  // Profile full_name used as the default owner-name on new resolutions.
+  const [profileName, setProfileName] = useState<string>("");
 
   useEffect(() => {
     (async () => {
@@ -201,11 +203,14 @@ export default function NotebookPage() {
         return;
       }
       setUserId(user.id);
-      const { data, error: err } = await supabase
-        .from("user_settings")
-        .select("data")
-        .eq("user_id", user.id)
-        .maybeSingle();
+      const [{ data, error: err }, { data: profile }] = await Promise.all([
+        supabase
+          .from("user_settings")
+          .select("data")
+          .eq("user_id", user.id)
+          .maybeSingle(),
+        supabase.from("profiles").select("full_name").eq("id", user.id).maybeSingle()
+      ]);
       if (err && err.code !== "PGRST116") setError(err.message);
       const parsed = readSettings(data?.data);
       setEmbeds(parsed.notebook_embeds ?? []);
@@ -213,6 +218,7 @@ export default function NotebookPage() {
       setScratch(parsed.notebook_scratchpad ?? "");
       setNotes(parsed.notebook_notes ?? []);
       setResolutions(parsed.notebook_resolutions ?? []);
+      setProfileName(profile?.full_name?.trim() ?? user.email?.split("@")[0] ?? "");
       setLoading(false);
     })();
   }, []);
@@ -377,7 +383,11 @@ export default function NotebookPage() {
       </div>
 
       {tab === "resolutions" && (
-        <ResolutionsTab resolutions={resolutions} onChange={persistResolutions} />
+        <ResolutionsTab
+          resolutions={resolutions}
+          onChange={persistResolutions}
+          defaultOwnerName={profileName}
+        />
       )}
 
       {tab === "general" && (

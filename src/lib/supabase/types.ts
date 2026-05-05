@@ -187,6 +187,9 @@ export type ResolutionSubsection = {
   label: string;
   /** Headline target / overall goal for this sub-section. */
   target?: string;
+  /** Whether the headline target itself is checked off. Counts toward the
+   *  card's overall progress percentage just like a regular bullet. */
+  target_checked?: boolean;
   items: ResolutionItem[];
 };
 
@@ -222,6 +225,18 @@ export type Resolution = {
   background?: ResolutionBackground;
   /** Whether to render the "YEAR OF THE <ANIMAL>" eyebrow label. Default true. */
   show_year_label?: boolean;
+  /**
+   * Personal owner-name shown above the year banner. Defaults to the
+   * profile's full name on first save; user can edit per-resolution and
+   * toggle visibility independently of the data.
+   */
+  owner_name?: string;
+  /** Show the personalised owner name above the year. Default false. */
+  show_owner_name?: boolean;
+  /** Show the "Created on …" timestamp below the year. Default false. */
+  show_created_timestamp?: boolean;
+  /** Show overall progress (% of checkboxes ticked) at the top of the card. */
+  show_progress?: boolean;
   /** @deprecated The Genesis brand mark is now always rendered on Resolution
    *  cards. Kept on the type so legacy rows still parse without errors. */
   show_genesis_logo?: boolean;

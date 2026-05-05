@@ -6,12 +6,17 @@ import { ChevronDown, RotateCcw, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { useFilters, CURRENCIES, DATE_RANGES, type AppFilters } from "@/lib/filters/store";
+import { useTrades } from "@/lib/hooks/use-trades";
 import type { PlaybookRow, ProfileRow, TradeFileRow } from "@/lib/supabase/types";
 
 export function TopBar() {
   const { filters, setFilters, reset } = useFilters();
+  // Accounts come from the shared TradesProvider cache rather than a
+  // duplicate query — eliminates the dropdown briefly going empty when
+  // a file is imported or deleted, since the provider holds onto the
+  // last good list while it refreshes in the background.
+  const { files: accounts } = useTrades();
   const [profile, setProfile] = useState<Partial<ProfileRow> | null>(null);
-  const [accounts, setAccounts] = useState<TradeFileRow[]>([]);
   const [playbooks, setPlaybooks] = useState<PlaybookRow[]>([]);
   const [greeting, setGreeting] = useState<string>("");
 
@@ -23,16 +28,8 @@ export function TopBar() {
   useEffect(() => {
     const supabase = createClient();
     let userId: string | null = null;
-    let unsubFiles: (() => void) | null = null;
     let unsubPlaybooks: (() => void) | null = null;
 
-    async function refreshFiles() {
-      const { data } = await supabase
-        .from("trade_files")
-        .select("*")
-        .order("created_at", { ascending: false });
-      setAccounts(data ?? []);
-    }
     async function refreshPlaybooks() {
       const { data } = await supabase
         .from("playbooks")
@@ -46,39 +43,23 @@ export function TopBar() {
       const user = userData.user;
       if (!user) return;
       userId = user.id;
-      const [{ data: prof }, { data: files }, { data: pbs }] = await Promise.all([
+      const [{ data: prof }, { data: pbs }] = await Promise.all([
         supabase
           .from("profiles")
           .select("full_name,avatar_url,email,default_currency")
           .eq("id", user.id)
           .maybeSingle(),
-        supabase.from("trade_files").select("*").order("created_at", { ascending: false }),
         supabase.from("playbooks").select("*").order("name", { ascending: true })
       ]);
       setProfile(prof ?? { email: user.email });
-      setAccounts(files ?? []);
       setPlaybooks((pbs ?? []) as PlaybookRow[]);
       if (prof?.default_currency && filters.currency === "USD") {
         setFilters({ currency: prof.default_currency });
       }
 
-      // Live-refresh the Accounts and Playbooks pickers when the user
-      // imports a new CSV / creates / deletes / renames a row, so they
-      // never have to refresh the page.
-      const filesChannel = supabase
-        .channel(`topbar-trade_files-${userId}`)
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "trade_files", filter: `user_id=eq.${userId}` },
-          () => {
-            refreshFiles();
-          }
-        )
-        .subscribe();
-      unsubFiles = () => {
-        supabase.removeChannel(filesChannel);
-      };
-
+      // Playbooks are still subscribed to here — accounts/trades are
+      // owned by TradesProvider and updated centrally there, so we don't
+      // duplicate that channel.
       const playbooksChannel = supabase
         .channel(`topbar-playbooks-${userId}`)
         .on(
@@ -98,14 +79,12 @@ export function TopBar() {
     // the realtime channel missed an event (network blip, etc.).
     function onFocus() {
       if (!userId) return;
-      refreshFiles();
       refreshPlaybooks();
     }
     window.addEventListener("focus", onFocus);
 
     return () => {
       window.removeEventListener("focus", onFocus);
-      unsubFiles?.();
       unsubPlaybooks?.();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

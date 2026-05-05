@@ -35,6 +35,9 @@ const SECTION_COLORS: ResolutionSection["color"][] = [
 type ResolutionsTabProps = {
   resolutions: Resolution[];
   onChange: (next: Resolution[]) => void;
+  /** Pulled from the user's profile.full_name on the parent page.
+   *  Used as the default `owner_name` on newly-created resolutions. */
+  defaultOwnerName?: string;
 };
 
 type SubTab = "create" | "created" | "passed";
@@ -58,7 +61,11 @@ function partition(resolutions: Resolution[]): {
   };
 }
 
-export function ResolutionsTab({ resolutions, onChange }: ResolutionsTabProps) {
+export function ResolutionsTab({
+  resolutions,
+  onChange,
+  defaultOwnerName
+}: ResolutionsTabProps) {
   const [sub, setSub] = useState<SubTab>("create");
   const [openId, setOpenId] = useState<string | null>(null);
   const { current, passed } = useMemo(() => partition(resolutions), [resolutions]);
@@ -93,6 +100,7 @@ export function ResolutionsTab({ resolutions, onChange }: ResolutionsTabProps) {
 
       {sub === "create" && (
         <CreateForm
+          defaultOwnerName={defaultOwnerName}
           onSave={(r) => {
             onChange([...resolutions, r]);
             setSub("created");
@@ -110,6 +118,7 @@ export function ResolutionsTab({ resolutions, onChange }: ResolutionsTabProps) {
           onUpdate={(next) =>
             onChange(resolutions.map((r) => (r.id === next.id ? next : r)))
           }
+          readOnly={false}
         />
       )}
 
@@ -123,6 +132,7 @@ export function ResolutionsTab({ resolutions, onChange }: ResolutionsTabProps) {
           onUpdate={(next) =>
             onChange(resolutions.map((r) => (r.id === next.id ? next : r)))
           }
+          readOnly
         />
       )}
 
@@ -130,6 +140,11 @@ export function ResolutionsTab({ resolutions, onChange }: ResolutionsTabProps) {
         <ResolutionModal
           resolution={open}
           onClose={() => setOpenId(null)}
+          // Resolutions whose year has already ended are frozen — the modal
+          // shows the card for viewing + downloading but every editing
+          // affordance (pencil, toggles, BG picker, ticking checkboxes) is
+          // hidden so the historical record can't be tampered with.
+          readOnly={open.year < new Date().getUTCFullYear()}
           onUpdate={(next) =>
             onChange(resolutions.map((r) => (r.id === next.id ? next : r)))
           }
@@ -168,7 +183,8 @@ function ResolutionGrid({
   emptyDescription,
   onOpen,
   onDelete,
-  onUpdate
+  onUpdate,
+  readOnly = false
 }: {
   resolutions: Resolution[];
   emptyTitle: string;
@@ -176,6 +192,8 @@ function ResolutionGrid({
   onOpen: (id: string) => void;
   onDelete: (id: string) => void;
   onUpdate: (next: Resolution) => void;
+  /** Time-passed grid → tick-boxes are frozen and the card is view-only. */
+  readOnly?: boolean;
 }) {
   if (!resolutions.length) {
     return <Empty title={emptyTitle} description={emptyDescription} />;
@@ -210,6 +228,22 @@ function ResolutionGrid({
     });
   }
 
+  function toggleTarget(r: Resolution, sectionId: string, subId: string, next: boolean) {
+    onUpdate({
+      ...r,
+      sections: r.sections.map((s) =>
+        s.id !== sectionId
+          ? s
+          : {
+              ...s,
+              subsections: s.subsections.map((ss) =>
+                ss.id !== subId ? ss : { ...ss, target_checked: next }
+              )
+            }
+      )
+    });
+  }
+
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       {resolutions.map((r) => (
@@ -238,11 +272,28 @@ function ResolutionGrid({
             <ResolutionCard
               resolution={r}
               variant="preview"
-              onToggleItem={(sectionId, subId, itemId, next) =>
-                toggleItem(r, sectionId, subId, itemId, next)
+              onToggleItem={
+                readOnly
+                  ? undefined
+                  : (sectionId, subId, itemId, next) =>
+                      toggleItem(r, sectionId, subId, itemId, next)
+              }
+              onToggleTarget={
+                readOnly
+                  ? undefined
+                  : (sectionId, subId, next) =>
+                      toggleTarget(r, sectionId, subId, next)
               }
             />
           </div>
+          {readOnly && (
+            <span
+              className="pointer-events-none absolute left-3 top-3 rounded-md border border-line bg-bg/85 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-fg-subtle"
+              title="Resolutions move here when their year ends. Read-only."
+            >
+              Archived
+            </span>
+          )}
           <button
             type="button"
             onClick={(e) => {
@@ -282,14 +333,25 @@ function makeBlankSubsection(): ResolutionSubsection {
   };
 }
 
-function CreateForm({ onSave }: { onSave: (r: Resolution) => void }) {
+function CreateForm({
+  onSave,
+  defaultOwnerName
+}: {
+  onSave: (r: Resolution) => void;
+  defaultOwnerName?: string;
+}) {
   const [year, setYear] = useState<number>(() => new Date().getUTCFullYear());
   const [title, setTitle] = useState<string>("");
   const [sections, setSections] = useState<ResolutionSection[]>(() => [makeBlankSection(0)]);
   const [background, setBackground] = useState<ResolutionBackground>({ kind: "theme" });
   const [showYearLabel, setShowYearLabel] = useState(true);
+  const [ownerName, setOwnerName] = useState<string>(defaultOwnerName ?? "");
+  const [showOwnerName, setShowOwnerName] = useState(false);
+  const [showCreatedTimestamp, setShowCreatedTimestamp] = useState(false);
+  const [showProgress, setShowProgress] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [bgOpen, setBgOpen] = useState(false);
+  const [personalOpen, setPersonalOpen] = useState(false);
   const zodiac = chineseZodiacOf(year);
 
   function updateSection(id: string, fn: (s: ResolutionSection) => ResolutionSection) {
@@ -337,13 +399,20 @@ function CreateForm({ onSave }: { onSave: (r: Resolution) => void }) {
       created_at: new Date().toISOString(),
       sections: cleaned,
       background,
-      show_year_label: showYearLabel
+      show_year_label: showYearLabel,
+      owner_name: ownerName.trim() || undefined,
+      show_owner_name: showOwnerName,
+      show_created_timestamp: showCreatedTimestamp,
+      show_progress: showProgress
     });
     // Reset
     setSections([makeBlankSection(0)]);
     setTitle("");
     setBackground({ kind: "theme" });
     setShowYearLabel(true);
+    setShowOwnerName(false);
+    setShowCreatedTimestamp(false);
+    setShowProgress(false);
     setShowPreview(false);
   }
 
@@ -391,7 +460,11 @@ function CreateForm({ onSave }: { onSave: (r: Resolution) => void }) {
             }
           ],
     background,
-    show_year_label: showYearLabel
+    show_year_label: showYearLabel,
+    owner_name: ownerName.trim() || undefined,
+    show_owner_name: showOwnerName,
+    show_created_timestamp: showCreatedTimestamp,
+    show_progress: showProgress
   };
 
   return (
@@ -401,9 +474,7 @@ function CreateForm({ onSave }: { onSave: (r: Resolution) => void }) {
           <CardTitle>Define your resolution</CardTitle>
         </CardHeader>
         <CardBody className="space-y-4">
-          {/* Year + Title side-by-side on the same line. The Year-of-the-X
-              hint is rendered inside the Year input footer instead of below
-              so it doesn't push Title off-axis. */}
+          {/* Year + Title side-by-side on the same line. */}
           <div className="grid gap-3 md:grid-cols-[160px_1fr_auto] md:items-end">
             <div>
               <Label>Year</Label>
@@ -429,6 +500,82 @@ function CreateForm({ onSave }: { onSave: (r: Resolution) => void }) {
           </div>
           <div className="text-[11px] text-fg-subtle">
             Year of the <span className="text-fg">{zodiac}</span>
+          </div>
+
+          {/* Personalisation — name above the year, timestamp below, progress %.
+              Foldable so the create form stays compact until the user wants
+              to enable any of the three. */}
+          <div className="rounded-xl border border-line bg-bg-soft/30">
+            <button
+              type="button"
+              onClick={() => setPersonalOpen((o) => !o)}
+              className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-fg-subtle hover:text-fg"
+            >
+              <span className="flex items-center gap-2">
+                {personalOpen ? (
+                  <ChevronDown className="h-3.5 w-3.5" />
+                ) : (
+                  <ChevronRight className="h-3.5 w-3.5" />
+                )}
+                Personalise
+              </span>
+              <span className="ml-2 rounded-md border border-line bg-bg px-1.5 py-0.5 text-[10px] normal-case tracking-normal text-fg-muted">
+                {[
+                  showOwnerName && "Name",
+                  showCreatedTimestamp && "Date",
+                  showProgress && "Progress"
+                ]
+                  .filter(Boolean)
+                  .join(" · ") || "Off"}
+              </span>
+            </button>
+            {personalOpen && (
+              <div className="space-y-3 border-t border-line px-4 pb-4 pt-3">
+                <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
+                  <div>
+                    <Label>Display name</Label>
+                    <Input
+                      value={ownerName}
+                      onChange={(e) => setOwnerName(e.target.value)}
+                      placeholder={defaultOwnerName ?? "Your name"}
+                    />
+                  </div>
+                  <label className="inline-flex items-center gap-2 pb-2 text-xs text-fg-muted">
+                    <input
+                      type="checkbox"
+                      checked={showOwnerName}
+                      onChange={(e) => setShowOwnerName(e.target.checked)}
+                      className="h-4 w-4 accent-brand-500"
+                    />
+                    Show name above year
+                  </label>
+                </div>
+                <div className="flex flex-wrap items-center gap-4 text-xs text-fg-muted">
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={showCreatedTimestamp}
+                      onChange={(e) => setShowCreatedTimestamp(e.target.checked)}
+                      className="h-4 w-4 accent-brand-500"
+                    />
+                    Show "Created on …" timestamp below year
+                  </label>
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={showProgress}
+                      onChange={(e) => setShowProgress(e.target.checked)}
+                      className="h-4 w-4 accent-brand-500"
+                    />
+                    Show overall progress (%) on card
+                  </label>
+                </div>
+                <p className="text-[11px] text-fg-subtle">
+                  Your name pre-fills from your profile. Each toggle is independent — you can
+                  change them per-resolution any time after it's saved.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Card decoration controls — foldable so the create form stays
@@ -513,15 +660,17 @@ function SectionEditor({
   index,
   onChange,
   onRemove,
-  canRemove
+  canRemove,
+  startCollapsed = false
 }: {
   section: ResolutionSection;
   index: number;
   onChange: (fn: (s: ResolutionSection) => ResolutionSection) => void;
   onRemove: () => void;
   canRemove: boolean;
+  startCollapsed?: boolean;
 }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(!startCollapsed);
 
   function setField<K extends keyof ResolutionSection>(k: K, v: ResolutionSection[K]) {
     onChange((s) => ({ ...s, [k]: v }));
@@ -661,6 +810,11 @@ function SectionEditor({
                       "Q1: Target $100000\nMonthly target → $35000 / month (3)\nFocus on 10 good trades targeting $1000 / trade"
                     }
                   />
+                  <p className="mt-1 text-[11px] text-fg-subtle">
+                    Each line becomes a tickable bullet. A richer slash-command editor (
+                    <code>/text</code>, <code>/heading</code>, <code>/bigbox</code>, <code>/toggle</code>,
+                    etc.) is coming next.
+                  </p>
                 </div>
               </div>
             ))}
@@ -676,17 +830,21 @@ function SectionEditor({
 }
 
 // ---------------------------------------------------------------------------
-// Open modal (with portrait/landscape + screenshot)
+// Open modal (with portrait/landscape + screenshot + full edit)
 // ---------------------------------------------------------------------------
 
 function ResolutionModal({
   resolution,
   onClose,
-  onUpdate
+  onUpdate,
+  readOnly = false
 }: {
   resolution: Resolution;
   onClose: () => void;
   onUpdate: (next: Resolution) => void;
+  /** Time-passed view → only screenshot + close are exposed; everything
+   *  else (edit pencil, BG picker, toggles, tick-boxes) is hidden. */
+  readOnly?: boolean;
 }) {
   const [orientation, setOrientation] = useState<"portrait" | "landscape">("portrait");
   const [editMode, setEditMode] = useState(false);
@@ -696,22 +854,55 @@ function ResolutionModal({
     onUpdate({ ...resolution, background: bg });
   const toggleYearLabel = () =>
     onUpdate({ ...resolution, show_year_label: !(resolution.show_year_label !== false) });
+  const toggleOwnerName = () =>
+    onUpdate({ ...resolution, show_owner_name: !resolution.show_owner_name });
+  const toggleTimestamp = () =>
+    onUpdate({ ...resolution, show_created_timestamp: !resolution.show_created_timestamp });
+  const toggleProgress = () =>
+    onUpdate({ ...resolution, show_progress: !resolution.show_progress });
   const updateTitle = (title: string) =>
     onUpdate({ ...resolution, title: title.trim() || undefined });
+  const updateOwnerName = (name: string) =>
+    onUpdate({ ...resolution, owner_name: name.trim() || undefined });
+
+  function updateSection(sectionId: string, fn: (s: ResolutionSection) => ResolutionSection) {
+    onUpdate({
+      ...resolution,
+      sections: resolution.sections.map((s) => (s.id === sectionId ? fn(s) : s))
+    });
+  }
+
+  function addSection() {
+    onUpdate({
+      ...resolution,
+      sections: [...resolution.sections, makeBlankSection(resolution.sections.length)]
+    });
+  }
+
+  function removeSection(sectionId: string) {
+    onUpdate({
+      ...resolution,
+      sections: resolution.sections.filter((s) => s.id !== sectionId)
+    });
+  }
 
   return (
     <div
       className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/70 p-4"
       onClick={onClose}
+      data-screenshot-ignore="true"
     >
       <div
         className={cn(
-          "flex max-h-[92vh] w-full flex-col gap-3 overflow-hidden",
+          "flex max-h-[92vh] w-full flex-col gap-3",
           orientation === "portrait" ? "max-w-[640px]" : "max-w-[1100px]"
         )}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-bg-elevated px-3 py-2">
+        <div
+          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-bg-elevated px-3 py-2"
+          data-screenshot-ignore="true"
+        >
           <div className="flex flex-wrap items-center gap-3 text-xs text-fg-muted">
             <div className="flex items-center gap-2">
               <span className="font-semibold uppercase tracking-wide">View</span>
@@ -743,42 +934,83 @@ function ResolutionModal({
               </div>
             </div>
 
-            <ResolutionBgPicker
-              compact
-              value={resolution.background}
-              onChange={setBackground}
-            />
-
-            <label className="inline-flex items-center gap-1.5 text-[11px]">
-              <input
-                type="checkbox"
-                checked={resolution.show_year_label !== false}
-                onChange={toggleYearLabel}
-                className="h-3.5 w-3.5 accent-brand-500"
+            {!readOnly && (
+              <ResolutionBgPicker
+                compact
+                value={resolution.background}
+                onChange={setBackground}
               />
-              YEAR OF THE {chineseZodiacOf(resolution.year).toUpperCase()}
-            </label>
+            )}
+
+            {!readOnly && (
+              <>
+                <label className="inline-flex items-center gap-1.5 text-[11px]">
+                  <input
+                    type="checkbox"
+                    checked={resolution.show_year_label !== false}
+                    onChange={toggleYearLabel}
+                    className="h-3.5 w-3.5 accent-brand-500"
+                  />
+                  YEAR OF THE {chineseZodiacOf(resolution.year).toUpperCase()}
+                </label>
+                <label className="inline-flex items-center gap-1.5 text-[11px]">
+                  <input
+                    type="checkbox"
+                    checked={!!resolution.show_owner_name}
+                    onChange={toggleOwnerName}
+                    className="h-3.5 w-3.5 accent-brand-500"
+                  />
+                  Name
+                </label>
+                <label className="inline-flex items-center gap-1.5 text-[11px]">
+                  <input
+                    type="checkbox"
+                    checked={!!resolution.show_created_timestamp}
+                    onChange={toggleTimestamp}
+                    className="h-3.5 w-3.5 accent-brand-500"
+                  />
+                  Date
+                </label>
+                <label className="inline-flex items-center gap-1.5 text-[11px]">
+                  <input
+                    type="checkbox"
+                    checked={!!resolution.show_progress}
+                    onChange={toggleProgress}
+                    className="h-3.5 w-3.5 accent-brand-500"
+                  />
+                  Progress %
+                </label>
+              </>
+            )}
+            {readOnly && (
+              <span className="rounded-md border border-line bg-bg-soft px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-fg-subtle">
+                Archived · read-only
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setEditMode((e) => !e)}
-              className={cn(
-                "inline-flex h-9 w-9 items-center justify-center rounded-xl border transition",
-                editMode
-                  ? "border-brand-400 bg-brand-500/15 text-brand-200"
-                  : "border-line bg-bg text-fg-muted hover:border-brand-400 hover:text-fg"
-              )}
-              aria-label="Edit"
-              title="Edit resolution"
-            >
-              <Pencil className="h-3.5 w-3.5" />
-            </button>
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={() => setEditMode((e) => !e)}
+                className={cn(
+                  "inline-flex h-9 w-9 items-center justify-center rounded-xl border transition",
+                  editMode
+                    ? "border-brand-400 bg-brand-500/15 text-brand-200"
+                    : "border-line bg-bg text-fg-muted hover:border-brand-400 hover:text-fg"
+                )}
+                aria-label="Edit"
+                title="Edit resolution"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+            )}
             <ScreenshotButton
               targetRef={cardRef}
               filename={`resolution-${resolution.year}-${orientation}`}
               label="Save resolution as PNG"
+              captureFullSize
             />
             <button
               type="button"
@@ -791,8 +1023,11 @@ function ResolutionModal({
           </div>
         </div>
 
-        {editMode && (
-          <div className="space-y-3 rounded-xl border border-line bg-bg-elevated p-3">
+        {editMode && !readOnly && (
+          <div
+            className="max-h-[60vh] space-y-3 overflow-y-auto rounded-xl border border-line bg-bg-elevated p-3"
+            data-screenshot-ignore="true"
+          >
             <div className="grid gap-3 md:grid-cols-[160px_1fr]">
               <div>
                 <Label>Year</Label>
@@ -818,9 +1053,47 @@ function ResolutionModal({
                 />
               </div>
             </div>
+
+            <div>
+              <Label>Display name (above year)</Label>
+              <Input
+                value={resolution.owner_name ?? ""}
+                onChange={(e) => updateOwnerName(e.target.value)}
+                placeholder="Your name"
+              />
+              <p className="mt-1 text-[11px] text-fg-subtle">
+                Stored separately from your account so you can personalise per resolution.
+                Use the toggle above to show / hide it on the card.
+              </p>
+            </div>
+
+            <div className="space-y-3 border-t border-line pt-3">
+              <div className="flex items-center justify-between">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
+                  Sections
+                </div>
+                <Button variant="secondary" onClick={addSection}>
+                  <Plus className="h-3.5 w-3.5" /> Add section
+                </Button>
+              </div>
+              {resolution.sections.map((section, idx) => (
+                <SectionEditor
+                  key={section.id}
+                  index={idx}
+                  section={section}
+                  onChange={(fn) =>
+                    updateSection(section.id, (curr) => fn(curr))
+                  }
+                  onRemove={() => removeSection(section.id)}
+                  canRemove={resolution.sections.length > 1}
+                  startCollapsed
+                />
+              ))}
+            </div>
+
             <div className="text-[11px] text-fg-subtle">
-              Toggle the labels above and pick a background — your changes save
-              automatically and the card preview updates in real time.
+              Edits save automatically — close the modal at any time. Toggles in the
+              toolbar above (Name, Date, Progress %, YEAR OF THE …) are independent.
             </div>
           </div>
         )}
@@ -829,27 +1102,52 @@ function ResolutionModal({
           <ResolutionCard
             resolution={resolution}
             orientation={orientation}
-            onToggleItem={(sectionId, subId, itemId, next) =>
-              onUpdate({
-                ...resolution,
-                sections: resolution.sections.map((s) =>
-                  s.id !== sectionId
-                    ? s
-                    : {
-                        ...s,
-                        subsections: s.subsections.map((ss) =>
-                          ss.id !== subId
-                            ? ss
-                            : {
-                                ...ss,
-                                items: ss.items.map((it) =>
-                                  it.id === itemId ? { ...it, checked: next } : it
-                                )
-                              }
-                        )
-                      }
-                )
-              })
+            onToggleItem={
+              readOnly
+                ? undefined
+                : (sectionId, subId, itemId, next) =>
+                    onUpdate({
+                      ...resolution,
+                      sections: resolution.sections.map((s) =>
+                        s.id !== sectionId
+                          ? s
+                          : {
+                              ...s,
+                              subsections: s.subsections.map((ss) =>
+                                ss.id !== subId
+                                  ? ss
+                                  : {
+                                      ...ss,
+                                      items: ss.items.map((it) =>
+                                        it.id === itemId
+                                          ? { ...it, checked: next }
+                                          : it
+                                      )
+                                    }
+                              )
+                            }
+                      )
+                    })
+            }
+            onToggleTarget={
+              readOnly
+                ? undefined
+                : (sectionId, subId, next) =>
+                    onUpdate({
+                      ...resolution,
+                      sections: resolution.sections.map((s) =>
+                        s.id !== sectionId
+                          ? s
+                          : {
+                              ...s,
+                              subsections: s.subsections.map((ss) =>
+                                ss.id !== subId
+                                  ? ss
+                                  : { ...ss, target_checked: next }
+                              )
+                            }
+                      )
+                    })
             }
           />
         </div>
