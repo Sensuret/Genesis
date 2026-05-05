@@ -8,26 +8,37 @@ import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { updateOneWithFallback } from "@/lib/supabase/insert-with-fallback";
 import { AUDIT_EVENT, logAuditEvent } from "@/lib/audit/log";
+import { useLocale } from "@/lib/i18n/context";
+import { SUPPORTED_LOCALES, type Locale } from "@/lib/i18n/types";
 
 type WeekStart = "monday" | "sunday" | "saturday";
 type PipUnits = "pips" | "points";
 
 type LocaleOption = { value: string; label: string };
+// Each locale's label is intentionally written in its own script so a
+// user who lands on Genesis without speaking English can still find
+// their language. This list also drives the dropdown order.
+const LOCALE_LABELS: Record<Locale, string> = {
+  "en-US": "English · US",
+  "en-GB": "English · UK",
+  "en-KE": "English · Kenya",
+  "es-ES": "Español · España",
+  "es-MX": "Español · México",
+  "fr-FR": "Français · France",
+  "de-DE": "Deutsch · Deutschland",
+  "pt-BR": "Português · Brasil",
+  "ar-AE": "العربية · UAE",
+  "sw-KE": "Kiswahili · Kenya",
+  "hi-IN": "हिन्दी · India",
+  "zh-CN": "中文 · 简体",
+  "ja-JP": "日本語"
+};
 const LOCALES: LocaleOption[] = [
   { value: "auto", label: "Auto-detect (browser)" },
-  { value: "en-US", label: "English · US" },
-  { value: "en-GB", label: "English · UK" },
-  { value: "en-KE", label: "English · Kenya" },
-  { value: "es-ES", label: "Español · España" },
-  { value: "es-MX", label: "Español · México" },
-  { value: "fr-FR", label: "Français · France" },
-  { value: "de-DE", label: "Deutsch · Deutschland" },
-  { value: "pt-BR", label: "Português · Brasil" },
-  { value: "ar-AE", label: "العربية · UAE" },
-  { value: "sw-KE", label: "Kiswahili · Kenya" },
-  { value: "hi-IN", label: "हिन्दी · India" },
-  { value: "zh-CN", label: "中文 · 简体" },
-  { value: "ja-JP", label: "日本語" }
+  ...SUPPORTED_LOCALES.map((value) => ({
+    value,
+    label: LOCALE_LABELS[value]
+  }))
 ];
 
 /** Currated list — covers the regions Genesis users actually trade from. */
@@ -62,6 +73,7 @@ const COMMON_TIMEZONES = [
 const CURRENCIES = ["USD", "EUR", "GBP", "JPY", "AUD", "CAD", "CHF", "NZD", "ZAR", "KES"];
 
 export function GlobalSettingsSection() {
+  const { t, locale: activeLocale, setLocale: setRuntimeLocale } = useLocale();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,6 +81,11 @@ export function GlobalSettingsSection() {
 
   const [userId, setUserId] = useState<string | null>(null);
   const [timezone, setTimezone] = useState<string>("auto");
+  // The dropdown holds the persisted value ("auto" or a specific
+  // locale). The runtime locale (`activeLocale`) is derived from this
+  // by the LocaleProvider — we update it eagerly in the dropdown's
+  // onChange so the language flips instantly, before the user clicks
+  // Save.
   const [locale, setLocale] = useState<string>("auto");
   const [weekStart, setWeekStart] = useState<WeekStart>("monday");
   const [pipUnits, setPipUnits] = useState<PipUnits>("pips");
@@ -163,8 +180,11 @@ export function GlobalSettingsSection() {
       if (missingColumns.length) setMissingCols(missingColumns);
       setSuccess(
         missingColumns.length
-          ? `Saved (${missingColumns.length} new column${missingColumns.length === 1 ? "" : "s"} skipped — see banner below).`
-          : "Settings saved."
+          ? t("settings.global.saved_partial", {
+              count: missingColumns.length,
+              plural: missingColumns.length === 1 ? "" : "s"
+            })
+          : t("settings.global.saved")
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to save settings.");
@@ -174,7 +194,24 @@ export function GlobalSettingsSection() {
   }
 
   if (loading) {
-    return <div className="text-sm text-fg-muted">Loading global settings…</div>;
+    return <div className="text-sm text-fg-muted">{t("common.loading")}</div>;
+  }
+
+  // Selecting a locale in the dropdown immediately changes the runtime
+  // language. The DB save still has to happen for the choice to stick
+  // across sessions, but the user gets to preview the chosen language
+  // first — mirroring the "live everywhere" behaviour they asked for.
+  function onLocaleChange(value: string) {
+    setLocale(value);
+    if (value === "auto") {
+      // "Auto" hands control back to the LocaleProvider's browser
+      // detection on the next mount; in the meantime we keep showing
+      // the active language so the dropdown isn't disorienting.
+      return;
+    }
+    if ((SUPPORTED_LOCALES as readonly string[]).includes(value)) {
+      setRuntimeLocale(value as Locale);
+    }
   }
 
   return (
@@ -183,17 +220,19 @@ export function GlobalSettingsSection() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Globe2 className="h-4 w-4 text-brand-300" />
-            Region & display
+            {t("settings.global.title")}
           </CardTitle>
         </CardHeader>
         <CardBody className="grid gap-4 md:grid-cols-2">
           <div>
             <Label className="flex items-center gap-1.5">
               <Globe2 className="h-3.5 w-3.5" />
-              Timezone
+              {t("settings.global.timezone.label")}
             </Label>
             <Select value={timezone} onChange={(e) => setTimezone(e.target.value)}>
-              <option value="auto">Auto-detect ({detected.timezone})</option>
+              <option value="auto">
+                {t("settings.global.timezone.auto", { timezone: detected.timezone })}
+              </option>
               {tzOptions.map((tz) => (
                 <option key={tz} value={tz}>
                   {tz}
@@ -201,61 +240,60 @@ export function GlobalSettingsSection() {
               ))}
             </Select>
             <p className="mt-1 text-[11px] text-fg-subtle">
-              Used for calendar boundaries, daily P&amp;L cut-offs and recap windows.
-              <br />
-              Per-file <em>broker</em> timezone (the one MetaTrader prints
-              timestamps in) is set independently in <strong>Accounts → Manual</strong>.
+              {t("settings.global.timezone.help")}
             </p>
           </div>
 
           <div>
             <Label className="flex items-center gap-1.5">
               <Languages className="h-3.5 w-3.5" />
-              Language &amp; locale
+              {t("settings.global.locale.label")}
             </Label>
-            <Select value={locale} onChange={(e) => setLocale(e.target.value)}>
+            <Select value={locale} onChange={(e) => onLocaleChange(e.target.value)}>
               {LOCALES.map((l) => (
                 <option key={l.value} value={l.value}>
-                  {l.value === "auto" ? `${l.label} (${detected.locale})` : l.label}
+                  {l.value === "auto"
+                    ? `${t("settings.global.locale.auto")} (${detected.locale})`
+                    : l.label}
                 </option>
               ))}
             </Select>
             <p className="mt-1 text-[11px] text-fg-subtle">
-              Affects number, currency and date formatting across the app.
+              {t("settings.global.locale.help")}
             </p>
           </div>
 
           <div>
             <Label className="flex items-center gap-1.5">
               <Calendar className="h-3.5 w-3.5" />
-              Week starts on
+              {t("settings.global.week_start.label")}
             </Label>
             <Select value={weekStart} onChange={(e) => setWeekStart(e.target.value as WeekStart)}>
-              <option value="monday">Monday (ISO 8601)</option>
-              <option value="sunday">Sunday (US)</option>
-              <option value="saturday">Saturday (Middle East)</option>
+              <option value="monday">{t("settings.global.week_start.monday")}</option>
+              <option value="sunday">{t("settings.global.week_start.sunday")}</option>
+              <option value="saturday">{t("settings.global.week_start.saturday")}</option>
             </Select>
             <p className="mt-1 text-[11px] text-fg-subtle">
-              Reports → Calendar and weekly recaps use this as the first column.
+              {t("settings.global.week_start.help")}
             </p>
           </div>
 
           <div>
             <Label className="flex items-center gap-1.5">
               <Ruler className="h-3.5 w-3.5" />
-              Distance units
+              {t("settings.global.pip_units.label")}
             </Label>
             <Select value={pipUnits} onChange={(e) => setPipUnits(e.target.value as PipUnits)}>
-              <option value="pips">Pips (1.00010 → 1 pip)</option>
-              <option value="points">Points (1.00010 → 10 points)</option>
+              <option value="pips">{t("settings.global.pip_units.pips")}</option>
+              <option value="points">{t("settings.global.pip_units.points")}</option>
             </Select>
             <p className="mt-1 text-[11px] text-fg-subtle">
-              Switches the &ldquo;Avg SL/TP pips&rdquo; cards and the per-trade pips column.
+              {t("settings.global.pip_units.help")}
             </p>
           </div>
 
           <div className="md:col-span-2">
-            <Label>Default currency</Label>
+            <Label>{t("settings.global.currency.label")}</Label>
             <Select value={currency} onChange={(e) => setCurrency(e.target.value)}>
               {CURRENCIES.map((c) => (
                 <option key={c} value={c}>
@@ -264,7 +302,7 @@ export function GlobalSettingsSection() {
               ))}
             </Select>
             <p className="mt-1 text-[11px] text-fg-subtle">
-              Initial currency selection on the top-bar — you can still flip it per-session.
+              {t("settings.global.currency.help")}
             </p>
           </div>
         </CardBody>
@@ -273,10 +311,13 @@ export function GlobalSettingsSection() {
       <div className="flex items-center gap-3">
         <Button type="submit" disabled={saving} className="inline-flex items-center gap-1.5">
           <Save className="h-3.5 w-3.5" />
-          {saving ? "Saving…" : "Save changes"}
+          {saving ? t("common.saving") : t("common.save_changes")}
         </Button>
         {error && <span className="text-xs text-danger">{error}</span>}
         {success && <span className="text-xs text-success">{success}</span>}
+        <span className="text-[11px] text-fg-subtle">
+          ({activeLocale})
+        </span>
       </div>
 
       {(missingCols.length > 0 || /schema cache/i.test(error ?? "")) && (
