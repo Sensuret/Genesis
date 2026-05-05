@@ -19,6 +19,9 @@ import { SecuritySection } from "@/components/settings/security-section";
 import { AccountsSection } from "@/components/settings/accounts-section";
 import { TradeSettingsSection } from "@/components/settings/trade-settings-section";
 import { ComingSoonSection } from "@/components/settings/coming-soon-section";
+import { GlobalSettingsSection } from "@/components/settings/global-settings-section";
+import { ImportHistorySection } from "@/components/settings/import-history-section";
+import { LogHistorySection } from "@/components/settings/log-history-section";
 import { cn } from "@/lib/utils";
 
 /**
@@ -155,12 +158,7 @@ function SectionContent({ section }: { section: SectionKey }) {
     case "trade-settings":
       return <TradeSettingsSection />;
     case "global":
-      return (
-        <ComingSoonSection
-          title="Global settings"
-          blurb="App-wide preferences that don't fit elsewhere — locale, timezone display, weekday-first preferences, default chart units (pips vs points). The session-window Forex/NYSE toggle moved to Trade settings."
-        />
-      );
+      return <GlobalSettingsSection />;
     case "tags":
       return (
         <ComingSoonSection
@@ -169,19 +167,9 @@ function SectionContent({ section }: { section: SectionKey }) {
         />
       );
     case "import-history":
-      return (
-        <ComingSoonSection
-          title="Import history"
-          blurb="Audit log of every statement upload — who uploaded it, when, broker timezone applied, rows parsed and how many were filtered as ghost rows. Helpful for tracing 'why doesn't this trade show?' questions."
-        />
-      );
+      return <ImportHistorySection />;
     case "log-history":
-      return (
-        <ComingSoonSection
-          title="Log history"
-          blurb="Sign-ins, password changes, and account-level events. A full security trail for your records."
-        />
-      );
+      return <LogHistorySection />;
     default: {
       const _exhaust: never = section;
       return _exhaust;

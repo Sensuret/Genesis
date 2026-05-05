@@ -7,6 +7,7 @@ import { Input, Label } from "@/components/ui/input";
 import { ThemePicker } from "@/components/theme-picker";
 import { createClient } from "@/lib/supabase/client";
 import type { ProfileRow } from "@/lib/supabase/types";
+import { AUDIT_EVENT, logAuditEvent } from "@/lib/audit/log";
 
 /**
  * Profile section — full name, email, DOB, currency, starting balance,
@@ -54,7 +55,14 @@ export function ProfileSection() {
     });
     setSaving(false);
     if (error) setError(error.message);
-    else setSuccess("Profile saved.");
+    else {
+      setSuccess("Profile saved.");
+      await logAuditEvent(AUDIT_EVENT.PROFILE_UPDATED, "Updated profile", {
+        full_name: profile.full_name ?? null,
+        default_currency: profile.default_currency ?? "USD",
+        starting_balance: profile.starting_balance ?? 0
+      });
+    }
   }
 
   async function uploadAvatar(file: File) {

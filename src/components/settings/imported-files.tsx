@@ -9,6 +9,7 @@ import { useTrades } from "@/lib/hooks/use-trades";
 import { detectSession } from "@/lib/parser";
 import { createClient } from "@/lib/supabase/client";
 import type { TradeFileRow, TradeRow } from "@/lib/supabase/types";
+import { AUDIT_EVENT, logAuditEvent } from "@/lib/audit/log";
 import { shortDate } from "@/lib/utils";
 
 /**
@@ -135,6 +136,17 @@ export function ImportedFilesCard() {
         await supabase.from("trades").update({ session: u.session }).eq("id", u.id);
       }
 
+      await logAuditEvent(
+        AUDIT_EVENT.TRADE_FILE_TZ_UPDATED,
+        `Updated broker timezone on ${file.name}`,
+        {
+          file_id: file.id,
+          file_name: file.name,
+          offset_minutes: offset,
+          rows_rebucketed: updates.length
+        }
+      );
+
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to update broker timezone.");
@@ -153,10 +165,23 @@ export function ImportedFilesCard() {
       const supabase = createClient();
       // Trades cascade delete via ON DELETE SET NULL on file_id by default,
       // so we delete trades first to avoid orphans.
+      const tradeCount = countForFile(trades, file.id);
       const { error: tradesErr } = await supabase.from("trades").delete().eq("file_id", file.id);
       if (tradesErr) throw tradesErr;
       const { error: fileErr } = await supabase.from("trade_files").delete().eq("id", file.id);
       if (fileErr) throw fileErr;
+      await logAuditEvent(
+        AUDIT_EVENT.TRADE_FILE_DELETED,
+        `Deleted file ${file.name} (${tradeCount} trades)`,
+        {
+          file_id: file.id,
+          file_name: file.name,
+          source: file.source,
+          broker: file.broker,
+          account_number: file.account_number,
+          trade_count: tradeCount
+        }
+      );
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to delete file.");

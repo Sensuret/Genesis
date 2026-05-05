@@ -8,6 +8,7 @@ import { Input, Label } from "@/components/ui/input";
 import { useTrades } from "@/lib/hooks/use-trades";
 import { createClient } from "@/lib/supabase/client";
 import type { GenesisApiKeyRow, TradeFileRow } from "@/lib/supabase/types";
+import { AUDIT_EVENT, logAuditEvent } from "@/lib/audit/log";
 import { shortDate, cn } from "@/lib/utils";
 
 /**
@@ -81,6 +82,12 @@ export function EaSyncCard({ supabaseUrl }: { supabaseUrl: string }) {
         .select("*")
         .order("created_at", { ascending: false });
       setKeys((refreshed ?? []) as GenesisApiKeyRow[]);
+      const labelUsed = label.trim() || "Genesis EA key";
+      await logAuditEvent(
+        AUDIT_EVENT.API_KEY_CREATED,
+        `Created API key "${labelUsed}"`,
+        { key_id: row.id, label: labelUsed }
+      );
       setCreateOpen(false);
       setLabel("Genesis EA key");
     } catch (e) {
@@ -98,6 +105,7 @@ export function EaSyncCard({ supabaseUrl }: { supabaseUrl: string }) {
   async function revoke(id: string) {
     setError(null);
     const supabase = createClient();
+    const target = keys.find((k) => k.id === id);
     const { error: err } = await supabase
       .from("genesis_api_keys")
       .update({ revoked_at: new Date().toISOString() })
@@ -109,17 +117,28 @@ export function EaSyncCard({ supabaseUrl }: { supabaseUrl: string }) {
     setKeys((prev) =>
       prev.map((k) => (k.id === id ? { ...k, revoked_at: new Date().toISOString() } : k))
     );
+    await logAuditEvent(
+      AUDIT_EVENT.API_KEY_REVOKED,
+      `Revoked API key${target?.label ? ` "${target.label}"` : ""}`,
+      { key_id: id, label: target?.label ?? null }
+    );
   }
 
   async function remove(id: string) {
     setError(null);
     const supabase = createClient();
+    const target = keys.find((k) => k.id === id);
     const { error: err } = await supabase.from("genesis_api_keys").delete().eq("id", id);
     if (err) {
       setError(err.message);
       return;
     }
     setKeys((prev) => prev.filter((k) => k.id !== id));
+    await logAuditEvent(
+      AUDIT_EVENT.API_KEY_DELETED,
+      `Deleted API key${target?.label ? ` "${target.label}"` : ""}`,
+      { key_id: id, label: target?.label ?? null }
+    );
   }
 
   function copy(value: string, marker: string) {
