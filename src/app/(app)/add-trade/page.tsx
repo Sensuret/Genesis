@@ -83,7 +83,19 @@ function UploadForm({ onDone }: { onDone: () => void }) {
         accountInfo: result.accountInfo
       });
       setFile(f);
-      if (!name) setName(f.name.replace(/\.[^.]+$/, ""));
+      if (!name) {
+        // Prefer a friendly broker · account name when the MT5 ReportHistory
+        // preamble was detected — e.g. "JustMarkets · 2001900944". Falls
+        // back to the raw filename minus extension for everything else.
+        const a = result.accountInfo;
+        const friendly =
+          a?.broker && a?.account_number
+            ? `${a.broker} · ${a.account_number}`
+            : a?.account_number
+              ? a.account_number
+              : f.name.replace(/\.[^.]+$/, "");
+        setName(friendly);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to parse file");
     } finally {
@@ -104,6 +116,8 @@ function UploadForm({ onDone }: { onDone: () => void }) {
       return;
     }
 
+    const a = preview.accountInfo;
+    const isMt5 = preview.format === "metatrader";
     const { data: created, error: fileErr } = await supabase
       .from("trade_files")
       .insert({
@@ -120,10 +134,20 @@ function UploadForm({ onDone }: { onDone: () => void }) {
         // Account-level metadata extracted from the broker file footer
         // (currently only MT5 supplies these; HFM and generic CSVs leave
         // them null and the Reports Overview cards fall back to "—").
-        account_balance: preview.accountInfo?.balance ?? null,
-        account_equity: preview.accountInfo?.equity ?? null,
-        deposits_total: preview.accountInfo?.deposits_total ?? null,
-        withdrawals_total: preview.accountInfo?.withdrawals_total ?? null
+        account_balance: a?.balance ?? null,
+        account_equity: a?.equity ?? null,
+        deposits_total: a?.deposits_total ?? null,
+        withdrawals_total: a?.withdrawals_total ?? null,
+        // ReportHistory preamble metadata — when present, lets analytics
+        // group by account, display the broker chip on the imported file
+        // row, and prevents two MT5 files for the same login colliding
+        // (the unique index on (user_id, account_number) already guards).
+        sync_kind: "manual",
+        account_number: a?.account_number ?? null,
+        account_name: a?.account_holder ?? null,
+        broker: a?.broker ?? a?.company ?? null,
+        server: a?.broker_server ?? null,
+        platform: isMt5 ? "MT5" : null
       })
       .select()
       .single();
@@ -133,7 +157,19 @@ function UploadForm({ onDone }: { onDone: () => void }) {
       return;
     }
 
-    const rows = preview.trades.map((t) => ({ ...t, user_id: user.id, file_id: created.id }));
+    // Stamp every trade row with the same broker / account / platform
+    // metadata so the analytic pages (Reports, Streaks, Calendar) can
+    // segment by broker or account without re-joining trade_files.
+    const rows = preview.trades.map((t) => ({
+      ...t,
+      user_id: user.id,
+      file_id: created.id,
+      account_number: a?.account_number ?? null,
+      broker: a?.broker ?? a?.company ?? null,
+      server: a?.broker_server ?? null,
+      platform: isMt5 ? "MT5" : null,
+      source: "manual" as const
+    }));
     const { error: tradesErr } = await supabase.from("trades").insert(rows);
     if (tradesErr) {
       setError(tradesErr.message);
@@ -204,10 +240,30 @@ function UploadForm({ onDone }: { onDone: () => void }) {
             {preview.accountInfo &&
               (preview.accountInfo.balance != null ||
                 preview.accountInfo.deposits_count > 0 ||
-                preview.accountInfo.withdrawals_count > 0) && (
+                preview.accountInfo.withdrawals_count > 0 ||
+                preview.accountInfo.account_number ||
+                preview.accountInfo.broker) && (
                 <div className="rounded-xl border border-line bg-bg-soft/40 p-3 text-xs">
-                  <div className="mb-1 font-medium text-fg">Account info detected</div>
+                  <div className="mb-1 font-medium text-fg">
+                    {preview.format === "metatrader" && preview.accountInfo.account_number
+                      ? "MT5 ReportHistory detected"
+                      : "Account info detected"}
+                  </div>
                   <div className="flex flex-wrap gap-1.5">
+                    {preview.accountInfo.account_number && (
+                      <Badge variant="brand">
+                        Account #{preview.accountInfo.account_number}
+                      </Badge>
+                    )}
+                    {preview.accountInfo.broker && (
+                      <Badge variant="brand">{preview.accountInfo.broker}</Badge>
+                    )}
+                    {preview.accountInfo.currency && (
+                      <Badge>{preview.accountInfo.currency}</Badge>
+                    )}
+                    {preview.accountInfo.account_kind && (
+                      <Badge>{preview.accountInfo.account_kind.toUpperCase()}</Badge>
+                    )}
                     {preview.accountInfo.balance != null && (
                       <Badge>Balance ${preview.accountInfo.balance.toFixed(2)}</Badge>
                     )}
@@ -227,6 +283,12 @@ function UploadForm({ onDone }: { onDone: () => void }) {
                       </Badge>
                     )}
                   </div>
+                  {preview.accountInfo.account_holder && (
+                    <div className="mt-1.5 text-[11px] text-fg-subtle">
+                      Holder: {preview.accountInfo.account_holder}
+                      {preview.accountInfo.company ? ` · ${preview.accountInfo.company}` : ""}
+                    </div>
+                  )}
                 </div>
               )}
           </div>
