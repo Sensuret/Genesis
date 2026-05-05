@@ -68,8 +68,11 @@ function UploadForm({ onDone }: { onDone: () => void }) {
   const [preview, setPreview] = useState<{
     trades: ParsedTrade[];
     mapping: Record<string, string | undefined>;
-    format: "metatrader" | "hfm" | "generic";
+    format: "metatrader" | "metatrader-htm" | "hfm" | "ctrader" | "tradingview" | "generic";
     accountInfo?: AccountInfo;
+    broker?: string | null;
+    platform?: string | null;
+    language?: string | null;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   // List of column names that the Supabase schema cache rejected during
@@ -88,7 +91,10 @@ function UploadForm({ onDone }: { onDone: () => void }) {
         trades: result.trades,
         mapping: result.mapping,
         format: result.format,
-        accountInfo: result.accountInfo
+        accountInfo: result.accountInfo,
+        broker: result.broker,
+        platform: result.platform,
+        language: result.language
       });
       setFile(f);
       if (!name) {
@@ -126,7 +132,20 @@ function UploadForm({ onDone }: { onDone: () => void }) {
     }
 
     const a = preview.accountInfo;
-    const isMt5 = preview.format === "metatrader";
+    const platform = preview.platform ??
+      (preview.format === "metatrader" ? "MT5" :
+        preview.format === "metatrader-htm" ? "MT4" :
+        preview.format === "ctrader" ? "cTrader" :
+        preview.format === "tradingview" ? "TradingView" :
+        preview.format === "hfm" ? "MT4" :
+        null);
+    const sourceLabel =
+      preview.format === "metatrader" ? "MT5" :
+      preview.format === "metatrader-htm" ? "MT4 HTM" :
+      preview.format === "hfm" ? "HFM" :
+      preview.format === "ctrader" ? "cTrader" :
+      preview.format === "tradingview" ? "TradingView" :
+      "Generic";
     type CreatedFile = { id: string; source: string };
     // Schema-resilient insert: the helper tries the full payload first
     // and on a "column not in schema cache" error, drops the offending
@@ -138,10 +157,7 @@ function UploadForm({ onDone }: { onDone: () => void }) {
       await insertOneWithFallback<CreatedFile>(supabase, "trade_files", {
         user_id: user.id,
         name: name || file.name,
-        source:
-          preview.format === "metatrader" ? "MT4/5" :
-          preview.format === "hfm" ? "HFM" :
-          "Generic",
+        source: sourceLabel,
         trade_count: preview.trades.length,
         broker_tz_offset_minutes: null,
         account_balance: a?.balance ?? null,
@@ -154,9 +170,9 @@ function UploadForm({ onDone }: { onDone: () => void }) {
         sync_kind: "manual",
         account_number: a?.account_number ?? null,
         account_name: a?.account_holder ?? null,
-        broker: a?.broker ?? a?.company ?? null,
+        broker: preview.broker ?? a?.broker ?? a?.company ?? null,
         server: a?.broker_server ?? null,
-        platform: isMt5 ? "MT5" : null
+        platform
       });
     if (fileErr || !created) {
       setError(fileErr?.message ?? "Failed to create file record.");
@@ -172,9 +188,9 @@ function UploadForm({ onDone }: { onDone: () => void }) {
       user_id: user.id,
       file_id: created.id,
       account_number: a?.account_number ?? null,
-      broker: a?.broker ?? a?.company ?? null,
+      broker: preview.broker ?? a?.broker ?? a?.company ?? null,
       server: a?.broker_server ?? null,
-      platform: isMt5 ? "MT5" : null,
+      platform,
       source: "manual" as const
     }));
     const { error: tradesErr, missingColumns: missingTrades } =
@@ -221,13 +237,13 @@ function UploadForm({ onDone }: { onDone: () => void }) {
         >
           <Upload className="h-6 w-6 text-brand-300" />
           <div className="text-sm font-medium">{file ? file.name : "Drag & drop or click to select"}</div>
-          <div className="text-xs text-fg-subtle">CSV, XLSX — flexible column names supported</div>
+          <div className="text-xs text-fg-subtle">CSV, XLSX, HTM — MT4/MT5, cTrader, TradingView, HFM, JustMarkets, XM, Exness, IC Markets, Pepperstone</div>
         </button>
 
         <input
           ref={input}
           type="file"
-          accept=".csv,.xlsx,.xls"
+          accept=".csv,.xlsx,.xls,.htm,.html"
           className="hidden"
           onChange={(e) => {
             const f = e.target.files?.[0];
@@ -237,6 +253,31 @@ function UploadForm({ onDone }: { onDone: () => void }) {
 
         {preview && (
           <div className="space-y-3">
+            {(preview.broker || preview.platform || preview.language) && (
+              <div className="rounded-xl border border-brand-400/40 bg-brand-500/5 p-3 text-xs">
+                <div className="mb-1 font-medium text-fg">Detected</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {preview.broker && (
+                    <Badge variant="brand">{preview.broker}</Badge>
+                  )}
+                  {preview.platform && (
+                    <Badge variant="brand">{preview.platform}</Badge>
+                  )}
+                  {preview.format === "metatrader-htm" && (
+                    <Badge>HTM Statement</Badge>
+                  )}
+                  {preview.format === "ctrader" && (
+                    <Badge>cTrader CSV</Badge>
+                  )}
+                  {preview.format === "tradingview" && (
+                    <Badge>TradingView Strategy Tester</Badge>
+                  )}
+                  {preview.language && preview.language !== "en" && (
+                    <Badge>Language: {preview.language.toUpperCase()}</Badge>
+                  )}
+                </div>
+              </div>
+            )}
             <div className="rounded-xl border border-line bg-bg-soft/40 p-3 text-xs">
               <div className="mb-1 font-medium text-fg">Detected mapping</div>
               <div className="flex flex-wrap gap-1.5">
@@ -261,7 +302,9 @@ function UploadForm({ onDone }: { onDone: () => void }) {
                   <div className="mb-1 font-medium text-fg">
                     {preview.format === "metatrader" && preview.accountInfo.account_number
                       ? "MT5 ReportHistory detected"
-                      : "Account info detected"}
+                      : preview.format === "metatrader-htm" && preview.accountInfo.account_number
+                        ? "MT4 HTM Statement detected"
+                        : "Account info detected"}
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {preview.accountInfo.account_number && (
