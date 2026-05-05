@@ -47,7 +47,7 @@ export function ImportHistorySection() {
       const { data, error: err } = await supabase
         .from("audit_log")
         .select("*")
-        .in("event_type", ["trade_file.deleted", "trade_file.imported"])
+        .in("event_type", ["trade_file.deleted", "trade_file.imported", "trade_file.refreshed"])
         .order("created_at", { ascending: false })
         .limit(200);
       if (cancelled) return;

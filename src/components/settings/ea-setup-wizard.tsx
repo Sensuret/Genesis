@@ -147,7 +147,19 @@ export function EaSetupWizard({
       );
       onKeyCreated?.();
     } catch (e) {
-      setError((e as Error).message);
+      const msg = (e as Error).message;
+      // pgcrypto-not-on-search-path is the most common cause of token
+      // generation failing on a fresh Supabase project — give the user
+      // actionable guidance instead of a raw Postgres error.
+      if (/gen_random_bytes|pgcrypto/i.test(msg)) {
+        setError(
+          "Token generation needs the pgcrypto extension on the function's search_path. " +
+            "Open Supabase → SQL editor → run supabase/migrations/2025_05_05_fix_generate_genesis_api_key_pgcrypto_schema.sql, " +
+            "then click Generate again."
+        );
+      } else {
+        setError(msg);
+      }
     } finally {
       setCreating(false);
     }

@@ -11,7 +11,8 @@ import { computePips, parseFile, type ParsedTrade, type AccountInfo } from "@/li
 import { createClient } from "@/lib/supabase/client";
 import {
   insertManyWithFallback,
-  insertOneWithFallback
+  insertOneWithFallback,
+  updateOneWithFallback
 } from "@/lib/supabase/insert-with-fallback";
 import { AUDIT_EVENT, logAuditEvent } from "@/lib/audit/log";
 import { CheckCircle2, Upload } from "lucide-react";
@@ -155,7 +156,8 @@ function UploadForm({ onDone }: { onDone: () => void }) {
     // (same user_id + account_number) we don't want to fail with a
     // `trade_files_user_account_uniq` violation — we want to refresh
     // the existing file in place. Look up the existing row first,
-    // delete its trades, then reuse the same file_id for the new rows.
+    // confirm with the user, then later (AFTER the metadata update
+    // succeeds) delete its trades and insert the fresh ones.
     let existingFileId: string | null = null;
     let replaced = false;
     if (accountNumber) {
@@ -178,25 +180,16 @@ function UploadForm({ onDone }: { onDone: () => void }) {
           return;
         }
         existingFileId = existing.id;
-        const { error: delErr } = await supabase
-          .from("trades")
-          .delete()
-          .eq("file_id", existing.id);
-        if (delErr) {
-          setError(`Couldn't clear old trades on existing import: ${delErr.message}`);
-          setBusy(false);
-          return;
-        }
         replaced = true;
       }
     }
 
-    // Schema-resilient insert: the helper tries the full payload first
-    // and on a "column not in schema cache" error, drops the offending
-    // key and retries. This means an imperfectly-migrated Supabase
-    // project still succeeds at the core insert; the broker / account
-    // chips just won't show on the file row until the migration is
-    // applied. The list of dropped columns is surfaced as a banner.
+    // Schema-resilient insert / update: the helpers try the full payload
+    // first and on a "column not in schema cache" error, drop the
+    // offending key and retry. This means an imperfectly-migrated
+    // Supabase project still succeeds at the core insert; the broker /
+    // account chips just won't show on the file row until the migration
+    // is applied. The list of dropped columns is surfaced as a banner.
     const filePayload = {
       user_id: user.id,
       name: name || file.name,
@@ -222,18 +215,35 @@ function UploadForm({ onDone }: { onDone: () => void }) {
     let createdSource: string;
     let missingFile: string[] = [];
     if (existingFileId) {
-      // Refresh path — update the existing row's metadata in place.
-      const { error: updErr } = await supabase
-        .from("trade_files")
-        .update(filePayload)
-        .eq("id", existingFileId);
+      // Refresh path — update the existing row's metadata FIRST. If this
+      // fails (network, schema mismatch, RLS), we bail out before we've
+      // touched the user's existing trade rows, so they're never left
+      // with a half-blown-away dataset.
+      const { error: updErr, missingColumns } = await updateOneWithFallback(
+        supabase,
+        "trade_files",
+        filePayload,
+        { id: existingFileId }
+      );
       if (updErr) {
         setError(updErr.message);
         setBusy(false);
         return;
       }
+      // Only delete the existing trades after the metadata update is
+      // confirmed durable — that way an early failure is non-destructive.
+      const { error: delErr } = await supabase
+        .from("trades")
+        .delete()
+        .eq("file_id", existingFileId);
+      if (delErr) {
+        setError(`Couldn't clear old trades on existing import: ${delErr.message}`);
+        setBusy(false);
+        return;
+      }
       createdId = existingFileId;
       createdSource = sourceLabel;
+      missingFile = missingColumns;
     } else {
       const { data: created, error: fileErr, missingColumns } =
         await insertOneWithFallback<CreatedFile>(supabase, "trade_files", filePayload);
@@ -274,7 +284,7 @@ function UploadForm({ onDone }: { onDone: () => void }) {
     const allMissing = Array.from(new Set([...missingFile, ...missingTrades]));
     if (allMissing.length) setMissingCols(allMissing);
     await logAuditEvent(
-      replaced ? AUDIT_EVENT.TRADE_FILE_IMPORTED : AUDIT_EVENT.TRADE_FILE_IMPORTED,
+      replaced ? AUDIT_EVENT.TRADE_FILE_REFRESHED : AUDIT_EVENT.TRADE_FILE_IMPORTED,
       replaced
         ? `Refreshed ${preview.trades.length} trades on ${name || file.name} (re-upload)`
         : `Imported ${preview.trades.length} trades from ${name || file.name}`,
