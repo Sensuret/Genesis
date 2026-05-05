@@ -6,6 +6,7 @@ import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
+import { updateOneWithFallback } from "@/lib/supabase/insert-with-fallback";
 import { AUDIT_EVENT, logAuditEvent } from "@/lib/audit/log";
 
 type WeekStart = "monday" | "sunday" | "saturday";
@@ -72,6 +73,10 @@ export function GlobalSettingsSection() {
   const [weekStart, setWeekStart] = useState<WeekStart>("monday");
   const [pipUnits, setPipUnits] = useState<PipUnits>("pips");
   const [currency, setCurrency] = useState<string>("USD");
+  // Columns the schema cache rejected on the most recent save — lets us
+  // surface the exact same "apply Supabase schema" guidance the import
+  // form shows, instead of a raw "PGRST204 column not found" error.
+  const [missingCols, setMissingCols] = useState<string[]>([]);
 
   const detected = useMemo(() => {
     try {
@@ -96,18 +101,24 @@ export function GlobalSettingsSection() {
       const user = userData.user;
       if (!user || cancelled) return;
       setUserId(user.id);
+      // SELECT * so we don't fail on projects whose `profiles` table
+      // hasn't yet been migrated with the new preferences columns. The
+      // missing columns simply come back as undefined, the form keeps
+      // its initial defaults, and the user can still save (which will
+      // surface the schema banner).
       const { data } = await supabase
         .from("profiles")
-        .select("timezone, locale, week_starts_on, pip_units, default_currency")
+        .select("*")
         .eq("id", user.id)
         .maybeSingle();
       if (cancelled) return;
       if (data) {
-        setTimezone(data.timezone ?? "auto");
-        setLocale(data.locale ?? "auto");
-        setWeekStart((data.week_starts_on as WeekStart) ?? "monday");
-        setPipUnits((data.pip_units as PipUnits) ?? "pips");
-        setCurrency(data.default_currency ?? "USD");
+        const row = data as Record<string, unknown>;
+        setTimezone((row.timezone as string | null) ?? "auto");
+        setLocale((row.locale as string | null) ?? "auto");
+        setWeekStart((row.week_starts_on as WeekStart) ?? "monday");
+        setPipUnits((row.pip_units as PipUnits) ?? "pips");
+        setCurrency((row.default_currency as string | null) ?? "USD");
       }
       setLoading(false);
     })();
@@ -122,18 +133,21 @@ export function GlobalSettingsSection() {
     setSaving(true);
     setError(null);
     setSuccess(null);
+    setMissingCols([]);
     try {
       const supabase = createClient();
-      const { error } = await supabase
-        .from("profiles")
-        .update({
+      const { error, missingColumns } = await updateOneWithFallback(
+        supabase,
+        "profiles",
+        {
           timezone: timezone === "auto" ? null : timezone,
           locale: locale === "auto" ? null : locale,
           week_starts_on: weekStart,
           pip_units: pipUnits,
           default_currency: currency
-        })
-        .eq("id", userId);
+        },
+        { id: userId }
+      );
       if (error) throw error;
       await logAuditEvent(
         AUDIT_EVENT.GLOBAL_SETTINGS_UPDATED,
@@ -146,7 +160,12 @@ export function GlobalSettingsSection() {
           default_currency: currency
         }
       );
-      setSuccess("Settings saved.");
+      if (missingColumns.length) setMissingCols(missingColumns);
+      setSuccess(
+        missingColumns.length
+          ? `Saved (${missingColumns.length} new column${missingColumns.length === 1 ? "" : "s"} skipped — see banner below).`
+          : "Settings saved."
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to save settings.");
     } finally {
@@ -259,6 +278,55 @@ export function GlobalSettingsSection() {
         {error && <span className="text-xs text-danger">{error}</span>}
         {success && <span className="text-xs text-success">{success}</span>}
       </div>
+
+      {(missingCols.length > 0 || /schema cache/i.test(error ?? "")) && (
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-xs text-amber-200">
+          <div className="mb-1 font-semibold uppercase tracking-wide">
+            Apply the latest Supabase schema
+          </div>
+          <p className="text-amber-100/80">
+            {missingCols.length > 0
+              ? `These preferences columns aren't in your project yet: ${missingCols
+                  .map((c) => `"${c}"`)
+                  .join(", ")}. Other preferences saved — these will save once you apply the migration.`
+              : "Save failed because Supabase doesn't have the latest preferences columns yet."}
+          </p>
+          <ol className="mt-1.5 list-inside list-decimal space-y-0.5 text-amber-100/85">
+            <li>
+              Open the{" "}
+              <a
+                className="underline"
+                href="https://supabase.com/dashboard/project/muwntpqblrxfhaahaczd/sql/new"
+                target="_blank"
+                rel="noreferrer noopener"
+              >
+                Supabase SQL editor
+              </a>
+              .
+            </li>
+            <li>
+              Copy the entire{" "}
+              <a
+                className="underline"
+                href="https://raw.githubusercontent.com/Sensuret/Genesis/main/supabase/schema.sql"
+                target="_blank"
+                rel="noreferrer noopener"
+              >
+                schema.sql
+              </a>{" "}
+              file (Ctrl+A, Ctrl+C).
+            </li>
+            <li>Paste into the editor and click Run.</li>
+            <li>
+              Refresh the cache:{" "}
+              <code className="rounded bg-amber-500/15 px-1 py-0.5">
+                notify pgrst, &apos;reload schema&apos;;
+              </code>
+            </li>
+            <li>Refresh Genesis. Re-save your preferences.</li>
+          </ol>
+        </div>
+      )}
     </form>
   );
 }
