@@ -139,24 +139,6 @@ export function ResolutionCard({
       )}
       style={bg ? { background: bg.css, color: bodyText } : undefined}
     >
-      {/* Progress chip — top-middle, only when show_progress is on. */}
-      {progress && (
-        <div
-          className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] backdrop-blur"
-          style={{
-            background: onLight || !bg ? "rgba(255,255,255,0.72)" : "rgba(0,0,0,0.32)",
-            borderColor: onLight || !bg ? "rgba(15,23,42,0.18)" : "rgba(255,255,255,0.18)",
-            color: onLight || !bg ? "rgb(15 23 42)" : "rgb(248 250 252)"
-          }}
-        >
-          <span aria-hidden>● </span>
-          {progress.pct}%
-          <span className="ml-1 opacity-70">
-            ({progress.done}/{progress.total})
-          </span>
-        </div>
-      )}
-
       {/* Year banner */}
       <div
         className={cn(
@@ -218,6 +200,29 @@ export function ResolutionCard({
             </div>
           )}
         </div>
+
+        {/* Progress — plain text, no background, sits in the gap between
+         *  the year banner content and the zodiac icon. Format: "X% Done".
+         *  Only renders when the user has toggled `show_progress` on,
+         *  so it never visually competes with the owner name above. */}
+        {progress && (
+          <div
+            className={cn(
+              "self-center px-1 text-center font-bold tabular-nums tracking-tight",
+              variant === "preview" ? "text-base" : "text-2xl"
+            )}
+            style={
+              bg
+                ? { color: onLight ? "rgb(120 53 15)" : "rgb(252 211 77)" }
+                : undefined
+            }
+            title={`${progress.done} of ${progress.total} checkboxes ticked`}
+          >
+            <span className={!bg ? "bg-gradient-to-br from-amber-300 via-amber-400 to-amber-600 bg-clip-text text-transparent" : undefined}>
+              {progress.pct}% Done
+            </span>
+          </div>
+        )}
 
         {/* Year-cycle animal — always rendered, not togglable, reacts to year. */}
         <div
