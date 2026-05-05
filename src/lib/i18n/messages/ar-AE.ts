@@ -46,7 +46,9 @@ const messages: MessageTree = {
     notebook: "الدفتر",
     numerology: "علم الأرقام",
     settings: "الإعدادات",
-    sign_out: "تسجيل الخروج"
+    sign_out: "تسجيل الخروج",
+    theme: "السمة",
+    your_account: "حسابك"
   },
   topbar: {
     accounts_label: "الحسابات",
@@ -57,7 +59,30 @@ const messages: MessageTree = {
     theme_dark: "داكن",
     theme_system: "النظام",
     profile: "الملف الشخصي",
-    account_settings: "إعدادات الحساب"
+    account_settings: "إعدادات الحساب",
+    greeting_morning: "صباح الخير",
+    greeting_afternoon: "مساء الخير",
+    greeting_evening: "مساء الخير",
+    accounts_all_count: "كل الحسابات · {count}",
+    accounts_none: "لا توجد حسابات",
+    accounts_count_of: "{count} من {total} محدد",
+    accounts_empty_hint: "لا توجد حسابات بعد — ارفع ملف CSV للبدء.",
+    accounts_trades_suffix: "· {count} صفقة",
+    currency_aria: "عملة العرض، حالياً {code}",
+    currency_title: "عملة العرض · {code}",
+    range_label: "الفترة",
+    range_all: "كل الوقت",
+    range_7d: "آخر 7 أيام",
+    range_30d: "آخر 30 يوم",
+    range_90d: "آخر 90 يوم",
+    range_ytd: "منذ بداية العام",
+    range_1y: "آخر سنة",
+    playbook_label: "Playbook",
+    playbook_all: "كل الـ Playbooks",
+    playbook_empty_hint: "لا يوجد Playbooks بعد — أنشئ واحداً من صفحة Playbooks.",
+    reset_label: "إعادة تعيين",
+    reset_title: "إعادة تعيين الفلاتر",
+    account_label: "الحساب"
   },
   settings: {
     title: "الإعدادات",

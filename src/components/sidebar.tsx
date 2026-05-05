@@ -14,8 +14,17 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import type { ProfileRow } from "@/lib/supabase/types";
+import { useT } from "@/lib/i18n/context";
 
-type Item = { href: string; label: string; icon: React.ComponentType<{ className?: string }>; primary?: boolean };
+type Item = {
+  href: string;
+  /** Translation key (e.g. "sidebar.dashboard"). Fed through useT() at
+   *  render time so the label flips language live when the user changes
+   *  locale in Global Settings. */
+  labelKey: string;
+  icon: React.ComponentType<{ className?: string }>;
+  primary?: boolean;
+};
 
 /**
  * Single canonical nav order. The four recap pages collapse to a single
@@ -23,24 +32,25 @@ type Item = { href: string; label: string; icon: React.ComponentType<{ className
  * the existing pages stay reachable.
  */
 const NAV: Item[] = [
-  { href: "/add-trade", label: "Add Trade", icon: Plus, primary: true },
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/day-view", label: "Day View", icon: Sun },
-  { href: "/trades", label: "Trades", icon: ListTree },
-  { href: "/gs-insights", label: "GS Insights", icon: BarChart3 },
-  { href: "/reports", label: "Reports", icon: FileBarChart2 },
-  { href: "/recaps", label: "Recaps", icon: CalendarRange },
-  { href: "/streaks", label: "Streaks", icon: Flame },
-  { href: "/prop-firm", label: "Prop Firm Calculator", icon: Calculator },
-  { href: "/playbooks", label: "Playbooks", icon: BookOpen },
-  { href: "/notebook", label: "Notebook", icon: NotebookPen },
-  { href: "/numerology", label: "Numerology & Astrology", icon: Sparkles },
-  { href: "/settings", label: "Settings", icon: Settings }
+  { href: "/add-trade", labelKey: "sidebar.add_trade", icon: Plus, primary: true },
+  { href: "/dashboard", labelKey: "sidebar.dashboard", icon: LayoutDashboard },
+  { href: "/day-view", labelKey: "sidebar.day_view", icon: Sun },
+  { href: "/trades", labelKey: "sidebar.trades", icon: ListTree },
+  { href: "/gs-insights", labelKey: "sidebar.gs_insights", icon: BarChart3 },
+  { href: "/reports", labelKey: "sidebar.reports", icon: FileBarChart2 },
+  { href: "/recaps", labelKey: "sidebar.recaps", icon: CalendarRange },
+  { href: "/streaks", labelKey: "sidebar.streaks", icon: Flame },
+  { href: "/prop-firm", labelKey: "sidebar.prop_firm", icon: Calculator },
+  { href: "/playbooks", labelKey: "sidebar.playbooks", icon: BookOpen },
+  { href: "/notebook", labelKey: "sidebar.notebook", icon: NotebookPen },
+  { href: "/numerology", labelKey: "sidebar.numerology", icon: Sparkles },
+  { href: "/settings", labelKey: "sidebar.settings", icon: Settings }
 ];
 
 const STORAGE_KEY = "gs.sidebar.collapsed";
 
 export function Sidebar() {
+  const t = useT();
   const pathname = usePathname();
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
@@ -119,6 +129,7 @@ export function Sidebar() {
       <nav className={cn("flex-1 space-y-1 overflow-y-auto py-4", collapsed ? "px-2" : "px-3")}>
         {NAV.map((item) => {
           const Icon = item.icon;
+          const label = t(item.labelKey);
           // Prefer the optimistic pending highlight so the clicked link
           // becomes the only "active" item the instant the user clicks.
           const matchesPath = pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -128,7 +139,7 @@ export function Sidebar() {
               <Link
                 key={item.href}
                 href={item.href}
-                title={collapsed ? item.label : undefined}
+                title={collapsed ? label : undefined}
                 onClick={() => {
                   setPendingHref(item.href);
                   startTransition(() => {});
@@ -139,7 +150,7 @@ export function Sidebar() {
                 )}
               >
                 <Icon className="h-4 w-4" />
-                {!collapsed && <span>{item.label}</span>}
+                {!collapsed && <span>{label}</span>}
               </Link>
             );
           }
@@ -147,7 +158,7 @@ export function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
-              title={collapsed ? item.label : undefined}
+              title={collapsed ? label : undefined}
               onClick={() => {
                 setPendingHref(item.href);
                 startTransition(() => {});
@@ -159,7 +170,7 @@ export function Sidebar() {
               )}
             >
               <Icon className="h-4 w-4 shrink-0" />
-              {!collapsed && <span className="truncate">{item.label}</span>}
+              {!collapsed && <span className="truncate">{label}</span>}
             </Link>
           );
         })}
@@ -169,7 +180,11 @@ export function Sidebar() {
       <div className={cn("border-t border-line py-3", collapsed ? "px-1" : "px-3")}>
         <Link
           href="/account"
-          title={collapsed ? (profile?.full_name ?? profile?.email ?? "Account") : undefined}
+          title={
+            collapsed
+              ? (profile?.full_name ?? profile?.email ?? t("sidebar.your_account"))
+              : undefined
+          }
           className={cn(
             "mb-2 flex items-center rounded-xl border border-transparent hover:border-line hover:bg-bg-elevated",
             collapsed ? "justify-center p-1.5" : "gap-3 p-2"
@@ -190,7 +205,7 @@ export function Sidebar() {
           {!collapsed && (
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-medium text-fg">
-                {profile?.full_name ?? "Your account"}
+                {profile?.full_name ?? t("sidebar.your_account")}
               </div>
               <div className="truncate text-xs text-fg-subtle">{profile?.email ?? ""}</div>
             </div>
@@ -198,7 +213,7 @@ export function Sidebar() {
         </Link>
 
         <div className={cn("mb-2 flex items-center", collapsed ? "justify-center" : "justify-between px-2 text-xs text-fg-subtle")}>
-          {!collapsed && <span>Theme</span>}
+          {!collapsed && <span>{t("sidebar.theme")}</span>}
           <ThemeToggle />
         </div>
 
@@ -206,10 +221,10 @@ export function Sidebar() {
           variant="ghost"
           className={cn("w-full text-fg-muted hover:text-danger", collapsed ? "justify-center px-0" : "justify-start")}
           onClick={logout}
-          title={collapsed ? "Log out" : undefined}
+          title={collapsed ? t("sidebar.sign_out") : undefined}
         >
           <LogOut className="h-4 w-4" />
-          {!collapsed && <span>Logout</span>}
+          {!collapsed && <span>{t("sidebar.sign_out")}</span>}
         </Button>
       </div>
     </aside>

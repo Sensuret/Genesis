@@ -8,8 +8,23 @@ import { createClient } from "@/lib/supabase/client";
 import { useFilters, CURRENCIES, DATE_RANGES, type AppFilters } from "@/lib/filters/store";
 import { useTrades } from "@/lib/hooks/use-trades";
 import type { PlaybookRow, ProfileRow, TradeFileRow } from "@/lib/supabase/types";
+import { useT } from "@/lib/i18n/context";
+import type { TranslateValues } from "@/lib/i18n/translate";
+
+/** Maps the filter-store DateRange ids to topbar.range_* translation keys.
+ *  Keeps the canonical id list as the source of truth while still letting
+ *  every visible label flip language with the active locale. */
+const RANGE_KEY: Record<AppFilters["dateRange"], string> = {
+  all: "topbar.range_all",
+  "7d": "topbar.range_7d",
+  "30d": "topbar.range_30d",
+  "90d": "topbar.range_90d",
+  ytd: "topbar.range_ytd",
+  "1y": "topbar.range_1y"
+};
 
 export function TopBar() {
+  const t = useT();
   const { filters, setFilters, reset } = useFilters();
   // Accounts come from the shared TradesProvider cache rather than a
   // duplicate query — eliminates the dropdown briefly going empty when
@@ -22,8 +37,16 @@ export function TopBar() {
 
   useEffect(() => {
     const h = new Date().getHours();
-    setGreeting(h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening");
-  }, []);
+    setGreeting(
+      h < 12
+        ? t("topbar.greeting_morning")
+        : h < 18
+          ? t("topbar.greeting_afternoon")
+          : t("topbar.greeting_evening")
+    );
+    // Re-runs when the active locale changes so the greeting flips
+    // language live without waiting for the next page load.
+  }, [t]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -135,17 +158,19 @@ export function TopBar() {
       <button
         type="button"
         onClick={reset}
-        title="Reset filters"
-        aria-label="Reset filters"
+        title={t("topbar.reset_title")}
+        aria-label={t("topbar.reset_title")}
         className="hidden h-9 items-center gap-1.5 rounded-xl border border-line bg-bg-elevated pl-2 pr-2.5 text-fg-muted hover:border-brand-400 hover:text-fg sm:inline-flex"
       >
         <RotateCcw className="h-4 w-4" />
-        <span className="text-[10px] font-medium uppercase tracking-wide">Reset</span>
+        <span className="text-[10px] font-medium uppercase tracking-wide">
+          {t("topbar.reset_label")}
+        </span>
       </button>
 
       <Link
         href="/account"
-        title={profile?.full_name ?? profile?.email ?? "Account"}
+        title={profile?.full_name ?? profile?.email ?? t("topbar.account_label")}
         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-line bg-bg-elevated text-fg-muted hover:border-brand-400 hover:text-fg"
       >
         {profile?.avatar_url ? (
@@ -235,6 +260,7 @@ function currencySymbol(code: string): string {
 }
 
 function CurrencyPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -252,8 +278,8 @@ function CurrencyPicker({ value, onChange }: { value: string; onChange: (v: stri
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        title={`Display currency · ${value}`}
-        aria-label={`Display currency, currently ${value}`}
+        title={t("topbar.currency_title", { code: value })}
+        aria-label={t("topbar.currency_aria", { code: value })}
         className={cn(
           "inline-flex h-9 w-9 items-center justify-center rounded-full border border-line bg-bg-elevated text-fg transition hover:border-brand-400 hover:text-brand-300",
           open && "border-brand-400 text-brand-200",
@@ -302,11 +328,12 @@ function DateRangePicker({
   value: AppFilters["dateRange"];
   onChange: (v: AppFilters["dateRange"]) => void;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
-  const current = DATE_RANGES.find((d) => d.id === value);
+  const currentLabel = t(RANGE_KEY[value]);
   return (
     <Pop
-      label={<>Range · <span className="text-fg">{current?.label}</span></>}
+      label={<>{t("topbar.range_label")} · <span className="text-fg">{currentLabel}</span></>}
       open={open}
       onToggle={() => setOpen((o) => !o)}
       onClose={() => setOpen(false)}
@@ -324,7 +351,7 @@ function DateRangePicker({
             d.id === value ? "text-brand-300" : "text-fg-muted"
           )}
         >
-          {d.label}
+          {t(RANGE_KEY[d.id])}
         </button>
       ))}
     </Pop>
@@ -340,12 +367,15 @@ function PlaybookPicker({
   value: string | null;
   onChange: (v: string | null) => void;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const current = value ? playbooks.find((p) => p.id === value) : null;
-  const label = current ? current.name : "All playbooks";
+  // Playbook names are user-authored strings, so they're rendered
+  // verbatim. Only the "All playbooks" placeholder is translated.
+  const label = current ? current.name : t("topbar.playbook_all");
   return (
     <Pop
-      label={<>Playbook · <span className="text-fg">{label}</span></>}
+      label={<>{t("topbar.playbook_label")} · <span className="text-fg">{label}</span></>}
       open={open}
       onToggle={() => setOpen((o) => !o)}
       onClose={() => setOpen(false)}
@@ -362,11 +392,11 @@ function PlaybookPicker({
           value === null ? "text-brand-300" : "text-fg-muted"
         )}
       >
-        All playbooks
+        {t("topbar.playbook_all")}
       </button>
       {playbooks.length === 0 && (
         <p className="px-3 py-2 text-xs text-fg-subtle">
-          No playbooks yet — create one in the Playbooks page.
+          {t("topbar.playbook_empty_hint")}
         </p>
       )}
       {playbooks.map((p) => (
@@ -398,6 +428,7 @@ function AccountsPicker({
   value: string[];
   onChange: (v: string[]) => void;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   // Defensive: dedupe the live selection against the actual account IDs so a
   // stale ID left over from a deleted file (or a duplicate accidentally
@@ -409,12 +440,15 @@ function AccountsPicker({
   const selectedCount = validSelectedIds.length;
   const label =
     accounts.length === 0
-      ? "No accounts"
+      ? t("topbar.accounts_none")
       : selectedCount === 0
-        ? `All accounts · ${accounts.length}`
+        ? t("topbar.accounts_all_count", { count: accounts.length } satisfies TranslateValues)
         : selectedCount === 1
-          ? (accounts.find((a) => a.id === validSelectedIds[0])?.name ?? "Account")
-          : `${selectedCount} of ${accounts.length} selected`;
+          ? (accounts.find((a) => a.id === validSelectedIds[0])?.name ?? t("topbar.account_label"))
+          : t("topbar.accounts_count_of", {
+              count: selectedCount,
+              total: accounts.length
+            } satisfies TranslateValues);
 
   // Once we know the live filter has stale IDs (e.g. the user deleted a file
   // somewhere else), self-heal by writing the cleaned list back. Without
@@ -435,7 +469,7 @@ function AccountsPicker({
 
   return (
     <Pop
-      label={<>Accounts · <span className="text-fg">{label}</span></>}
+      label={<>{t("topbar.accounts_label")} · <span className="text-fg">{label}</span></>}
       open={open}
       onToggle={() => setOpen((o) => !o)}
       onClose={() => setOpen(false)}
@@ -446,11 +480,11 @@ function AccountsPicker({
         onClick={() => onChange([])}
         className="mb-1 block w-full rounded-lg px-3 py-1.5 text-left text-xs text-brand-300 hover:bg-brand-500/10"
       >
-        All accounts
+        {t("topbar.accounts_all")}
       </button>
       {accounts.length === 0 && (
         <p className="px-3 py-2 text-xs text-fg-subtle">
-          No accounts yet — upload a CSV to get started.
+          {t("topbar.accounts_empty_hint")}
         </p>
       )}
       {accounts.map((a) => {
@@ -472,7 +506,9 @@ function AccountsPicker({
             </span>
             <span className="min-w-0 flex-1 truncate text-fg-muted">
               {a.name}{" "}
-              <span className="text-fg-subtle">· {a.trade_count} trades</span>
+              <span className="text-fg-subtle">
+                {t("topbar.accounts_trades_suffix", { count: a.trade_count })}
+              </span>
             </span>
           </button>
         );
