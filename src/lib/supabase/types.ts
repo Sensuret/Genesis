@@ -199,12 +199,36 @@ export type NotebookEmbed = {
   url: string;
 };
 
-/** A single bullet inside a sub-section of a Yearly Resolution. */
+/** A single block inside a sub-section of a Yearly Resolution.
+ *  Originally just a tickable bullet; now extended with an optional
+ *  `kind` field so the inner editor can be a Notion-style slash-command
+ *  block list (text / heading / to-do / bigbox / toggle / callout /
+ *  quote / divider / bullet / numbered). Legacy rows without `kind`
+ *  default to the original "todo" tickbox rendering. */
+export type ResolutionBlockKind =
+  | "text"
+  | "h1"
+  | "h2"
+  | "h3"
+  | "bullet"
+  | "numbered"
+  | "todo"
+  | "bigbox"
+  | "toggle"
+  | "callout"
+  | "quote"
+  | "divider";
+
 export type ResolutionItem = {
   id: string;
   text: string;
-  /** Optional — quarterly checkboxes that flag what's already been hit. */
+  /** Optional — quarterly checkboxes that flag what's already been hit.
+   *  Only meaningful for `todo` / `bigbox` kinds (and legacy untyped). */
   checked?: boolean;
+  /** Block kind. Omitted on legacy rows; default rendering is "todo". */
+  kind?: ResolutionBlockKind;
+  /** Toggle blocks: whether the disclosure is currently open. */
+  open?: boolean;
 };
 
 /** A focused area inside a Resolution section (e.g. "Personal account"). */
