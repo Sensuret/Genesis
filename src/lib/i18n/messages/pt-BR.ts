@@ -41,7 +41,9 @@ const messages: MessageTree = {
     notebook: "Caderno",
     numerology: "Numerologia",
     settings: "Configurações",
-    sign_out: "Sair"
+    sign_out: "Sair",
+    theme: "Tema",
+    your_account: "Sua conta"
   },
   topbar: {
     accounts_label: "Contas",
@@ -52,7 +54,30 @@ const messages: MessageTree = {
     theme_dark: "Escuro",
     theme_system: "Sistema",
     profile: "Perfil",
-    account_settings: "Configurações da conta"
+    account_settings: "Configurações da conta",
+    greeting_morning: "Bom dia",
+    greeting_afternoon: "Boa tarde",
+    greeting_evening: "Boa noite",
+    accounts_all_count: "Todas as contas · {count}",
+    accounts_none: "Sem contas",
+    accounts_count_of: "{count} de {total} selecionadas",
+    accounts_empty_hint: "Ainda não há contas — envie um CSV para começar.",
+    accounts_trades_suffix: "· {count} trades",
+    currency_aria: "Moeda de exibição, atual {code}",
+    currency_title: "Moeda de exibição · {code}",
+    range_label: "Período",
+    range_all: "Todo o período",
+    range_7d: "Últimos 7 dias",
+    range_30d: "Últimos 30 dias",
+    range_90d: "Últimos 90 dias",
+    range_ytd: "Ano até hoje",
+    range_1y: "Último ano",
+    playbook_label: "Playbook",
+    playbook_all: "Todos os playbooks",
+    playbook_empty_hint: "Ainda não há playbooks — crie um na página Playbooks.",
+    reset_label: "Limpar",
+    reset_title: "Limpar filtros",
+    account_label: "Conta"
   },
   settings: {
     title: "Configurações",

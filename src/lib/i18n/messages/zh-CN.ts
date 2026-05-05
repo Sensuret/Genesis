@@ -41,7 +41,9 @@ const messages: MessageTree = {
     notebook: "笔记本",
     numerology: "数字学",
     settings: "设置",
-    sign_out: "退出登录"
+    sign_out: "退出登录",
+    theme: "主题",
+    your_account: "你的账户"
   },
   topbar: {
     accounts_label: "账户",
@@ -52,7 +54,30 @@ const messages: MessageTree = {
     theme_dark: "深色",
     theme_system: "跟随系统",
     profile: "个人资料",
-    account_settings: "账户设置"
+    account_settings: "账户设置",
+    greeting_morning: "早上好",
+    greeting_afternoon: "下午好",
+    greeting_evening: "晚上好",
+    accounts_all_count: "全部账户 · {count}",
+    accounts_none: "暂无账户",
+    accounts_count_of: "已选 {count} / {total}",
+    accounts_empty_hint: "暂无账户 — 上传 CSV 开始使用。",
+    accounts_trades_suffix: "· {count} 笔交易",
+    currency_aria: "显示货币，当前 {code}",
+    currency_title: "显示货币 · {code}",
+    range_label: "时间范围",
+    range_all: "全部时间",
+    range_7d: "最近 7 天",
+    range_30d: "最近 30 天",
+    range_90d: "最近 90 天",
+    range_ytd: "本年至今",
+    range_1y: "最近一年",
+    playbook_label: "Playbook",
+    playbook_all: "全部 Playbooks",
+    playbook_empty_hint: "暂无 Playbook — 在 Playbooks 页面创建一个。",
+    reset_label: "重置",
+    reset_title: "重置筛选器",
+    account_label: "账户"
   },
   settings: {
     title: "设置",

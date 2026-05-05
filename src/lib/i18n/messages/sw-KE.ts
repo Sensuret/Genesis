@@ -47,7 +47,9 @@ const messages: MessageTree = {
     notebook: "Daftari",
     numerology: "Nambari",
     settings: "Mipangilio",
-    sign_out: "Toka"
+    sign_out: "Toka",
+    theme: "Mandhari",
+    your_account: "Akaunti yako"
   },
   topbar: {
     accounts_label: "Akaunti",
@@ -58,7 +60,30 @@ const messages: MessageTree = {
     theme_dark: "Giza",
     theme_system: "Mfumo",
     profile: "Wasifu",
-    account_settings: "Mipangilio ya Akaunti"
+    account_settings: "Mipangilio ya Akaunti",
+    greeting_morning: "Habari za asubuhi",
+    greeting_afternoon: "Habari za mchana",
+    greeting_evening: "Habari za jioni",
+    accounts_all_count: "Akaunti zote · {count}",
+    accounts_none: "Hakuna akaunti",
+    accounts_count_of: "{count} kati ya {total} zimechaguliwa",
+    accounts_empty_hint: "Hakuna akaunti bado — pakia CSV ili kuanza.",
+    accounts_trades_suffix: "· trade {count}",
+    currency_aria: "Sarafu ya kuonyesha, sasa {code}",
+    currency_title: "Sarafu ya kuonyesha · {code}",
+    range_label: "Kipindi",
+    range_all: "Muda wote",
+    range_7d: "Siku 7 zilizopita",
+    range_30d: "Siku 30 zilizopita",
+    range_90d: "Siku 90 zilizopita",
+    range_ytd: "Tangu mwaka huu",
+    range_1y: "Mwaka mmoja uliopita",
+    playbook_label: "Playbook",
+    playbook_all: "Playbooks zote",
+    playbook_empty_hint: "Hakuna Playbooks bado — tengeneza moja kwenye ukurasa wa Playbooks.",
+    reset_label: "Anzisha upya",
+    reset_title: "Anzisha vichujio upya",
+    account_label: "Akaunti"
   },
   settings: {
     title: "Mipangilio",

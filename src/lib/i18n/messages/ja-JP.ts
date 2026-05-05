@@ -41,7 +41,9 @@ const messages: MessageTree = {
     notebook: "ノート",
     numerology: "数秘術",
     settings: "設定",
-    sign_out: "ログアウト"
+    sign_out: "ログアウト",
+    theme: "テーマ",
+    your_account: "あなたのアカウント"
   },
   topbar: {
     accounts_label: "口座",
@@ -52,7 +54,30 @@ const messages: MessageTree = {
     theme_dark: "ダーク",
     theme_system: "システム",
     profile: "プロフィール",
-    account_settings: "アカウント設定"
+    account_settings: "アカウント設定",
+    greeting_morning: "おはようございます",
+    greeting_afternoon: "こんにちは",
+    greeting_evening: "こんばんは",
+    accounts_all_count: "すべての口座 · {count}",
+    accounts_none: "口座なし",
+    accounts_count_of: "{total} 件中 {count} 件選択",
+    accounts_empty_hint: "口座がまだありません — CSV をアップロードして開始してください。",
+    accounts_trades_suffix: "· {count} 件のトレード",
+    currency_aria: "表示通貨、現在 {code}",
+    currency_title: "表示通貨 · {code}",
+    range_label: "期間",
+    range_all: "全期間",
+    range_7d: "直近7日間",
+    range_30d: "直近30日間",
+    range_90d: "直近90日間",
+    range_ytd: "今年（年初来）",
+    range_1y: "直近1年",
+    playbook_label: "Playbook",
+    playbook_all: "すべての Playbook",
+    playbook_empty_hint: "Playbook がまだありません — Playbooks ページで作成してください。",
+    reset_label: "リセット",
+    reset_title: "フィルタをリセット",
+    account_label: "口座"
   },
   settings: {
     title: "設定",

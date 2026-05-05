@@ -41,7 +41,9 @@ const messages: MessageTree = {
     notebook: "नोटबुक",
     numerology: "अंक विद्या",
     settings: "सेटिंग्स",
-    sign_out: "साइन आउट"
+    sign_out: "साइन आउट",
+    theme: "थीम",
+    your_account: "आपका खाता"
   },
   topbar: {
     accounts_label: "खाते",
@@ -52,7 +54,30 @@ const messages: MessageTree = {
     theme_dark: "डार्क",
     theme_system: "सिस्टम",
     profile: "प्रोफ़ाइल",
-    account_settings: "खाता सेटिंग्स"
+    account_settings: "खाता सेटिंग्स",
+    greeting_morning: "सुप्रभात",
+    greeting_afternoon: "नमस्ते",
+    greeting_evening: "शुभ संध्या",
+    accounts_all_count: "सभी खाते · {count}",
+    accounts_none: "कोई खाता नहीं",
+    accounts_count_of: "{total} में से {count} चयनित",
+    accounts_empty_hint: "अभी कोई खाता नहीं — शुरू करने के लिए CSV अपलोड करें।",
+    accounts_trades_suffix: "· {count} ट्रेड",
+    currency_aria: "प्रदर्शन मुद्रा, वर्तमान {code}",
+    currency_title: "प्रदर्शन मुद्रा · {code}",
+    range_label: "रेंज",
+    range_all: "हर समय",
+    range_7d: "पिछले 7 दिन",
+    range_30d: "पिछले 30 दिन",
+    range_90d: "पिछले 90 दिन",
+    range_ytd: "इस साल अब तक",
+    range_1y: "पिछला 1 साल",
+    playbook_label: "Playbook",
+    playbook_all: "सभी Playbooks",
+    playbook_empty_hint: "अभी कोई Playbook नहीं — Playbooks पेज पर एक बनाएँ।",
+    reset_label: "रीसेट",
+    reset_title: "फ़िल्टर रीसेट करें",
+    account_label: "खाता"
   },
   settings: {
     title: "सेटिंग्स",

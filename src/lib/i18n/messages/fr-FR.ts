@@ -44,7 +44,9 @@ const messages: MessageTree = {
     notebook: "Carnet",
     numerology: "Numérologie",
     settings: "Paramètres",
-    sign_out: "Se déconnecter"
+    sign_out: "Se déconnecter",
+    theme: "Thème",
+    your_account: "Votre compte"
   },
   topbar: {
     accounts_label: "Comptes",
@@ -55,7 +57,30 @@ const messages: MessageTree = {
     theme_dark: "Sombre",
     theme_system: "Système",
     profile: "Profil",
-    account_settings: "Paramètres du compte"
+    account_settings: "Paramètres du compte",
+    greeting_morning: "Bonjour",
+    greeting_afternoon: "Bon après-midi",
+    greeting_evening: "Bonsoir",
+    accounts_all_count: "Tous les comptes · {count}",
+    accounts_none: "Aucun compte",
+    accounts_count_of: "{count} sur {total} sélectionnés",
+    accounts_empty_hint: "Aucun compte pour le moment — importez un CSV pour commencer.",
+    accounts_trades_suffix: "· {count} trades",
+    currency_aria: "Devise d'affichage, actuellement {code}",
+    currency_title: "Devise d'affichage · {code}",
+    range_label: "Période",
+    range_all: "Tout le temps",
+    range_7d: "7 derniers jours",
+    range_30d: "30 derniers jours",
+    range_90d: "90 derniers jours",
+    range_ytd: "Depuis le début de l'année",
+    range_1y: "Dernière année",
+    playbook_label: "Playbook",
+    playbook_all: "Tous les playbooks",
+    playbook_empty_hint: "Aucun playbook pour le moment — créez-en un sur la page Playbooks.",
+    reset_label: "Réinitialiser",
+    reset_title: "Réinitialiser les filtres",
+    account_label: "Compte"
   },
   settings: {
     title: "Paramètres",
