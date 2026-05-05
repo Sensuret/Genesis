@@ -12,6 +12,13 @@ type ScreenshotButtonProps = {
   className?: string;
   /** Tooltip / aria label. */
   label?: string;
+  /**
+   * When true the captured image uses the node's full scrollWidth /
+   * scrollHeight instead of its visible offsetWidth / offsetHeight.
+   * This is what the Resolutions card needs — a tall portrait should
+   * export end-to-end without being cropped to the modal viewport.
+   */
+  captureFullSize?: boolean;
 };
 
 /**
@@ -23,26 +30,47 @@ export function ScreenshotButton({
   targetRef,
   filename = "genesis-snapshot",
   className,
-  label = "Save snapshot as PNG"
+  label = "Save snapshot as PNG",
+  captureFullSize = false
 }: ScreenshotButtonProps) {
   const [state, setState] = useState<"idle" | "loading" | "done">("idle");
 
   async function capture() {
     if (!targetRef.current || state === "loading") return;
     setState("loading");
+    // When capturing full-size we temporarily strip the node's overflow
+    // styles so html-to-image renders against the full scroll size
+    // instead of the visible viewport.
+    const node = targetRef.current;
+    const previousOverflow = node.style.overflow;
+    const previousMaxHeight = node.style.maxHeight;
+    if (captureFullSize) {
+      node.style.overflow = "visible";
+      node.style.maxHeight = "none";
+    }
     try {
       const { toPng } = await import("html-to-image");
-      const node = targetRef.current;
-      const dataUrl = await toPng(node, {
+      const opts: Parameters<typeof toPng>[1] = {
         cacheBust: true,
         pixelRatio: 2,
         backgroundColor: getComputedStyle(document.documentElement).getPropertyValue("--bg-elevated") || undefined,
         filter: (el) => {
-          // Skip the screenshot button itself so it doesn't appear in the PNG.
+          // Skip elements explicitly marked as "ignore" so neither the
+          // screenshot button itself nor surrounding nav / toolbar
+          // chrome end up baked into the PNG.
           if (el instanceof HTMLElement && el.dataset.screenshotIgnore === "true") return false;
           return true;
         }
-      });
+      };
+      if (captureFullSize) {
+        // Use scrollWidth/scrollHeight so a tall portrait card exports
+        // top-to-bottom even when the modal viewport scrolled it.
+        opts.width = node.scrollWidth;
+        opts.height = node.scrollHeight;
+        opts.canvasWidth = node.scrollWidth;
+        opts.canvasHeight = node.scrollHeight;
+      }
+      const dataUrl = await toPng(node, opts);
       const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
       const a = document.createElement("a");
       a.href = dataUrl;
@@ -53,6 +81,11 @@ export function ScreenshotButton({
     } catch (err) {
       console.error("Screenshot failed", err);
       setState("idle");
+    } finally {
+      if (captureFullSize) {
+        node.style.overflow = previousOverflow;
+        node.style.maxHeight = previousMaxHeight;
+      }
     }
   }
 
