@@ -221,7 +221,14 @@ export type ResolutionBlockKind =
 
 export type ResolutionItem = {
   id: string;
+  /** Plain-text fallback. Always kept in sync with `html` so legacy
+   *  renderers / exports / search can still read the block. */
   text: string;
+  /** Optional rich-text HTML for the block body. When present the card
+   *  renders this (after whitelist sanitization) instead of `text`, so
+   *  inline formatting — bold, italic, underline — is preserved. Empty
+   *  / undefined means "no formatting, just render text". */
+  html?: string;
   /** Optional — quarterly checkboxes that flag what's already been hit.
    *  Only meaningful for `todo` / `bigbox` kinds (and legacy untyped). */
   checked?: boolean;

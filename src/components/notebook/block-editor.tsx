@@ -29,11 +29,11 @@ import {
   Plus,
   Quote,
   SquarePlus,
-  Trash2,
   Type
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ResolutionBlockKind, ResolutionItem } from "@/lib/supabase/types";
+import { RichTextInput, type RichTextInputHandle } from "./rich-text-input";
 
 type Option = {
   kind: ResolutionBlockKind;
@@ -90,7 +90,7 @@ export function BlockEditor({ blocks, onChange, placeholder, className }: BlockE
   // Slash menu state — anchored to the block currently triggering it.
   const [menu, setMenu] = useState<{ blockId: string; query: string; activeIdx: number } | null>(null);
   const [pendingFocus, setPendingFocus] = useState<string | null>(null);
-  const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const inputRefs = useRef<Record<string, RichTextInputHandle | null>>({});
 
   // Always keep at least one empty block so the editor never collapses
   // to a zero-block "looks broken" state.
@@ -102,14 +102,9 @@ export function BlockEditor({ blocks, onChange, placeholder, className }: BlockE
 
   useEffect(() => {
     if (pendingFocus && inputRefs.current[pendingFocus]) {
-      inputRefs.current[pendingFocus]?.focus();
-      // Place caret at end after focus.
-      const el = inputRefs.current[pendingFocus];
-      try {
-        el?.setSelectionRange(el.value.length, el.value.length);
-      } catch {
-        /* ignore */
-      }
+      // Focus + place caret at the end. setCaretToEnd handles both for
+      // contentEditable surfaces (input.setSelectionRange doesn't apply).
+      inputRefs.current[pendingFocus]?.setCaretToEnd();
       setPendingFocus(null);
     }
   }, [pendingFocus, blocks]);
@@ -149,10 +144,10 @@ export function BlockEditor({ blocks, onChange, placeholder, className }: BlockE
   function changeKind(id: string, kind: ResolutionBlockKind) {
     // The slash menu only opens when the entire input is a slash command
     // (e.g. "/h1", "/callout"), so the block's text at this point is the
-    // command itself. Always clear it after selection — otherwise the
-    // newly-typed Heading-1 block would render with the literal "/h1"
-    // as its visible content.
-    patch(id, (b) => ({ ...b, kind, text: "" }));
+    // command itself. Always clear it (text + html) after selection —
+    // otherwise the newly-typed Heading-1 block would render with the
+    // literal "/h1" as its visible content.
+    patch(id, (b) => ({ ...b, kind, text: "", html: "" }));
     setMenu(null);
     if (kind !== "divider") setPendingFocus(id);
   }
@@ -170,7 +165,7 @@ export function BlockEditor({ blocks, onChange, placeholder, className }: BlockE
           isFirst={idx === 0}
           placeholder={idx === 0 ? (placeholder ?? "") : ""}
           inputRef={(el) => { inputRefs.current[block.id] = el; }}
-          onTextChange={(text) => patch(block.id, (b) => ({ ...b, text }))}
+          onBodyChange={(next) => patch(block.id, (b) => ({ ...b, text: next.text, html: next.html }))}
           onToggleChecked={() => patch(block.id, (b) => ({ ...b, checked: !b.checked }))}
           onToggleOpen={() => patch(block.id, (b) => ({ ...b, open: !b.open }))}
           onEnter={() => insertAfter(block.id, blockKindOf(block))}
@@ -210,8 +205,8 @@ type BlockRowProps = {
   block: ResolutionItem;
   isFirst: boolean;
   placeholder: string;
-  inputRef: (el: HTMLInputElement | null) => void;
-  onTextChange: (text: string) => void;
+  inputRef: (el: RichTextInputHandle | null) => void;
+  onBodyChange: (next: { html: string; text: string }) => void;
   onToggleChecked: () => void;
   onToggleOpen: () => void;
   onEnter: () => void;
@@ -231,7 +226,7 @@ type BlockRowProps = {
 function BlockRow(props: BlockRowProps) {
   const {
     block, isFirst, placeholder, inputRef,
-    onTextChange, onToggleChecked, onToggleOpen,
+    onBodyChange, onToggleChecked, onToggleOpen,
     onEnter, onBackspaceEmpty,
     onSlashOpen, onSlashUpdate, onSlashClose,
     isMenuOpen, menu, onMenuPick, onMenuMove, onMenuConfirm,
@@ -241,7 +236,7 @@ function BlockRow(props: BlockRowProps) {
   const kind = blockKindOf(block);
   const isDivider = kind === "divider";
 
-  function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+  function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
     // Slash menu navigation while open.
     if (isMenuOpen) {
       if (e.key === "ArrowDown") { e.preventDefault(); onMenuMove(1); return; }
@@ -261,10 +256,12 @@ function BlockRow(props: BlockRowProps) {
     }
   }
 
-  function onChangeText(e: React.ChangeEvent<HTMLInputElement>) {
-    const value = e.target.value;
-    onTextChange(value);
-    // "/foo" at the start of an otherwise-empty block opens the slash menu.
+  function handleBodyChange(next: { html: string; text: string }) {
+    onBodyChange(next);
+    // "/foo" at the start of an otherwise-empty block opens the slash
+    // menu. Match against plain text so a stray bold / italic span
+    // doesn't break detection.
+    const value = next.text;
     if (/^\/[a-z0-9 ]*$/i.test(value)) {
       const query = value.slice(1);
       if (isMenuOpen) onSlashUpdate(query);
@@ -277,26 +274,21 @@ function BlockRow(props: BlockRowProps) {
   // Divider blocks render an <hr> with a "type / to add a block" hint
   // wrapped in a focusable div so keyboard navigation still works.
   if (isDivider) {
+    // Divider blocks aren't text-editable, so we keep using a plain
+    // hidden <input> for keyboard nav (Backspace-to-delete, Enter-to-
+    // insert-below) instead of routing them through the rich-text
+    // surface. The BlockEditor's focus tracker uses RichTextInputHandle,
+    // so wrap the input in a tiny shim that exposes the same methods.
     return (
       <div className="group relative flex items-center gap-2">
         <RowGutter onAdd={onAddBelow} onDelete={onDelete} />
         <div className="flex-1 py-2">
           <hr className="border-line" />
         </div>
-        <input
-          ref={inputRef}
-          type="text"
-          value=""
-          readOnly
-          aria-label="Divider"
-          className="sr-only"
-          onKeyDown={(e) => {
-            if (e.key === "Backspace" || e.key === "Enter") {
-              e.preventDefault();
-              if (e.key === "Enter") onEnter();
-              else onBackspaceEmpty();
-            }
-          }}
+        <DividerFocusTarget
+          inputRef={inputRef}
+          onEnter={onEnter}
+          onBackspaceEmpty={onBackspaceEmpty}
         />
       </div>
     );
@@ -323,18 +315,15 @@ function BlockRow(props: BlockRowProps) {
         onToggleOpen={onToggleOpen}
       />
 
-      <input
-        ref={inputRef}
-        type="text"
-        value={block.text}
+      <RichTextInput
+        ref={(handle) => inputRef(handle)}
+        text={block.text}
+        html={block.html}
         placeholder={ph}
-        onChange={onChangeText}
+        onChange={handleBodyChange}
         onKeyDown={onKeyDown}
-        className={cn(
-          "flex-1 bg-transparent outline-none placeholder:text-fg-subtle/70",
-          "text-fg",
-          inputClass
-        )}
+        ariaLabel={hintFor(kind, isFirst)}
+        className={cn("text-fg", inputClass)}
       />
 
       {isMenuOpen && menu && (
@@ -346,6 +335,52 @@ function BlockRow(props: BlockRowProps) {
         />
       )}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Divider focus shim — exposes the same RichTextInputHandle interface as
+// the rich-text surface so BlockEditor's `inputRefs` / `pendingFocus`
+// tracker can treat divider blocks identically. The visible content of
+// a divider is just an <hr>, so this hosts a hidden <input> that owns
+// keyboard navigation (Enter / Backspace) for the row.
+// ---------------------------------------------------------------------------
+
+function DividerFocusTarget({
+  inputRef,
+  onEnter,
+  onBackspaceEmpty
+}: {
+  inputRef: (el: RichTextInputHandle | null) => void;
+  onEnter: () => void;
+  onBackspaceEmpty: () => void;
+}) {
+  const localRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    inputRef({
+      focus: () => localRef.current?.focus(),
+      setCaretToEnd: () => localRef.current?.focus()
+    });
+    return () => inputRef(null);
+  }, [inputRef]);
+
+  return (
+    <input
+      ref={localRef}
+      type="text"
+      value=""
+      readOnly
+      aria-label="Divider"
+      className="sr-only"
+      onKeyDown={(e) => {
+        if (e.key === "Backspace" || e.key === "Enter") {
+          e.preventDefault();
+          if (e.key === "Enter") onEnter();
+          else onBackspaceEmpty();
+        }
+      }}
+    />
   );
 }
 
