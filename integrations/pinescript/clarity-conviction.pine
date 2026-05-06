@@ -1,0 +1,1481 @@
+//@version=5
+// max_bars_back is intentionally NOT set on the indicator(...) declaration.
+// Setting it manually was triggering a runtime "max_bars_back" error on lower
+// intraday timeframes (notably 30m on some symbols). Letting Pine auto-detect
+// the required buffer is more reliable; explicit max_bars_back() calls below
+// cover the few series that need extra history.
+indicator("Clarity + Conviction (Full Suite - Restored OB)", overlay=true, max_lines_count=500, max_boxes_count=500, max_labels_count=500)
+// Pine v5 hard limit: drawings using xloc.bar_index can only be created/moved
+// within ~5000 bars of the current bar_index. On lower TFs (e.g. 30m) charts
+// accumulate enough bars that long-lived UMG / Zone / FVG drawings created
+// many bars ago hit this limit when the maintenance block tries to update
+// them — producing a runtime error like:
+//   "Bar index value of the 'x' argument is too far from the current bar index."
+// We evict any such drawing once it ages past this constant. 4500 leaves a
+// 500-bar safety margin under Pine's ~5000 limit.
+int BAR_IDX_HISTORY_LIMIT = 4500
+// ================= MODULE 7 — INPUTS, COLORS, SETTINGS =================
+smt_sym = input.symbol("CME_MINI:NQ1!", "SMT Comparison Symbol", group="Institutional")
+show_horiz   = input.bool(true, "Show PDH/PDL Lines")
+show_mid     = input.bool(true, "Show 50% Midpoints")
+show_ob      = input.bool(true, "Show Dynamic OB")
+show_vert    = input.bool(true, "Show Vertical Lines")
+show_fvg     = input.bool(true, "Show Unfilled FVGs (master)", group="Institutional")
+show_fvg_bull= input.bool(true, "Show Bullish FVGs",           group="Institutional")
+show_fvg_bear= input.bool(true, "Show Bearish FVGs",           group="Institutional")
+show_smt     = input.bool(true, "Show SMT (Slanted Line)",     group="Institutional")
+fvg_transp   = input.int(80,    "FVG Transparency", minval=0, maxval=100, group="Institutional")
+fvg_atr_mult = input.float(0.5, "FVG Min Size (× ATR) — major gaps only", minval=0.0, step=0.05, group="Institutional")
+fvg_max      = input.int(5,     "Max Active FVGs", minval=1, maxval=20, group="Institutional")
+color_BullFVG= input.color(#81D8D0,       "Bullish FVG Color", group="Institutional")
+color_BearFVG= input.color(#C77DFF,       "Bearish FVG Color", group="Institutional")
+// --- MSS ---
+show_mss      = input.bool(true,  "Show MSS",                       group="MSS")
+mss_pivot     = input.int(15,     "MSS Pivot Length",   minval=5,   group="MSS")
+mss_cooldown  = input.int(40,     "MSS Cooldown (bars)", minval=0,  group="MSS")
+mss_disp_mult = input.float(1.5,  "MSS Min Displacement (× ATR)", minval=0.0, step=0.1, group="MSS")
+// --- Liquidity Sweep Markings (LSM) ---
+show_lsm        = input.bool(true,  "Show LSM (master)",            group="Liquidity Sweeps")
+show_lsm_lines  = input.bool(true,  "Show LSM Rays",                group="Liquidity Sweeps")
+show_lsm_labels = input.bool(true,  "Show LSM Labels (LIQ SWEEP)",  group="Liquidity Sweeps")
+lsm_pivot       = input.int(10,     "LSM Pivot Length", minval=3,   group="Liquidity Sweeps")
+color_LSM       = input.color(color.orange, "LSM Color",            group="Liquidity Sweeps")
+lsm_transp      = input.int(40,     "LSM Transparency", minval=0, maxval=100, group="Liquidity Sweeps")
+// --- Asia + London full-session H/L ---
+// One paired toggle per session: Asia (ASH+ASL together) and London (LSH+LSL
+// together). LND 1hr lives in its own group below.
+show_asia_hl     = input.bool(true,  "Show Asia High & Low (ASH/ASL)",    group="Asia & London Sessions")
+show_lon_hl      = input.bool(true,  "Show London High & Low (LSH/LSL)",  group="Asia & London Sessions")
+show_sess_lines  = input.bool(true,  "Show Session Lines (rays)",         group="Asia & London Sessions")
+show_sess_labels = input.bool(true,  "Show Session Labels",               group="Asia & London Sessions")
+asia_start_h     = input.int(2,  "Asia Start (hour, UTC+3)",  minval=0, maxval=23, group="Asia & London Sessions")
+asia_end_h       = input.int(10, "Asia End (hour, UTC+3)",    minval=1, maxval=24, group="Asia & London Sessions")
+ldn_start_h      = input.int(10, "London Start (hour, UTC+3)", minval=0, maxval=23, group="Asia & London Sessions")
+ldn_end_h        = input.int(18, "London End (hour, UTC+3)",   minval=1, maxval=24, group="Asia & London Sessions")
+color_SESS       = input.color(color.gray, "Session Color",                group="Asia & London Sessions")
+sess_transp      = input.int(50,     "Session Transparency", minval=0, maxval=100, group="Asia & London Sessions")
+// --- Support / Resistance ---
+show_sr        = input.bool(true,  "Show S/R (master)",              group="Support / Resistance")
+show_sr_lines  = input.bool(true,  "Show S/R Lines",                 group="Support / Resistance")
+show_sr_labels = input.bool(true,  "Show S/R Labels",                group="Support / Resistance")
+sr_pivot       = input.int(20,     "S/R Pivot Length",  minval=5,    group="Support / Resistance")
+sr_max         = input.int(3,      "Max S/R Each Side", minval=1, maxval=10, group="Support / Resistance")
+sr_disp_mult   = input.float(0.5,  "S/R Break Displacement (× ATR)", minval=0.0, step=0.1, group="Support / Resistance")
+color_SR       = input.color(color.gray, "S/R Color",                group="Support / Resistance")
+sr_transp      = input.int(40,     "S/R Transparency", minval=0, maxval=100, group="Support / Resistance")
+// --- Supply / Demand Zones ---
+show_zones   = input.bool(true,  "Show Supply/Demand Zones",       group="Supply / Demand")
+zone_pivot   = input.int(15,     "Zone Pivot Length", minval=5,    group="Supply / Demand")
+zone_max     = input.int(3,      "Max Zones Each Side", minval=1, maxval=10, group="Supply / Demand")
+color_demand = input.color(#81D8D0, "Demand Color",                group="Supply / Demand")
+color_supply = input.color(color.purple, "Supply Color",           group="Supply / Demand")
+zone_transp  = input.int(85,     "Zone Transparency", minval=0, maxval=100, group="Supply / Demand")
+zone_min_w   = input.int(15,     "Zone Min Width (bars, fit text)", minval=5, group="Supply / Demand")
+// --- Trend ---
+show_trend       = input.bool(true,  "Show Active Trend Channel",      group="Trend")
+trend_pivot      = input.int(15,     "Trend Pivot Length", minval=5,   group="Trend")
+trend_min_gap    = input.int(10,     "Trend Min Bars Between Pivots", minval=1, group="Trend")
+// How many bars past the latest pivot to project the channel. Keeps the
+// trend lines anchored to the chart instead of running off into empty space.
+trend_extend_bars= input.int(5,      "Trend Project Bars Past Latest Pivot", minval=0, maxval=200, group="Trend")
+color_trend      = input.color(color.gray, "Trend Color",              group="Trend")
+trend_transp     = input.int(50,     "Trend Transparency", minval=0, maxval=100, group="Trend")
+// --- Gaps ---
+// NWOG = New Week Opening Gap. NMOG = New Month Opening Gap.
+// Display rule: NWOG on every TF below Monthly; on Monthly TF the NWOG is
+// hidden and NMOG takes its place. Either gap is hidden once price has fully
+// traversed it (top tagged AND bottom tagged).
+show_nwog    = input.bool(true,  "Show NWOG (sub-Monthly TFs)",   group="Gaps")
+show_nmog    = input.bool(true,  "Show NMOG (Monthly TF only)",   group="Gaps")
+color_NWOG   = input.color(color.yellow, "NWOG Color",             group="Gaps")
+color_NMOG   = input.color(color.orange, "NMOG Color",             group="Gaps")
+// Rectangle transparency (default 75 — visible without dominating). Label
+// uses its own setting so the text stays crisp even with a faint fill.
+nwog_transp        = input.int(75, "NWOG/NMOG Box Transparency",   minval=0, maxval=100, group="Gaps")
+nwog_label_transp  = input.int(0,  "NWOG/NMOG Label Transparency", minval=0, maxval=100, group="Gaps")
+show_umg     = input.bool(true,  "Show Unfilled Market Gaps",      group="Gaps")
+umg_atr_mult = input.float(0.4,  "Min Gap Size (× ATR)", minval=0.0, step=0.1, group="Gaps")
+umg_max      = input.int(5,      "Max Active UMG Boxes", minval=1, maxval=20, group="Gaps")
+color_UMG    = input.color(color.red, "Unfilled Gap Color",        group="Gaps")
+umg_transp   = input.int(85,     "Unfilled Gap Transparency", minval=0, maxval=100, group="Gaps")
+umg_min_w    = input.int(30,     "UMG Min Width (bars, fit text)", minval=10, group="Gaps")
+// --- Dashboard / AMD State Machine ---
+// AMD is BEHAVIOR-driven (not session-driven). Sequence is enforced:
+//   IDLE → ACCUMULATION → MANIPULATION → DISTRIBUTION → IDLE
+// Distribution can never be flagged without a prior Manipulation (sweep) event.
+show_dash      = input.bool(true,  "Show Dashboard (Bottom-Right)",  group="Dashboard / AMD")
+// Each dashboard column can be toggled independently. Defaults: all six on.
+// Order (left → right) is fixed: Acc, Mani, Dist, Moon Cycle, Bias, Structure, Day's Path, Day's No.
+show_col_acc   = input.bool(true,  "Column: Accumulation", group="Dashboard / AMD")
+show_col_mani  = input.bool(true,  "Column: Manipulation", group="Dashboard / AMD")
+show_col_dist  = input.bool(true,  "Column: Distribution", group="Dashboard / AMD")
+show_col_moon  = input.bool(true,  "Column: Moon Cycle",   group="Dashboard / AMD")
+show_col_bias  = input.bool(true,  "Column: Bias",         group="Dashboard / AMD")
+// Structure column: HH/HL → Bullish, LL/LH → Bearish, otherwise Ranging.
+// Independent from PD-array logic (uses pivot swings only). Sits immediately
+// to the right of Bias on every TF.
+show_col_struct= input.bool(true,  "Column: Structure",    group="Dashboard / AMD")
+show_col_path  = input.bool(true,  "Column: Day's Path",   group="Dashboard / AMD")
+show_col_dayno = input.bool(true,  "Column: Day's No.",    group="Dashboard / AMD")
+struct_pivot   = input.int(5,      "Structure Swing Pivot Length", minval=2, group="Dashboard / AMD")
+// --- Moon Phase Chart Markers ---
+show_moon_markers = input.bool(true, "Show Moon Phase Markers (New/Full)", group="Moon Phase")
+acc_lookback   = input.int(20,    "Accumulation Range Lookback (bars)",   minval=5,  group="Dashboard / AMD")
+acc_atr_mult   = input.float(2.5, "Accumulation Max Range (× ATR)",        minval=0.5, step=0.1, group="Dashboard / AMD")
+sweep_atr_mult = input.float(0.1, "Manipulation Sweep Min Wick (× ATR)",   minval=0.0, step=0.05, group="Dashboard / AMD")
+dist_atr_mult  = input.float(0.5, "Distribution Min Displacement (× ATR)", minval=0.1, step=0.1,  group="Dashboard / AMD")
+mani_timeout   = input.int(30,    "Manipulation → Distribution Timeout (bars)", minval=3, group="Dashboard / AMD")
+dist_timeout   = input.int(50,    "Distribution → Reset Timeout (bars)",         minval=3, group="Dashboard / AMD")
+// --- PD Arrays (dedicated group: width + opacity) ---
+pd_width        = input.int(1, "PDH/PDL Line Width (1 = thin; labels scale with this)", minval=1, maxval=5, group="PD Arrays")
+mid_width       = input.int(1, "Midpoint Line Width", minval=1, maxval=5, group="PD Arrays")
+pd_transp       = input.int(0, "PD Line Transparency", minval=0, maxval=100, group="PD Arrays")
+// Labels dimmed independently from the lines so they blend (matches ATH style).
+pd_label_transp = input.int(55, "PD Label Transparency (matches ATH)", minval=0, maxval=100, group="PD Arrays")
+// --- Other Line Widths ---
+mss_width    = input.int(1, "MSS Line Width",      minval=1, maxval=5, group="Line Widths")
+lsm_width    = input.int(1, "LSM Line Width",      minval=1, maxval=5, group="Line Widths")
+sr_width     = input.int(1, "S/R Line Width",      minval=1, maxval=5, group="Line Widths")
+sess_width   = input.int(1, "Session Line Width",  minval=1, maxval=5, group="Line Widths")
+trend_width  = input.int(1, "Trend Line Width",    minval=1, maxval=5, group="Line Widths")
+// OB half-line uses the same thickness as PD arrays (pd_width) so it doesn't
+// shout. Length stays configurable.
+ob_length    = input.int(12, "OB Half-Line Length (bars right of confirmation)", minval=3, maxval=100, group="Line Widths")
+// --- LND 1hr Candle High & Low (single paired toggle) ---
+show_lnd_hl  = input.bool(true, "Show LND 1hr Candle High & Low", group="LND 1hr")
+// --- Existing colors / offsets / TZ ---
+color_PDH    = input.color(color.blue,    "High Color")
+color_PDL    = input.color(color.fuchsia, "Low Color")
+color_MID    = input.color(color.new(color.gray, 50), "Midpoint Color")
+color_BullOB = input.color(color.blue,    "Bullish OB Color")
+color_BearOB = input.color(color.purple,  "Bearish OB Color")
+color_LDN    = color.gray
+color_BLUE   = color.blue
+color_GREEN  = color.green
+// Label-offset hierarchy (right of last bar):
+//   PD arrays are placed FARTHEST right, followed by LND 1hr, then everything
+//   else (ASH/ASL/LSH/LSL/OB/ATH/SR) which retains its original position.
+offset_pd     = input.int(75, "PD Array Label Offset (Right — farthest)")
+offset_london = input.int(45, "LND 1hr Label Offset (Right — between PD and the rest)")
+offset_session= input.int(20, "Session Label Offset (ASH/ASL/LSH/LSL)")
+tz = "UTC+3"
+// --- Moving Average ---
+show_ma   = input.bool(true,              "Show Moving Average", group="Moving Average")
+ma_type   = input.string("EMA",           "MA Type",   options=["EMA","SMA","WMA","RMA","VWMA","HMA"], group="Moving Average")
+ma_length = input.int(50,                 "MA Length", minval=1, group="Moving Average")
+ma_source = input.source(close,           "MA Source", group="Moving Average")
+ma_color  = input.color(#29B6F6,          "MA Color",  group="Moving Average")
+ma_width  = input.int(1,                  "MA Thickness", minval=1, maxval=5, group="Moving Average")
+// --- ATH ---
+show_ath      = input.bool(true,          "Show ATH Line", group="ATH")
+ath_color     = input.color(color.purple, "ATH Color",     group="ATH")
+ath_transp    = input.int(55,             "ATH Transparency", minval=0, maxval=100, group="ATH")
+ath_width     = input.int(1,              "ATH Line Thickness", minval=1, maxval=5, group="ATH")
+// Default offset matches PD-array offset (75) so the ATH label aligns with
+// PDH/PDL at the far right. Still independently adjustable.
+ath_label_off = input.int(75,             "ATH Label Offset",   group="ATH")
+// ================= MODULE 1 — PREVIOUS PERIOD LEVELS (PD ARRAYS) =================
+get_tf_string() =>
+    if timeframe.isintraday
+        m = timeframe.multiplier
+        m >= 60 ? str.tostring(m / 60) + "H" : str.tostring(m) + "m"
+    else if timeframe.isdaily
+        "D"
+    else if timeframe.isweekly
+        "W"
+    else if timeframe.ismonthly
+        "M"
+    else
+        timeframe.period
+is_monthly  = timeframe.ismonthly
+is_weekly   = timeframe.isweekly
+is_daily    = timeframe.isdaily
+is_intraday = timeframe.isintraday
+show_pd_tf  = is_intraday or is_daily or is_weekly or is_monthly
+// Compute is_new_period.
+// IMPORTANT: time("W") and time("M") are request.security-backed calls. In Pine
+// v5 these are hoisted to the top scope and evaluated unconditionally, so
+// hiding them inside a ternary (`is_weekly ? ta.change(time("W")) : 0.0`)
+// produces inconsistent state and can throw runtime errors on some intraday
+// timeframes. They are now always called.
+chg_day     = ta.change(dayofmonth(time, tz))
+chg_week    = ta.change(time("W"))
+chg_month   = ta.change(time("M"))
+bool is_new_period = false
+if is_monthly
+    is_new_period := not na(chg_month) and chg_month != 0
+else if is_weekly
+    is_new_period := not na(chg_week) and chg_week != 0
+else
+    // bar 1 has chg_day = na; treat that as "no new period" so we don't trigger junk
+    is_new_period := not na(chg_day) and chg_day != 0
+is_weekend    = dayofweek(time, tz) == dayofweek.saturday or dayofweek(time, tz) == dayofweek.sunday
+var float track_h = na, var float track_l = na
+var float prev_h  = na, var float prev_l  = na
+var int   period_start_time = na
+var line  l_high = na, var line  l_low = na, var line  l_mid = na
+var label lab_h  = na, var label lab_l = na
+// Keep period accumulation alive on intraday weekend bars too — only the *new period*
+// branch is gated by is_weekend so PDH/PDL on Monday correctly = Friday's H/L.
+// This makes PD arrays render reliably on lower TFs (e.g. 30m) where weekend bars
+// previously starved track_h/track_l of updates.
+if show_pd_tf
+    if is_new_period and (not is_weekend or is_weekly or is_monthly)
+        int start_of_prev = period_start_time
+        prev_h := track_h
+        prev_l := track_l
+        track_h := high
+        track_l := low
+        period_start_time := time
+        if show_horiz and not na(prev_h) and not na(start_of_prev)
+            line.delete(l_high)
+            line.delete(l_low)
+            line.delete(l_mid)
+            label.delete(lab_h)
+            label.delete(lab_l)
+            l_high := line.new(start_of_prev, prev_h, time, prev_h, xloc=xloc.bar_time, extend=extend.right, color=color.new(color_PDH, pd_transp), width=pd_width)
+            l_low  := line.new(start_of_prev, prev_l, time, prev_l, xloc=xloc.bar_time, extend=extend.right, color=color.new(color_PDL, pd_transp), width=pd_width)
+            if show_mid
+                l_mid := line.new(start_of_prev, (prev_h+prev_l)/2, time, (prev_h+prev_l)/2, xloc=xloc.bar_time, extend=extend.right, color=color.new(color_MID, pd_transp), style=line.style_dashed, width=mid_width)
+            lbl_pfx = is_monthly ? "PM" : is_weekly ? "PW" : "PD"
+            // Label styling matches ATH (default size — no size= parameter)
+            // PD labels use pd_label_transp (default 55) so they blend with
+            // their lines like the ATH label. Lines stay crisp at pd_transp.
+            lab_h := label.new(bar_index + offset_pd, prev_h, lbl_pfx + "H", style=label.style_none, textcolor=color.new(color_PDH, pd_label_transp))
+            lab_l := label.new(bar_index + offset_pd, prev_l, lbl_pfx + "L", style=label.style_none, textcolor=color.new(color_PDL, pd_label_transp))
+    else
+        // Always update the running high/low (even on weekend bars) so PDH/PDL reflects
+        // the full prior period when the next weekday roll-over fires.
+        track_h := math.max(nz(track_h, high), high)
+        track_l := math.min(nz(track_l, low),  low)
+        // Bootstrap period_start_time on the very first bar so the first new-period
+        // event has a valid start anchor (otherwise it gets skipped on lower TFs that
+        // load mid-day with limited history).
+        if na(period_start_time)
+            period_start_time := time
+// ================= MODULE 2 — SESSION LOGIC & TIME ANCHORS =================
+show_london_tf = is_intraday and timeframe.multiplier <= 60
+int eat_y  = year(time, tz)
+int eat_m  = month(time, tz)
+int eat_d  = dayofmonth(time, tz)
+int t_0000 = timestamp(tz, eat_y, eat_m, eat_d, 0, 0)
+int t_1000 = timestamp(tz, eat_y, eat_m, eat_d, 10, 0)
+int t_1100 = timestamp(tz, eat_y, eat_m, eat_d, 11, 0)
+int t_1630 = timestamp(tz, eat_y, eat_m, eat_d, 16, 30)
+int t_1900 = timestamp(tz, eat_y, eat_m, eat_d, 19, 0)
+var bool mid_drawn   = false
+var bool blue_drawn  = false
+var bool green_drawn = false
+var float london_h          = na
+var float london_l          = na
+var int   london_start_t    = na
+var int   london_captured_d = na
+var line  lnL_H             = na
+var line  lnL_L             = na
+var label lnL_LabH          = na
+var label lnL_LabL          = na
+london_is_stale = not na(london_captured_d) and london_captured_d != t_0000
+if is_new_period or london_is_stale
+    blue_drawn  := false
+    green_drawn := false
+    mid_drawn   := false
+    line.delete(lnL_H)
+    line.delete(lnL_L)
+    label.delete(lnL_LabH)
+    label.delete(lnL_LabL)
+    lnL_H             := na
+    lnL_L             := na
+    lnL_LabH          := na
+    lnL_LabL          := na
+    london_h          := na
+    london_l          := na
+    london_start_t    := na
+    london_captured_d := na
+if show_london_tf and not is_weekend and time >= t_1000 and time < t_1100
+    if na(london_h)
+        london_start_t := time
+        london_h := high
+        london_l := low
+    else
+        london_h := math.max(london_h, high)
+        london_l := math.min(london_l, low)
+london_fresh = na(london_captured_d) or london_captured_d != t_0000
+london_ready = show_london_tf and show_horiz and not is_weekend and time >= t_1100 and not na(london_h) and london_fresh
+if london_ready
+    line.delete(lnL_H)
+    line.delete(lnL_L)
+    label.delete(lnL_LabH)
+    label.delete(lnL_LabL)
+    // Each LND level honors its own toggle. The lines/labels are only created
+    // for sides the user has enabled.
+    if show_lnd_hl
+        lnL_H    := line.new(london_start_t, london_h, time, london_h, xloc=xloc.bar_time, color=color_LDN, extend=extend.right)
+        lnL_L    := line.new(london_start_t, london_l, time, london_l, xloc=xloc.bar_time, color=color_LDN, extend=extend.right)
+        // Labels styled like PD/ATH: muted text (pd_label_transp) + small size
+        // so the LINE remains the dominant visual; the label blends with it
+        // instead of "shouting" above the level.
+        lnL_LabH := label.new(bar_index + offset_london, london_h, "LND 1hr High", style=label.style_none, textcolor=color.new(color_LDN, pd_label_transp), size=size.small)
+        lnL_LabL := label.new(bar_index + offset_london, london_l, "LND 1hr Low",  style=label.style_none, textcolor=color.new(color_LDN, pd_label_transp), size=size.small)
+    london_captured_d := t_0000
+if show_vert and not is_weekend and show_london_tf
+    if not mid_drawn and time >= t_0000
+        line.new(t_0000, 0, t_0000, 1, xloc=xloc.bar_time, extend=extend.both, color=color_BLUE, width=1)
+        mid_drawn := true
+    if not blue_drawn and time >= t_1630
+        line.new(t_1630, 0, t_1630, 1, xloc=xloc.bar_time, extend=extend.both, color=color_BLUE, width=1)
+        blue_drawn := true
+    if not green_drawn and time >= t_1900
+        line.new(t_1900, 0, t_1900, 1, xloc=xloc.bar_time, extend=extend.both, color=color_GREEN, width=1)
+        green_drawn := true
+var line fut_1630 = na
+var line fut_1900 = na
+var line fut_0000 = na
+if show_vert and barstate.islast and show_london_tf
+    line.delete(fut_1630)
+    line.delete(fut_1900)
+    line.delete(fut_0000)
+    int t_today_00 = timestamp(tz, year(timenow, tz), month(timenow, tz), dayofmonth(timenow, tz), 0, 0)
+    int ms_1630 = 59400000
+    int ms_1900 = 68400000
+    int ms_day  = 86400000
+    int f_1630  = t_today_00 + ms_1630
+    int f_1900  = t_today_00 + ms_1900
+    int f_0000  = t_today_00 + ms_day
+    int now_ts = timenow
+    if now_ts < f_1630
+        fut_1630 := line.new(f_1630, 0, f_1630, 1, xloc=xloc.bar_time, extend=extend.both, color=color_BLUE,  width=1)
+    if now_ts < f_1900
+        fut_1900 := line.new(f_1900, 0, f_1900, 1, xloc=xloc.bar_time, extend=extend.both, color=color_GREEN, width=1)
+    fut_0000 := line.new(f_0000, 0, f_0000, 1, xloc=xloc.bar_time, extend=extend.both, color=color_BLUE, width=1)
+// ----- Asia + London full-session H/L: silent during session, draw ONLY after close -----
+hr_now    = hour(time, tz)
+asia_in   = is_intraday and not is_weekend and hr_now >= asia_start_h and hr_now < asia_end_h
+ldn_in    = is_intraday and not is_weekend and hr_now >= ldn_start_h and hr_now < ldn_end_h
+asia_just_ended = (not asia_in) and nz(asia_in[1], false)
+ldn_just_ended  = (not ldn_in)  and nz(ldn_in[1],  false)
+var float ash_v = na
+var float asl_v = na
+var int   asia_start_t = na     // first bar's `time` once Asia session begins
+var line  ash_ln = na
+var line  asl_ln = na
+var label ash_lb = na
+var label asl_lb = na
+var bool  asia_drawn_today = false
+var float lsh_v = na
+var float lsl_v = na
+var int   ldn_start_t = na      // first bar's `time` once London session begins
+var line  lsh_ln = na
+var line  lsl_ln = na
+var label lsh_lb = na
+var label lsl_lb = na
+var bool  lon_drawn_today = false
+sess_col = color.new(color_SESS, sess_transp)
+if is_new_period
+    line.delete(ash_ln)
+    line.delete(asl_ln)
+    label.delete(ash_lb)
+    label.delete(asl_lb)
+    line.delete(lsh_ln)
+    line.delete(lsl_ln)
+    label.delete(lsh_lb)
+    label.delete(lsl_lb)
+    ash_ln := na
+    asl_ln := na
+    ash_lb := na
+    asl_lb := na
+    lsh_ln := na
+    lsl_ln := na
+    lsh_lb := na
+    lsl_lb := na
+    ash_v := na
+    asl_v := na
+    lsh_v := na
+    lsl_v := na
+    asia_start_t := na
+    ldn_start_t  := na
+    asia_drawn_today := false
+    lon_drawn_today := false
+// Asia: paired toggle. ASH and ASL render together when enabled.
+if show_asia_hl and asia_in
+    if na(ash_v)
+        // First bar of the Asia session — anchor the future ray's left edge
+        // here so the line has non-zero length and renders properly.
+        asia_start_t := time
+    ash_v := math.max(nz(ash_v, high), high)
+    asl_v := math.min(nz(asl_v, low),  low)
+if show_asia_hl and asia_just_ended and not asia_drawn_today and not na(ash_v) and not na(asl_v)
+    asia_drawn_today := true
+    int asia_left_t = nz(asia_start_t, time)
+    if show_sess_lines
+        ash_ln := line.new(asia_left_t, ash_v, time, ash_v, xloc=xloc.bar_time, extend=extend.right, color=sess_col, width=sess_width)
+        asl_ln := line.new(asia_left_t, asl_v, time, asl_v, xloc=xloc.bar_time, extend=extend.right, color=sess_col, width=sess_width)
+    if show_sess_labels
+        ash_lb := label.new(bar_index + offset_session, ash_v, "ASH", style=label.style_none, textcolor=sess_col, size=size.small)
+        asl_lb := label.new(bar_index + offset_session, asl_v, "ASL", style=label.style_none, textcolor=sess_col, size=size.small)
+// London: paired toggle. LSH and LSL render together when enabled.
+if show_lon_hl and ldn_in
+    if na(lsh_v)
+        // First bar of the London session — anchor the future ray's left edge.
+        ldn_start_t := time
+    lsh_v := math.max(nz(lsh_v, high), high)
+    lsl_v := math.min(nz(lsl_v, low),  low)
+if show_lon_hl and ldn_just_ended and not lon_drawn_today and not na(lsh_v) and not na(lsl_v)
+    lon_drawn_today := true
+    int ldn_left_t = nz(ldn_start_t, time)
+    if show_sess_lines
+        lsh_ln := line.new(ldn_left_t, lsh_v, time, lsh_v, xloc=xloc.bar_time, extend=extend.right, color=sess_col, width=sess_width)
+        lsl_ln := line.new(ldn_left_t, lsl_v, time, lsl_v, xloc=xloc.bar_time, extend=extend.right, color=sess_col, width=sess_width)
+    if show_sess_labels
+        lsh_lb := label.new(bar_index + offset_session, lsh_v, "LSH", style=label.style_none, textcolor=sess_col, size=size.small)
+        lsl_lb := label.new(bar_index + offset_session, lsl_v, "LSL", style=label.style_none, textcolor=sess_col, size=size.small)
+// ================= MODULE 3 — LIQUIDITY & MARKET STRUCTURE SHIFTS =================
+atr14 = ta.atr(14)
+atr14_safe = nz(atr14, 0)
+// ----- MSS -----
+var float mss_sh = na
+var float mss_sl = na
+var int   mss_last_bar = na
+mss_ph_val = ta.pivothigh(mss_pivot, mss_pivot)
+mss_pl_val = ta.pivotlow(mss_pivot, mss_pivot)
+if not na(mss_ph_val)
+    mss_sh := mss_ph_val
+if not na(mss_pl_val)
+    mss_sl := mss_pl_val
+mss_ok = na(mss_last_bar) or (bar_index - mss_last_bar) >= mss_cooldown
+mss_col = color.new(color.gray, 30)
+if show_mss and mss_ok
+    if not na(mss_sh) and close > mss_sh and (close - mss_sh) >= mss_disp_mult * atr14_safe
+        line.new(bar_index - mss_pivot, mss_sh, bar_index, mss_sh, color=mss_col, width=mss_width)
+        label.new(bar_index, mss_sh, "MSS", style=label.style_none, textcolor=mss_col, size=size.small)
+        mss_sh := na
+        mss_last_bar := bar_index
+    if not na(mss_sl) and close < mss_sl and (mss_sl - close) >= mss_disp_mult * atr14_safe
+        line.new(bar_index - mss_pivot, mss_sl, bar_index, mss_sl, color=mss_col, width=mss_width)
+        label.new(bar_index, mss_sl, "MSS", style=label.style_none, textcolor=mss_col, size=size.small)
+        mss_sl := na
+        mss_last_bar := bar_index
+// ----- LSM -----
+var float lsm_last_ph = na
+var float lsm_last_pl = na
+var line[]  lsm_rays   = array.new_line()
+var label[] lsm_labs   = array.new_label()
+var float[] lsm_levels = array.new_float()
+var bool[]  lsm_is_h   = array.new_bool()
+var int     last_sweep_bar = na
+lsm_ph_val = ta.pivothigh(lsm_pivot, lsm_pivot)
+lsm_pl_val = ta.pivotlow(lsm_pivot, lsm_pivot)
+if not na(lsm_ph_val)
+    lsm_last_ph := lsm_ph_val
+if not na(lsm_pl_val)
+    lsm_last_pl := lsm_pl_val
+lsm_col = color.new(color_LSM, lsm_transp)
+if show_lsm and not na(lsm_last_ph) and high > lsm_last_ph and close < lsm_last_ph
+    line  ln_h = na
+    label lb_h = na
+    if show_lsm_lines
+        ln_h := line.new(bar_index, lsm_last_ph, bar_index + 1, lsm_last_ph, extend=extend.right, color=lsm_col, width=lsm_width)
+    if show_lsm_labels
+        lb_h := label.new(bar_index, lsm_last_ph, "LIQ SWEEP", style=label.style_none, textcolor=lsm_col, size=size.tiny)
+    array.push(lsm_rays, ln_h)
+    array.push(lsm_labs, lb_h)
+    array.push(lsm_levels, lsm_last_ph)
+    array.push(lsm_is_h, true)
+    last_sweep_bar := bar_index
+    lsm_last_ph := na
+if show_lsm and not na(lsm_last_pl) and low < lsm_last_pl and close > lsm_last_pl
+    line  ln_l = na
+    label lb_l = na
+    if show_lsm_lines
+        ln_l := line.new(bar_index, lsm_last_pl, bar_index + 1, lsm_last_pl, extend=extend.right, color=lsm_col, width=lsm_width)
+    if show_lsm_labels
+        lb_l := label.new(bar_index, lsm_last_pl, "LIQ SWEEP", style=label.style_none, textcolor=lsm_col, size=size.tiny)
+    array.push(lsm_rays, ln_l)
+    array.push(lsm_labs, lb_l)
+    array.push(lsm_levels, lsm_last_pl)
+    array.push(lsm_is_h, false)
+    last_sweep_bar := bar_index
+    lsm_last_pl := na
+if array.size(lsm_levels) > 0
+    for i = array.size(lsm_levels) - 1 to 0
+        lvl_lsm = array.get(lsm_levels, i)
+        ish_lsm = array.get(lsm_is_h, i)
+        if (ish_lsm and close > lvl_lsm) or (not ish_lsm and close < lvl_lsm)
+            line.delete(array.get(lsm_rays, i))
+            label.delete(array.get(lsm_labs, i))
+            array.remove(lsm_rays, i)
+            array.remove(lsm_labs, i)
+            array.remove(lsm_levels, i)
+            array.remove(lsm_is_h, i)
+// ----- Support / Resistance with 3-step role-flip state machine -----
+var line[]  sr_lines  = array.new_line()
+var label[] sr_labels = array.new_label()
+var float[] sr_lvls   = array.new_float()
+var bool[]  sr_is_r   = array.new_bool()
+var int[]   sr_state  = array.new_int()
+sr_col = color.new(color_SR, sr_transp)
+sr_ph_val = ta.pivothigh(sr_pivot, sr_pivot)
+sr_pl_val = ta.pivotlow(sr_pivot, sr_pivot)
+if show_sr and not na(sr_ph_val)
+    line  ln_r = na
+    label lb_r = na
+    if show_sr_lines
+        ln_r := line.new(bar_index - sr_pivot, sr_ph_val, bar_index, sr_ph_val, color=sr_col, extend=extend.right, width=sr_width)
+    if show_sr_labels
+        lb_r := label.new(bar_index + 5, sr_ph_val, "R", style=label.style_none, textcolor=sr_col, size=size.tiny)
+    array.push(sr_lines, ln_r)
+    array.push(sr_labels, lb_r)
+    array.push(sr_lvls, sr_ph_val)
+    array.push(sr_is_r, true)
+    array.push(sr_state, 0)
+if show_sr and not na(sr_pl_val)
+    line  ln_s = na
+    label lb_s = na
+    if show_sr_lines
+        ln_s := line.new(bar_index - sr_pivot, sr_pl_val, bar_index, sr_pl_val, color=sr_col, extend=extend.right, width=sr_width)
+    if show_sr_labels
+        lb_s := label.new(bar_index + 5, sr_pl_val, "S", style=label.style_none, textcolor=sr_col, size=size.tiny)
+    array.push(sr_lines, ln_s)
+    array.push(sr_labels, lb_s)
+    array.push(sr_lvls, sr_pl_val)
+    array.push(sr_is_r, false)
+    array.push(sr_state, 0)
+if array.size(sr_lvls) > 0
+    for i = 0 to array.size(sr_lvls) - 1
+        lvl_sr = array.get(sr_lvls, i)
+        isr_sr = array.get(sr_is_r, i)
+        st_sr  = array.get(sr_state, i)
+        if st_sr == 0
+            if isr_sr and close > lvl_sr and (close - lvl_sr) >= sr_disp_mult * atr14_safe
+                array.set(sr_state, i, 1)
+            else if not isr_sr and close < lvl_sr and (lvl_sr - close) >= sr_disp_mult * atr14_safe
+                array.set(sr_state, i, 1)
+        else if st_sr == 1
+            if isr_sr and low <= lvl_sr
+                array.set(sr_state, i, 2)
+            else if not isr_sr and high >= lvl_sr
+                array.set(sr_state, i, 2)
+        else if st_sr == 2
+            if isr_sr and close > lvl_sr
+                array.set(sr_is_r, i, false)
+                array.set(sr_state, i, 0)
+                lb_flip = array.get(sr_labels, i)
+                if not na(lb_flip)
+                    label.set_text(lb_flip, "S")
+            else if not isr_sr and close < lvl_sr
+                array.set(sr_is_r, i, true)
+                array.set(sr_state, i, 0)
+                lb_flip = array.get(sr_labels, i)
+                if not na(lb_flip)
+                    label.set_text(lb_flip, "R")
+if array.size(sr_lvls) > 0
+    int r_keep = 0
+    int s_keep = 0
+    for i = array.size(sr_lvls) - 1 to 0
+        ish_keep = array.get(sr_is_r, i)
+        keep_now = false
+        if ish_keep
+            r_keep := r_keep + 1
+            keep_now := r_keep <= sr_max
+        else
+            s_keep := s_keep + 1
+            keep_now := s_keep <= sr_max
+        if not keep_now
+            line.delete(array.get(sr_lines, i))
+            label.delete(array.get(sr_labels, i))
+            array.remove(sr_lines, i)
+            array.remove(sr_labels, i)
+            array.remove(sr_lvls, i)
+            array.remove(sr_is_r, i)
+            array.remove(sr_state, i)
+// ----- Supply / Demand Zones -----
+var box[]   zn_boxes  = array.new_box()
+var label[] zn_labels = array.new_label()
+var float[] zn_tops   = array.new_float()
+var float[] zn_bots   = array.new_float()
+var bool[]  zn_is_dem = array.new_bool()
+var int[]   zn_left_b = array.new_int()
+zn_ph_val = ta.pivothigh(zone_pivot, zone_pivot)
+zn_pl_val = ta.pivotlow(zone_pivot, zone_pivot)
+if show_zones and not na(zn_pl_val)
+    pb_d   = bar_index - zone_pivot
+    btop_d = math.max(open[zone_pivot], close[zone_pivot])
+    bbot_d = math.min(open[zone_pivot], close[zone_pivot])
+    bool overlaps_d = false
+    if array.size(zn_tops) > 0
+        for j = 0 to array.size(zn_tops) - 1
+            t_o = array.get(zn_tops, j)
+            b_o = array.get(zn_bots, j)
+            if not (btop_d < b_o or bbot_d > t_o)
+                overlaps_d := true
+                break
+    if not overlaps_d
+        right_d  = math.max(bar_index, pb_d + zone_min_w)
+        center_d = (pb_d + right_d) / 2
+        bx_d = box.new(pb_d, btop_d, right_d, bbot_d, border_color=na, bgcolor=color.new(color_demand, zone_transp))
+        lb_d = label.new(center_d, (btop_d + bbot_d) / 2, "Demand", style=label.style_none, textcolor=color.new(color_demand, math.max(0, zone_transp - 50)), size=size.tiny)
+        array.push(zn_boxes, bx_d)
+        array.push(zn_labels, lb_d)
+        array.push(zn_tops, btop_d)
+        array.push(zn_bots, bbot_d)
+        array.push(zn_is_dem, true)
+        array.push(zn_left_b, pb_d)
+if show_zones and not na(zn_ph_val)
+    pb_s   = bar_index - zone_pivot
+    btop_s = math.max(open[zone_pivot], close[zone_pivot])
+    bbot_s = math.min(open[zone_pivot], close[zone_pivot])
+    bool overlaps_s = false
+    if array.size(zn_tops) > 0
+        for j = 0 to array.size(zn_tops) - 1
+            t_o2 = array.get(zn_tops, j)
+            b_o2 = array.get(zn_bots, j)
+            if not (btop_s < b_o2 or bbot_s > t_o2)
+                overlaps_s := true
+                break
+    if not overlaps_s
+        right_s  = math.max(bar_index, pb_s + zone_min_w)
+        center_s = (pb_s + right_s) / 2
+        bx_s = box.new(pb_s, btop_s, right_s, bbot_s, border_color=na, bgcolor=color.new(color_supply, zone_transp))
+        lb_s2 = label.new(center_s, (btop_s + bbot_s) / 2, "Supply", style=label.style_none, textcolor=color.new(color_supply, math.max(0, zone_transp - 50)), size=size.tiny)
+        array.push(zn_boxes, bx_s)
+        array.push(zn_labels, lb_s2)
+        array.push(zn_tops, btop_s)
+        array.push(zn_bots, bbot_s)
+        array.push(zn_is_dem, false)
+        array.push(zn_left_b, pb_s)
+if array.size(zn_boxes) > 0
+    int d_keep = 0
+    int s_keep_z = 0
+    for i = array.size(zn_boxes) - 1 to 0
+        isd_z = array.get(zn_is_dem, i)
+        keep_z = false
+        if isd_z
+            d_keep := d_keep + 1
+            keep_z := d_keep <= zone_max
+        else
+            s_keep_z := s_keep_z + 1
+            keep_z := s_keep_z <= zone_max
+        if not keep_z
+            box.delete(array.get(zn_boxes, i))
+            label.delete(array.get(zn_labels, i))
+            array.remove(zn_boxes, i)
+            array.remove(zn_labels, i)
+            array.remove(zn_tops, i)
+            array.remove(zn_bots, i)
+            array.remove(zn_is_dem, i)
+            array.remove(zn_left_b, i)
+// Age-based eviction — see BAR_IDX_HISTORY_LIMIT note at top.
+if array.size(zn_boxes) > 0
+    for i = array.size(zn_boxes) - 1 to 0
+        if bar_index - array.get(zn_left_b, i) > BAR_IDX_HISTORY_LIMIT
+            box.delete(array.get(zn_boxes, i))
+            label.delete(array.get(zn_labels, i))
+            array.remove(zn_boxes, i)
+            array.remove(zn_labels, i)
+            array.remove(zn_tops, i)
+            array.remove(zn_bots, i)
+            array.remove(zn_is_dem, i)
+            array.remove(zn_left_b, i)
+// ----- Active Trend Channel (dual lines) -----
+var float th1 = na
+var float th2 = na
+var int   th1_b = na
+var int   th2_b = na
+var float tl1 = na
+var float tl2 = na
+var int   tl1_b = na
+var int   tl2_b = na
+var line  trend_high_ln = na
+var line  trend_low_ln  = na
+tr_ph_val = ta.pivothigh(trend_pivot, trend_pivot)
+tr_pl_val = ta.pivotlow(trend_pivot, trend_pivot)
+if not na(tr_ph_val)
+    th1 := th2
+    th1_b := th2_b
+    th2 := tr_ph_val
+    th2_b := bar_index - trend_pivot
+if not na(tr_pl_val)
+    tl1 := tl2
+    tl1_b := tl2_b
+    tl2 := tr_pl_val
+    tl2_b := bar_index - trend_pivot
+trend_col = color.new(color_trend, trend_transp)
+// Trend lines are FINITE segments (no extend=extend.right). On each new pivot
+// the line is recreated using the latest two pivots. The right edge is
+// projected `trend_extend_bars` past the most recent bar so the line keeps up
+// with the chart but never runs off into empty space.
+if show_trend and not na(tr_ph_val) and not na(th1) and not na(th2) and not na(th1_b) and not na(th2_b) and (th2_b - th1_b) >= trend_min_gap
+    line.delete(trend_high_ln)
+    int   th_x2 = bar_index + trend_extend_bars
+    float th_slope = (th2 - th1) / (th2_b - th1_b)
+    float th_y2 = th2 + th_slope * (th_x2 - th2_b)
+    trend_high_ln := line.new(th1_b, th1, th_x2, th_y2, color=trend_col, width=trend_width)
+if show_trend and not na(tr_pl_val) and not na(tl1) and not na(tl2) and not na(tl1_b) and not na(tl2_b) and (tl2_b - tl1_b) >= trend_min_gap
+    line.delete(trend_low_ln)
+    int   tl_x2 = bar_index + trend_extend_bars
+    float tl_slope = (tl2 - tl1) / (tl2_b - tl1_b)
+    float tl_y2 = tl2 + tl_slope * (tl_x2 - tl2_b)
+    trend_low_ln := line.new(tl1_b, tl1, tl_x2, tl_y2, color=trend_col, width=trend_width)
+// ================= MODULE 4 — GAPS & IMBALANCES =================
+// ----- NWOG -----
+var float nwog_fri_close = na
+var int   nwog_fri_t     = na
+var box   nwog_box       = na
+var label nwog_lab       = na
+var int   nwog_left_t    = na
+// Fill-tracking: an NWOG is hidden once price has fully traversed it
+// (high ≥ top AND low ≤ bot cumulatively).
+var float nwog_top       = na
+var float nwog_bot       = na
+var bool  nwog_top_hit   = false
+var bool  nwog_bot_hit   = false
+is_friday  = dayofweek(time, tz) == dayofweek.friday
+prev_dow   = dayofweek(time[1], tz)
+cur_dow    = dayofweek(time, tz)
+new_week   = (cur_dow == dayofweek.sunday or cur_dow == dayofweek.monday) and (prev_dow == dayofweek.friday or prev_dow == dayofweek.saturday)
+if is_friday
+    nwog_fri_close := close
+    nwog_fri_t     := time
+// NWOG only on sub-Monthly TFs. On Monthly TF the NMOG (below) takes over.
+if show_nwog and not is_monthly and new_week and not na(nwog_fri_close)
+    box.delete(nwog_box)
+    label.delete(nwog_lab)
+    top_n = math.max(nwog_fri_close, open)
+    bot_n = math.min(nwog_fri_close, open)
+    nwog_left_t  := nwog_fri_t
+    nwog_top     := top_n
+    nwog_bot     := bot_n
+    nwog_top_hit := false
+    nwog_bot_hit := false
+    nwog_box := box.new(nwog_left_t, top_n, time, bot_n, xloc=xloc.bar_time, border_color=na, bgcolor=color.new(color_NWOG, nwog_transp))
+    // Anchor the label by bar_index (not bar_time) so it sits squarely inside
+    // the rectangle on intraday TFs even though the weekend gap in time-coords
+    // would otherwise place it outside the visible candles.
+    nwog_lab := label.new(bar_index, (top_n + bot_n) / 2, "NWOG", style=label.style_none, textcolor=color.new(color_NWOG, nwog_label_transp), size=size.small)
+// NWOG fill check — once price has tagged BOTH the top and the bottom of the
+// gap, it's been fully filled and we hide the drawing.
+if not na(nwog_box) and not na(nwog_top) and not na(nwog_bot)
+    if high >= nwog_top
+        nwog_top_hit := true
+    if low  <= nwog_bot
+        nwog_bot_hit := true
+    if nwog_top_hit and nwog_bot_hit
+        box.delete(nwog_box)
+        label.delete(nwog_lab)
+        nwog_box     := na
+        nwog_lab     := na
+        nwog_top     := na
+        nwog_bot     := na
+// ----- NMOG (New Month Opening Gap) -----
+// Only displayed on the Monthly timeframe per ICT convention. Built from the
+// previous month's close vs the new month's open. Same fill-detection as NWOG.
+var box   nmog_box      = na
+var label nmog_lab      = na
+var int   nmog_left_t   = na
+var float nmog_top      = na
+var float nmog_bot      = na
+var bool  nmog_top_hit  = false
+var bool  nmog_bot_hit  = false
+bool new_month = not na(chg_month) and chg_month != 0
+// On the first bar of a new month, close[1] is the last close of the previous
+// month (on Monthly TF, that's the previous monthly bar). open is the new
+// month's open. Together they define the NMOG range.
+if show_nmog and is_monthly and new_month and not na(close[1])
+    box.delete(nmog_box)
+    label.delete(nmog_lab)
+    top_m = math.max(close[1], open)
+    bot_m = math.min(close[1], open)
+    nmog_left_t  := time[1]
+    nmog_top     := top_m
+    nmog_bot     := bot_m
+    nmog_top_hit := false
+    nmog_bot_hit := false
+    nmog_box := box.new(nmog_left_t, top_m, time, bot_m, xloc=xloc.bar_time, border_color=na, bgcolor=color.new(color_NMOG, nwog_transp))
+    // Same bar_index anchoring as NWOG — keeps the label inside the box.
+    nmog_lab := label.new(bar_index, (top_m + bot_m) / 2, "NMOG", style=label.style_none, textcolor=color.new(color_NMOG, nwog_label_transp), size=size.small)
+// NMOG fill check — same logic as NWOG.
+if not na(nmog_box) and not na(nmog_top) and not na(nmog_bot)
+    if high >= nmog_top
+        nmog_top_hit := true
+    if low  <= nmog_bot
+        nmog_bot_hit := true
+    if nmog_top_hit and nmog_bot_hit
+        box.delete(nmog_box)
+        label.delete(nmog_lab)
+        nmog_box     := na
+        nmog_lab     := na
+        nmog_top     := na
+        nmog_bot     := na
+// ----- Unfilled Market Gaps -----
+var box[]   umg_boxes  = array.new_box()
+var label[] umg_labels = array.new_label()
+var float[] umg_tops   = array.new_float()
+var float[] umg_bots   = array.new_float()
+var bool[]  umg_is_up  = array.new_bool()
+var int[]   umg_left_b = array.new_int()
+if show_umg and not na(close[1]) and atr14_safe > 0
+    if open > close[1] and (open - close[1]) > umg_atr_mult * atr14_safe
+        left_u  = bar_index - 1
+        right_u = math.max(bar_index, left_u + umg_min_w)
+        bx_u = box.new(left_u, open, right_u, close[1], border_color=na, bgcolor=color.new(color_UMG, umg_transp))
+        lb_u = label.new((left_u + right_u) / 2, (open + close[1]) / 2, "Unfilled Market Gap", style=label.style_none, textcolor=color.new(color_UMG, math.max(0, umg_transp - 50)), size=size.small)
+        array.push(umg_boxes, bx_u)
+        array.push(umg_labels, lb_u)
+        array.push(umg_tops, open)
+        array.push(umg_bots, close[1])
+        array.push(umg_is_up, true)
+        array.push(umg_left_b, left_u)
+    if open < close[1] and (close[1] - open) > umg_atr_mult * atr14_safe
+        left_d2  = bar_index - 1
+        right_d2 = math.max(bar_index, left_d2 + umg_min_w)
+        bx_d2 = box.new(left_d2, close[1], right_d2, open, border_color=na, bgcolor=color.new(color_UMG, umg_transp))
+        lb_d2 = label.new((left_d2 + right_d2) / 2, (open + close[1]) / 2, "Unfilled Market Gap", style=label.style_none, textcolor=color.new(color_UMG, math.max(0, umg_transp - 50)), size=size.small)
+        array.push(umg_boxes, bx_d2)
+        array.push(umg_labels, lb_d2)
+        array.push(umg_tops, close[1])
+        array.push(umg_bots, open)
+        array.push(umg_is_up, false)
+        array.push(umg_left_b, left_d2)
+if show_umg and array.size(umg_boxes) > 0
+    for i = array.size(umg_boxes) - 1 to 0
+        t_u    = array.get(umg_tops, i)
+        b_u    = array.get(umg_bots, i)
+        isup_u = array.get(umg_is_up, i)
+        filled = (isup_u and low <= b_u) or (not isup_u and high >= t_u)
+        if filled
+            box.delete(array.get(umg_boxes, i))
+            label.delete(array.get(umg_labels, i))
+            array.remove(umg_boxes, i)
+            array.remove(umg_labels, i)
+            array.remove(umg_tops, i)
+            array.remove(umg_bots, i)
+            array.remove(umg_is_up, i)
+            array.remove(umg_left_b, i)
+while array.size(umg_boxes) > umg_max
+    box.delete(array.shift(umg_boxes))
+    label.delete(array.shift(umg_labels))
+    array.shift(umg_tops)
+    array.shift(umg_bots)
+    array.shift(umg_is_up)
+    array.shift(umg_left_b)
+// Age-based eviction — see BAR_IDX_HISTORY_LIMIT note at top.
+if array.size(umg_boxes) > 0
+    for i = array.size(umg_boxes) - 1 to 0
+        if bar_index - array.get(umg_left_b, i) > BAR_IDX_HISTORY_LIMIT
+            box.delete(array.get(umg_boxes, i))
+            label.delete(array.get(umg_labels, i))
+            array.remove(umg_boxes, i)
+            array.remove(umg_labels, i)
+            array.remove(umg_tops, i)
+            array.remove(umg_bots, i)
+            array.remove(umg_is_up, i)
+            array.remove(umg_left_b, i)
+// ----- FVG (major-only, Tiffany blue / light purple, capped count, with bull/bear toggles) -----
+var box[]  fvg_boxes   = array.new_box()
+var bool[] fvg_is_bull = array.new_bool()
+if show_fvg and not na(high[2]) and not na(low[2]) and atr14_safe > 0
+    bull_gap = low - high[2]
+    bear_gap = low[2] - high
+    if show_fvg_bull and low > high[2] and close[1] > high[2] and bull_gap >= fvg_atr_mult * atr14_safe
+        array.push(fvg_boxes,   box.new(bar_index[2], low, bar_index, high[2], border_color=na, bgcolor=color.new(color_BullFVG, fvg_transp)))
+        array.push(fvg_is_bull, true)
+    if show_fvg_bear and high < low[2] and close[1] < low[2] and bear_gap >= fvg_atr_mult * atr14_safe
+        array.push(fvg_boxes,   box.new(bar_index[2], high, bar_index, low[2], border_color=na, bgcolor=color.new(color_BearFVG, fvg_transp)))
+        array.push(fvg_is_bull, false)
+if show_fvg and array.size(fvg_boxes) > 0
+    for i = array.size(fvg_boxes) - 1 to 0
+        b_f  = array.get(fvg_boxes, i)
+        isb  = array.get(fvg_is_bull, i)
+        filled = (isb and low <= box.get_bottom(b_f)) or (not isb and high >= box.get_top(b_f))
+        if filled
+            box.delete(b_f)
+            array.remove(fvg_boxes, i)
+            array.remove(fvg_is_bull, i)
+while array.size(fvg_boxes) > fvg_max
+    box.delete(array.shift(fvg_boxes))
+    array.shift(fvg_is_bull)
+// Age-based eviction — see BAR_IDX_HISTORY_LIMIT note at top.
+if array.size(fvg_boxes) > 0
+    for i = array.size(fvg_boxes) - 1 to 0
+        if bar_index - box.get_left(array.get(fvg_boxes, i)) > BAR_IDX_HISTORY_LIMIT
+            box.delete(array.get(fvg_boxes, i))
+            array.remove(fvg_boxes, i)
+            array.remove(fvg_is_bull, i)
+// ================= MODULE 5 — INSTITUTIONAL CONCEPTS (SMT & OB) =================
+[o_h, o_l] = request.security(smt_sym, timeframe.period, [high, low], ignore_invalid_symbol=true, lookahead=barmerge.lookahead_off)
+// Explicitly tell Pine how far back the SMT comparison series need to be
+// addressable. The pivot+history references below reach o_h[8] / o_l[8]; we
+// reserve a little extra headroom. Without this, Pine occasionally throws a
+// "max_bars_back" runtime error on lower intraday TFs where the secondary
+// symbol's data is sparser than the chart symbol's.
+max_bars_back(o_h, 20)
+max_bars_back(o_l, 20)
+smt_ph_local = ta.pivothigh(high, 3, 3)
+smt_ph_other = ta.pivothigh(o_h,  3, 3)
+if show_smt and not na(smt_ph_local) and not na(smt_ph_other) and not na(high[8]) and not na(o_h[8])
+    if high[3] > high[8] and o_h[3] < o_h[8]
+        line.new(bar_index[8], high[8], bar_index[3], high[3], color=color.orange, style=line.style_dotted)
+        label.new(bar_index[3], high[3], "SMT", style=label.style_none, textcolor=color.orange, size=size.small)
+// Dynamic OB rendered as a SHORT solid "half-line" (not a ray): finite
+// horizontal segment of length `ob_length` bars, blue for bullish OB,
+// purple for bearish OB. The label sits at the right end of the half-line.
+var line  ob_ln = na
+var label ob_lb = na
+var float ob_p  = na
+var bool  is_b  = na
+if show_ob and not na(close[1]) and not na(close[2])
+    if close > high[1] and close[1] > open[1] and close[2] < open[2]
+        line.delete(ob_ln)
+        label.delete(ob_lb)
+        ob_p := high[2]
+        is_b := true
+        ob_ln := line.new(bar_index - 2, ob_p, bar_index + ob_length, ob_p, color=color_BullOB, width=pd_width)
+        ob_lb := label.new(bar_index + ob_length, ob_p, "+OB " + get_tf_string(), style=label.style_none, textcolor=color_BullOB, size=size.small)
+    else if close < low[1] and close[1] < open[1] and close[2] > open[2]
+        line.delete(ob_ln)
+        label.delete(ob_lb)
+        ob_p := low[2]
+        is_b := false
+        ob_ln := line.new(bar_index - 2, ob_p, bar_index + ob_length, ob_p, color=color_BearOB, width=pd_width)
+        ob_lb := label.new(bar_index + ob_length, ob_p, "-OB " + get_tf_string(), style=label.style_none, textcolor=color_BearOB, size=size.small)
+if not na(ob_p) and ((is_b and close < ob_p) or (not is_b and close > ob_p))
+    line.delete(ob_ln)
+    label.delete(ob_lb)
+    ob_p := na
+// ================= MODULE 6 — REFERENCE INDICATORS =================
+ma_value = switch ma_type
+    "EMA"  => ta.ema(ma_source, ma_length)
+    "SMA"  => ta.sma(ma_source, ma_length)
+    "WMA"  => ta.wma(ma_source, ma_length)
+    "RMA"  => ta.rma(ma_source, ma_length)
+    "VWMA" => ta.vwma(ma_source, ma_length)
+    "HMA"  => ta.hma(ma_source, ma_length)
+    =>        ta.ema(ma_source, ma_length)
+plot(show_ma ? ma_value : na, title="Moving Average", color=ma_color, linewidth=ma_width)
+var float ath_val        = na
+var int   ath_start_time = na
+var line  ath_line       = na
+var label ath_label      = na
+if na(ath_val) or high > ath_val
+    ath_val        := high
+    ath_start_time := time
+    if show_ath
+        line.delete(ath_line)
+        label.delete(ath_label)
+        ath_line  := line.new(ath_start_time, ath_val, ath_start_time + 1, ath_val, xloc=xloc.bar_time, extend=extend.right, color=color.new(ath_color, ath_transp), width=ath_width)
+        ath_label := label.new(bar_index + ath_label_off, ath_val, "ATH", style=label.style_none, textcolor=color.new(ath_color, ath_transp))
+// ----- Dashboard -----
+var table dash = na
+tiffany_blue = #81D8D0
+light_purple = #C77DFF
+ranging_orng = #FFA500
+// --- Moon Phase computation (analytic Conway / Meeus simplified) ---
+// Reference new moon: 2000-01-06 18:14 UTC. Synodic month ≈ 29.53059 days.
+float SYNODIC = 29.53059
+float REF_NEW_MOON = timestamp("UTC", 2000, 1, 6, 18, 14, 0)
+float moon_days = (time - REF_NEW_MOON) / 86400000.0
+float moon_age  = moon_days % SYNODIC
+if moon_age < 0
+    moon_age := moon_age + SYNODIC
+float moon_frac = moon_age / SYNODIC
+// Phase labels (8-phase model).
+string moon_phase_str = "Waxing Crescent"
+if moon_frac < 0.03 or moon_frac > 0.97
+    moon_phase_str := "New Moon"
+else if moon_frac < 0.22
+    moon_phase_str := "Waxing Crescent"
+else if moon_frac < 0.28
+    moon_phase_str := "First Quarter"
+else if moon_frac < 0.47
+    moon_phase_str := "Waxing Gibbous"
+else if moon_frac < 0.53
+    moon_phase_str := "Full Moon"
+else if moon_frac < 0.72
+    moon_phase_str := "Waning Gibbous"
+else if moon_frac < 0.78
+    moon_phase_str := "Third Quarter"
+else
+    moon_phase_str := "Waning Crescent"
+bool is_new_moon  = moon_phase_str == "New Moon"
+bool is_full_moon = moon_phase_str == "Full Moon"
+// Chart markers — small circles at New Moon (grey) and Full Moon (Tiffany Blue).
+// Placed just below the bar's low so they don't overlap price action.
+if show_moon_markers
+    if is_full_moon
+        label.new(bar_index, low - ta.atr(14) * 0.3, "●", style=label.style_none, textcolor=tiffany_blue, size=size.small)
+    else if is_new_moon
+        label.new(bar_index, low - ta.atr(14) * 0.3, "●", style=label.style_none, textcolor=color.gray, size=size.small)
+// --- AMD state machine (BEHAVIOR-driven, not session-driven) ---
+//
+//   IDLE          → no active range
+//   ACCUMULATION  → range is tight (highest-lowest over `acc_lookback` bars
+//                   < acc_atr_mult × ATR). Equal highs/lows naturally form
+//                   when price keeps bouncing inside this range. The captured
+//                   bounds (acc_high / acc_low) become the liquidity pools.
+//   MANIPULATION  → while in ACCUMULATION, price wicks past one of the bounds
+//                   by ≥ sweep_atr_mult × ATR AND closes back inside the range
+//                   (the swept liquidity pool is taken). `mani_dir` records
+//                   which side was swept (+1 = high taken → expect bearish
+//                   delivery; −1 = low taken → expect bullish delivery).
+//   DISTRIBUTION  → from MANIPULATION only: close breaks the OPPOSITE bound
+//                   by ≥ dist_atr_mult × ATR (true displacement away from the
+//                   range). Cannot be reached without a prior sweep.
+//
+// Reset rules:
+//   • If MANIPULATION isn't followed by displacement within `mani_timeout`
+//     bars, fall back to IDLE.
+//   • DISTRIBUTION auto-resets to IDLE after `dist_timeout` bars or when a
+//     fresh range begins to form.
+//   • Sessions (Asia/London/NY) play NO role in transitions. They could be
+//     used to weight probability later, but never as a gating condition.
+var string amd_phase   = "IDLE"
+var float  acc_high    = na
+var float  acc_low     = na
+var int    mani_dir    = 0       // +1 swept high, -1 swept low
+var int    mani_bar    = na
+var int    dist_bar    = na
+hi_acc       = ta.highest(acc_lookback)
+lo_acc       = ta.lowest(acc_lookback)
+range_acc    = hi_acc - lo_acc
+range_tight  = atr14_safe > 0 and range_acc < acc_atr_mult * atr14_safe
+sweep_min    = sweep_atr_mult * atr14_safe
+disp_min     = dist_atr_mult  * atr14_safe
+if amd_phase == "IDLE"
+    if range_tight
+        acc_high  := hi_acc
+        acc_low   := lo_acc
+        amd_phase := "ACCUMULATION"
+else if amd_phase == "ACCUMULATION"
+    // Refresh bounds while still ranging tight (lets equal highs/lows tighten).
+    if range_tight
+        acc_high := math.max(acc_high, hi_acc)
+        acc_low  := math.min(acc_low,  lo_acc)
+    // Sweep of the high (wick-then-reject).
+    if not na(acc_high) and high > acc_high + sweep_min and close < acc_high
+        mani_dir  := 1
+        mani_bar  := bar_index
+        amd_phase := "MANIPULATION"
+    // Sweep of the low (wick-then-reject).
+    else if not na(acc_low) and low < acc_low - sweep_min and close > acc_low
+        mani_dir  := -1
+        mani_bar  := bar_index
+        amd_phase := "MANIPULATION"
+    // Plain breakout (close beyond bound, no rejection) → range invalidated.
+    else if not na(acc_high) and close > acc_high
+        amd_phase := "IDLE"
+        acc_high  := na
+        acc_low   := na
+    else if not na(acc_low) and close < acc_low
+        amd_phase := "IDLE"
+        acc_high  := na
+        acc_low   := na
+else if amd_phase == "MANIPULATION"
+    // Distribution requires displacement on the OPPOSITE side of the sweep.
+    if mani_dir == 1 and not na(acc_low) and close < acc_low - disp_min
+        amd_phase := "DISTRIBUTION"
+        dist_bar  := bar_index
+    else if mani_dir == -1 and not na(acc_high) and close > acc_high + disp_min
+        amd_phase := "DISTRIBUTION"
+        dist_bar  := bar_index
+    else if not na(mani_bar) and (bar_index - mani_bar) > mani_timeout
+        // Sweep didn't deliver — fall back to IDLE so a new range can form.
+        amd_phase := "IDLE"
+        acc_high  := na
+        acc_low   := na
+        mani_dir  := 0
+        mani_bar  := na
+else if amd_phase == "DISTRIBUTION"
+    if not na(dist_bar) and (bar_index - dist_bar) > dist_timeout
+        amd_phase := "IDLE"
+        acc_high  := na
+        acc_low   := na
+        mani_dir  := 0
+        mani_bar  := na
+        dist_bar  := na
+acc_state  = amd_phase == "ACCUMULATION"
+mani_state = amd_phase == "MANIPULATION"
+dist_state = amd_phase == "DISTRIBUTION"
+// --- Sticky PD-array break tracking (PDH/PDL · PWH/PWL · PMH/PML) ---
+// Bias = Bullish once price breaks above the previous-period high, Bearish
+// once it breaks below the previous-period low — regardless of retracement.
+// Resets at each new period (day on intraday, week on weekly, month on
+// monthly) so the break detection is always relative to the current
+// period's PD array.
+//   period_broke_h → high has exceeded prev_h at some point this period
+//   period_broke_l → low  has gone below  prev_l at some point this period
+var bool period_broke_h = false
+var bool period_broke_l = false
+if is_new_period
+    period_broke_h := false
+    period_broke_l := false
+if not na(prev_h) and high > prev_h
+    period_broke_h := true
+if not na(prev_l) and low < prev_l
+    period_broke_l := true
+string bias_str = "Ranging"
+color  bias_col = ranging_orng
+if period_broke_h and not period_broke_l
+    bias_str := "Bullish"
+    bias_col := tiffany_blue
+else if period_broke_l and not period_broke_h
+    bias_str := "Bearish"
+    bias_col := light_purple
+else if period_broke_h and period_broke_l
+    bias_str := "Mixed Up"
+    bias_col := ranging_orng
+// --- Structure (whole-chart swing assessment) — independent of PD-array logic ---
+// Uses THREE confirmed pivot highs and THREE confirmed pivot lows to capture
+// the overall direction of the chart, not just the last swing. Bullish =
+// overall higher highs AND higher lows (newest vs oldest), Bearish = overall
+// lower highs AND lower lows, anything else = Ranging. Intermediate pivots
+// add consistency weighting to the score.
+struct_ph_now = ta.pivothigh(struct_pivot, struct_pivot)
+struct_pl_now = ta.pivotlow(struct_pivot,  struct_pivot)
+var float ph_a = na   // oldest pivot high
+var float ph_b = na   // middle pivot high
+var float ph_c = na   // newest pivot high
+var float pl_a = na   // oldest pivot low
+var float pl_b = na   // middle pivot low
+var float pl_c = na   // newest pivot low
+if not na(struct_ph_now)
+    ph_a := ph_b
+    ph_b := ph_c
+    ph_c := struct_ph_now
+if not na(struct_pl_now)
+    pl_a := pl_b
+    pl_b := pl_c
+    pl_c := struct_pl_now
+// Overall direction: compare newest pivot to oldest (captures the whole
+// picture instead of reacting to a single counter-trend swing).
+bool highs_up = not na(ph_a) and not na(ph_c) and ph_c > ph_a
+bool highs_dn = not na(ph_a) and not na(ph_c) and ph_c < ph_a
+bool lows_up  = not na(pl_a) and not na(pl_c) and pl_c > pl_a
+bool lows_dn  = not na(pl_a) and not na(pl_c) and pl_c < pl_a
+// Consistency: do intermediate pivots confirm the overall trend?
+bool h_consistent = highs_up ? (not na(ph_b) and ph_b > ph_a and ph_c > ph_b) : highs_dn ? (not na(ph_b) and ph_b < ph_a and ph_c < ph_b) : false
+bool l_consistent = lows_up  ? (not na(pl_b) and pl_b > pl_a and pl_c > pl_b) : lows_dn  ? (not na(pl_b) and pl_b < pl_a and pl_c < pl_b) : false
+string struct_str = "Ranging"
+color  struct_col = ranging_orng
+if highs_up and lows_up
+    struct_str := "Bullish"
+    struct_col := tiffany_blue
+else if highs_dn and lows_dn
+    struct_str := "Bearish"
+    struct_col := light_purple
+// Structure score — actual percentages based on swing clarity and
+// consistency. No contradictions: high scores always pair with
+// directional labels; Ranging never exceeds 50%.
+float clarity = 0.0
+if not na(ph_a) and not na(ph_c) and not na(pl_a) and not na(pl_c) and atr14_safe > 0
+    clarity := (math.abs(ph_c - ph_a) + math.abs(pl_c - pl_a)) / (2 * atr14_safe)
+float struct_score = 35.0
+if struct_str == "Bullish" or struct_str == "Bearish"
+    if h_consistent and l_consistent
+        // All 3 pivots confirm the trend — strongest signal.
+        struct_score := math.min(100.0, 80 + clarity * 10)
+    else
+        // Overall direction confirmed but intermediate pivot diverges.
+        struct_score := math.min(79.0, 60 + clarity * 10)
+else
+    // Ranging — score reflects how choppy or flat the market is.
+    if (highs_up and lows_dn) or (highs_dn and lows_up)
+        struct_score := 40   // conflicting signals
+    else if highs_up or highs_dn or lows_up or lows_dn
+        struct_score := 45   // single-sided drift
+    else
+        struct_score := 25   // completely flat
+// --- Higher-TF dashboard scoring (50 EMA / Bias / Structure / Overall) ---
+// Computed every bar so they're ready when the dashboard renders on
+// barstate.islast. The HTF dashboard activates on Daily/Weekly/Monthly TFs
+// and replaces the intraday columns (Acc/Mani/Dist) with these intelligence
+// readouts. Bias and Structure cells are reused with their existing colors.
+ema50_val = ta.ema(close, 50)
+float ema_dist = atr14_safe > 0 ? math.abs(close - ema50_val) / atr14_safe : 0.0
+float ema_score = 50.0
+// Volatility-normalised distance buckets:
+//   < 0.5 ATR  → 40–60% (price is hugging the mean)
+//   0.5–2 ATR  → 60–90% (clear directional pressure)
+//   > 2 ATR    → 90–100% (extended; strongly directional)
+if ema_dist < 0.5
+    ema_score := 40 + ema_dist * 40
+else if ema_dist < 2
+    ema_score := 60 + (ema_dist - 0.5) * 20
+else
+    ema_score := math.min(100.0, 90 + (ema_dist - 2) * 5)
+string ema_dir_str = "Neutral"
+color  ema_dir_col = ranging_orng
+int    ema_sgn = 0
+if not na(ema50_val)
+    if close > ema50_val and ema_dist >= 0.25
+        ema_dir_str := "Bullish"
+        ema_dir_col := tiffany_blue
+        ema_sgn := 1
+    else if close < ema50_val and ema_dist >= 0.25
+        ema_dir_str := "Bearish"
+        ema_dir_col := light_purple
+        ema_sgn := -1
+// Bias score — uses the same break-based logic as the intraday dashboard.
+// Broken above prev_h = Bullish, broken below prev_l = Bearish, both = Mixed
+// Up, neither = Ranging. Score reflects the magnitude of the break in ATR
+// units so the percentage is actual, not estimated.
+string bias_str_htf = bias_str
+color  bias_col_htf = bias_col
+float  bias_score   = 50.0
+bool broke_h_htf = not na(prev_h) and high > prev_h
+bool broke_l_htf = not na(prev_l) and low  < prev_l
+float h_break_dist = broke_h_htf and atr14_safe > 0 ? (high - prev_h) / atr14_safe : 0.0
+float l_break_dist = broke_l_htf and atr14_safe > 0 ? (prev_l - low)  / atr14_safe : 0.0
+if broke_h_htf and broke_l_htf
+    bias_str_htf := "Mixed Up"
+    bias_col_htf := ranging_orng
+    bias_score   := 40
+else if broke_h_htf
+    bias_str_htf := "Bullish"
+    bias_col_htf := tiffany_blue
+    bias_score   := math.min(100.0, 65 + h_break_dist * 15)
+else if broke_l_htf
+    bias_str_htf := "Bearish"
+    bias_col_htf := light_purple
+    bias_score   := math.min(100.0, 65 + l_break_dist * 15)
+else
+    bias_score := 50
+int bias_sgn   = bias_str_htf == "Bullish" ? 1 : bias_str_htf == "Bearish" ? -1 : 0
+int struct_sgn = struct_str == "Bullish" ? 1 : struct_str == "Bearish" ? -1 : 0
+float avg_score = (ema_score + bias_score + struct_score) / 3.0
+// Majority direction: at least 2 of 3 signals agree.
+int dir_sum = ema_sgn + bias_sgn + struct_sgn
+int majority_dir = dir_sum >= 2 ? 1 : dir_sum <= -2 ? -1 : 0
+// Quality label is driven purely by the percentage so there are never
+// contradictions (e.g. 82% labelled "Weak").
+// Colors: Strong = Tiffany Blue, Weak = Light Purple, Moderate = Orange.
+// Direction (Bullish / Bearish) is appended when majority_dir is clear.
+string overall_str = "Weak"
+color  overall_col = light_purple
+if avg_score >= 80 and majority_dir == 1
+    overall_str := "Strong Bullish"
+    overall_col := tiffany_blue
+else if avg_score >= 80 and majority_dir == -1
+    overall_str := "Strong Bearish"
+    overall_col := tiffany_blue
+else if avg_score >= 80
+    overall_str := "Strong"
+    overall_col := tiffany_blue
+else if avg_score >= 60
+    overall_str := "Moderate"
+    overall_col := ranging_orng
+else if avg_score >= 40 and majority_dir == 1
+    overall_str := "Weak Bullish"
+    overall_col := light_purple
+else if avg_score >= 40 and majority_dir == -1
+    overall_str := "Weak Bearish"
+    overall_col := light_purple
+else if avg_score >= 40
+    overall_str := "Weak"
+    overall_col := light_purple
+else
+    overall_str := "Poor"
+    overall_col := color.gray
+// --- Numerology helpers (Day's Path / Day's No.) ---
+// Master-number-aware digital root: keep reducing while the value is > 9 and
+// not one of {11, 22, 33}. Sum-of-digits handles negative inputs defensively.
+sum_digits(int n) =>
+    int s = 0
+    int t = math.abs(n)
+    while t > 0
+        s += t % 10
+        t := int(t / 10)
+    s
+reduce_master(int n) =>
+    int x = n
+    while x > 9 and x != 11 and x != 22 and x != 33
+        x := sum_digits(x)
+    x
+// Day's Path = digital-root of (year + month + day) using ALL digits of the
+// date. e.g. 2026-04-27 → 2+0+2+6 + 4 + 2+7 = 23 → 2+3 = 5 (no master hit).
+// Day's No.  = digital-root of just the day-of-month digits, master-aware.
+int dpd_year  = year(time, tz)
+int dpd_month = month(time, tz)
+int dpd_day   = dayofmonth(time, tz)
+int dpd_raw   = sum_digits(dpd_year) + sum_digits(dpd_month) + sum_digits(dpd_day)
+int days_path = reduce_master(dpd_raw)
+int days_no   = reduce_master(dpd_day)
+// HTF dashboard activates on Daily / Weekly / Monthly TFs. Below that we
+// keep the intraday layout (Acc / Mani / Dist / Bias / Structure / Path /
+// Day's No.). The two layouts are mutually exclusive on any given chart.
+bool is_htf_dash = timeframe.isdaily or timeframe.isweekly or timeframe.ismonthly
+if show_dash and barstate.islast
+    head_bg = color.new(#B0B0B0, 0)
+    cell_bg = color.new(#D8D8D8, 0)
+    head_tx = color.black
+    if is_htf_dash
+        // ---- HTF layout: 50 EMA | Bias | Structure | Moon Cycle | Overall Score Quality ----
+        // 3 rows: header, value (label/colour), score (percentage).
+        int htf_cols = 4 + (show_col_moon ? 1 : 0)
+        table.delete(dash)
+        dash := table.new(position.bottom_right, htf_cols, 3, bgcolor=color.new(color.gray, 30), border_width=1, border_color=color.new(color.black, 50))
+        int hc = 0
+        // Col — 50 EMA
+        table.cell(dash, hc, 0, "50 EMA",       text_color=head_tx,    bgcolor=head_bg, text_size=size.small)
+        table.cell(dash, hc, 1, ema_dir_str,    text_color=ema_dir_col, bgcolor=cell_bg, text_size=size.small)
+        table.cell(dash, hc, 2, str.tostring(math.round(ema_score)) + "%",    text_color=color.black, bgcolor=cell_bg, text_size=size.small)
+        hc += 1
+        // Col — Bias
+        table.cell(dash, hc, 0, "Bias",         text_color=head_tx,    bgcolor=head_bg, text_size=size.small)
+        table.cell(dash, hc, 1, bias_str_htf,   text_color=bias_col_htf, bgcolor=cell_bg, text_size=size.small)
+        table.cell(dash, hc, 2, str.tostring(math.round(bias_score)) + "%",   text_color=color.black, bgcolor=cell_bg, text_size=size.small)
+        hc += 1
+        // Col — Structure
+        table.cell(dash, hc, 0, "Structure",    text_color=head_tx,    bgcolor=head_bg, text_size=size.small)
+        table.cell(dash, hc, 1, struct_str,     text_color=struct_col, bgcolor=cell_bg, text_size=size.small)
+        table.cell(dash, hc, 2, str.tostring(math.round(struct_score)) + "%", text_color=color.black, bgcolor=cell_bg, text_size=size.small)
+        hc += 1
+        // Col — Moon Cycle (optional)
+        if show_col_moon
+            color htf_moon_col = is_full_moon ? tiffany_blue : is_new_moon ? color.gray : color.black
+            table.cell(dash, hc, 0, "Moon Cycle", text_color=head_tx, bgcolor=head_bg, text_size=size.small)
+            table.cell(dash, hc, 1, moon_phase_str, text_color=htf_moon_col, bgcolor=cell_bg, text_size=size.small)
+            table.cell(dash, hc, 2, "", text_color=color.black, bgcolor=cell_bg, text_size=size.small)
+            hc += 1
+        // Col — Overall Score Quality
+        table.cell(dash, hc, 0, "Overall Score Quality", text_color=head_tx, bgcolor=head_bg, text_size=size.small)
+        table.cell(dash, hc, 1, overall_str,    text_color=overall_col, bgcolor=cell_bg, text_size=size.small)
+        table.cell(dash, hc, 2, str.tostring(math.round(avg_score))   + "%", text_color=color.black, bgcolor=cell_bg, text_size=size.small)
+    else
+        // ---- Intraday layout: existing AMD columns + Bias + Structure + numerology ----
+        // Recompute active column count each bar so toggles take effect live.
+        int active_cols = 0
+        if show_col_acc
+            active_cols += 1
+        if show_col_mani
+            active_cols += 1
+        if show_col_dist
+            active_cols += 1
+        if show_col_moon
+            active_cols += 1
+        if show_col_bias
+            active_cols += 1
+        if show_col_struct
+            active_cols += 1
+        if show_col_path
+            active_cols += 1
+        if show_col_dayno
+            active_cols += 1
+        if active_cols > 0
+            // Recreate table so it sizes itself to only the enabled columns.
+            table.delete(dash)
+            dash := table.new(position.bottom_right, active_cols, 2, bgcolor=color.new(color.gray, 30), border_width=1, border_color=color.new(color.black, 50))
+            int c = 0
+            if show_col_acc
+                table.cell(dash, c, 0, "Accumulation", text_color=head_tx, bgcolor=head_bg, text_size=size.small)
+                table.cell(dash, c, 1, acc_state  ? "✓" : "·", text_color=color.black, bgcolor=cell_bg, text_size=size.normal)
+                c += 1
+            if show_col_mani
+                table.cell(dash, c, 0, "Manipulation", text_color=head_tx, bgcolor=head_bg, text_size=size.small)
+                table.cell(dash, c, 1, mani_state ? "✓" : "·", text_color=color.black, bgcolor=cell_bg, text_size=size.normal)
+                c += 1
+            if show_col_dist
+                table.cell(dash, c, 0, "Distribution", text_color=head_tx, bgcolor=head_bg, text_size=size.small)
+                table.cell(dash, c, 1, dist_state ? "✓" : "·", text_color=color.black, bgcolor=cell_bg, text_size=size.normal)
+                c += 1
+            if show_col_moon
+                color moon_cell_col = is_full_moon ? tiffany_blue : is_new_moon ? color.gray : color.black
+                table.cell(dash, c, 0, "Moon Cycle", text_color=head_tx, bgcolor=head_bg, text_size=size.small)
+                table.cell(dash, c, 1, moon_phase_str, text_color=moon_cell_col, bgcolor=cell_bg, text_size=size.small)
+                c += 1
+            if show_col_bias
+                table.cell(dash, c, 0, "Bias", text_color=head_tx, bgcolor=head_bg, text_size=size.small)
+                table.cell(dash, c, 1, bias_str, text_color=bias_col, bgcolor=cell_bg, text_size=size.small)
+                c += 1
+            if show_col_struct
+                // Structure column sits immediately to the right of Bias on
+                // every TF (intraday here, HTF above). Independent of PD logic.
+                table.cell(dash, c, 0, "Structure", text_color=head_tx, bgcolor=head_bg, text_size=size.small)
+                table.cell(dash, c, 1, struct_str, text_color=struct_col, bgcolor=cell_bg, text_size=size.small)
+                c += 1
+            if show_col_path
+                table.cell(dash, c, 0, "Day's Path", text_color=head_tx, bgcolor=head_bg, text_size=size.small)
+                table.cell(dash, c, 1, str.tostring(days_path), text_color=color.black, bgcolor=cell_bg, text_size=size.normal)
+                c += 1
+            if show_col_dayno
+                table.cell(dash, c, 0, "Day's No.", text_color=head_tx, bgcolor=head_bg, text_size=size.small)
+                table.cell(dash, c, 1, str.tostring(days_no), text_color=color.black, bgcolor=cell_bg, text_size=size.normal)
+                c += 1
+// ================= MODULE 8 — DRAWING MAINTENANCE & LABEL UPDATES =================
+if barstate.islast
+    if not na(prev_h) and not na(l_high)
+        line.set_x2(l_high, time)
+        line.set_x2(l_low,  time)
+        if not na(l_mid)
+            line.set_x2(l_mid, time)
+    if not na(lab_h)
+        label.set_x(lab_h, bar_index + offset_pd)
+        label.set_x(lab_l, bar_index + offset_pd)
+    if not na(lnL_LabH)
+        label.set_x(lnL_LabH, bar_index + offset_london)
+    if not na(lnL_LabL)
+        label.set_x(lnL_LabL, bar_index + offset_london)
+    // Keep the OB half-line and its label tracking the right side of the
+    // chart so the level remains visible until invalidated.
+    if not na(ob_ln)
+        line.set_x2(ob_ln, bar_index + ob_length)
+    if not na(ob_lb)
+        label.set_x(ob_lb, bar_index + ob_length)
+    if not na(ath_label)
+        label.set_x(ath_label, bar_index + ath_label_off)
+    // Trend channel projection: keep both lines anchored to the chart by
+    // pushing their right edge to (current bar + trend_extend_bars). The
+    // y-value is extrapolated from the last two pivots so the slope is preserved.
+    if not na(trend_high_ln) and not na(th1) and not na(th2) and not na(th1_b) and not na(th2_b) and (th2_b - th1_b) > 0
+        int   th_x2m = bar_index + trend_extend_bars
+        float th_sm  = (th2 - th1) / (th2_b - th1_b)
+        line.set_xy2(trend_high_ln, th_x2m, th2 + th_sm * (th_x2m - th2_b))
+    if not na(trend_low_ln) and not na(tl1) and not na(tl2) and not na(tl1_b) and not na(tl2_b) and (tl2_b - tl1_b) > 0
+        int   tl_x2m = bar_index + trend_extend_bars
+        float tl_sm  = (tl2 - tl1) / (tl2_b - tl1_b)
+        line.set_xy2(trend_low_ln, tl_x2m, tl2 + tl_sm * (tl_x2m - tl2_b))
+    if not na(ash_lb)
+        label.set_x(ash_lb, bar_index + offset_session)
+    if not na(asl_lb)
+        label.set_x(asl_lb, bar_index + offset_session)
+    if not na(lsh_lb)
+        label.set_x(lsh_lb, bar_index + offset_session)
+    if not na(lsl_lb)
+        label.set_x(lsl_lb, bar_index + offset_session)
+    if not na(nwog_box) and not na(nwog_left_t)
+        box.set_right(nwog_box, time)
+        if not na(nwog_lab)
+            // Keep label tracking the right edge (bar_index) of the box so it
+            // always sits inside the visible portion of the rectangle.
+            label.set_x(nwog_lab, bar_index)
+    if not na(nmog_box) and not na(nmog_left_t)
+        box.set_right(nmog_box, time)
+        if not na(nmog_lab)
+            label.set_x(nmog_lab, bar_index)
+    if array.size(umg_boxes) > 0
+        for i = 0 to array.size(umg_boxes) - 1
+            lb_b_u = array.get(umg_left_b, i)
+            // Defensive guard: skip any item that somehow slipped past the
+            // age eviction (shouldn't happen, but Pine errors here are fatal).
+            if bar_index - lb_b_u <= BAR_IDX_HISTORY_LIMIT
+                rb_u     = math.max(bar_index, lb_b_u + umg_min_w)
+                center_u = (lb_b_u + rb_u) / 2
+                box.set_right(array.get(umg_boxes, i), rb_u)
+                label.set_x(array.get(umg_labels, i), center_u)
+    if array.size(zn_boxes) > 0
+        for i = 0 to array.size(zn_boxes) - 1
+            lb_b_z = array.get(zn_left_b, i)
+            if bar_index - lb_b_z <= BAR_IDX_HISTORY_LIMIT
+                rb_z     = math.max(bar_index, lb_b_z + zone_min_w)
+                center_z = (lb_b_z + rb_z) / 2
+                box.set_right(array.get(zn_boxes, i), rb_z)
+                label.set_x(array.get(zn_labels, i), center_z)
+    if array.size(fvg_boxes) > 0
+        for i = 0 to array.size(fvg_boxes) - 1
+            b_fvg = array.get(fvg_boxes, i)
+            if bar_index - box.get_left(b_fvg) <= BAR_IDX_HISTORY_LIMIT
+                box.set_right(b_fvg, bar_index)
+    if show_sr and array.size(sr_labels) > 0
+        for i = 0 to array.size(sr_labels) - 1
+            lb_sr = array.get(sr_labels, i)
+            if not na(lb_sr)
+                label.set_x(lb_sr, bar_index + 5)
+ 
