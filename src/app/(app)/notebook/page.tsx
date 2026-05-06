@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ExternalLink, Plus, Save, StickyNote, Trash2, X } from "lucide-react";
+import { ExternalLink, Pencil, Plus, Save, StickyNote, Trash2, X } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty } from "@/components/ui/empty";
@@ -322,6 +322,15 @@ export default function NotebookPage() {
     const nextNotes = notes.filter((n) => n.id !== id);
     setNotes(nextNotes);
     if (openNote?.id === id) setOpenNote(null);
+    await persist({ notebook_notes: nextNotes });
+  }
+
+  // Replace a note in-place (id-matched) and persist. Used by the
+  // NoteModal's pencil-edit flow.
+  async function updateNote(next: NotebookNote) {
+    const nextNotes = notes.map((n) => (n.id === next.id ? next : n));
+    setNotes(nextNotes);
+    if (openNote?.id === next.id) setOpenNote(next);
     await persist({ notebook_notes: nextNotes });
   }
 
@@ -751,6 +760,7 @@ export default function NotebookPage() {
           note={openNote}
           onClose={() => setOpenNote(null)}
           onDelete={() => deleteNote(openNote.id)}
+          onSave={updateNote}
         />
       )}
         </>
@@ -762,65 +772,161 @@ export default function NotebookPage() {
 function NoteModal({
   note,
   onClose,
-  onDelete
+  onDelete,
+  onSave
 }: {
   note: NotebookNote;
   onClose: () => void;
   onDelete: () => void;
+  onSave: (next: NotebookNote) => Promise<void>;
 }) {
   const captureRef = useRef<HTMLDivElement>(null);
+  const [editing, setEditing] = useState(false);
+  const [draftName, setDraftName] = useState(note.name);
+  const [draftBody, setDraftBody] = useState(note.body);
+  const [saving, setSaving] = useState(false);
   const safeName = note.name.replace(/[^a-z0-9-_ ]/gi, "").trim() || "note";
+
+  // Prefer the latest edit timestamp over the original created_at when
+  // showing "saved X" in the header — tells the user when they last
+  // touched the note.
+  const savedLabel = note.updated_at ?? note.created_at;
+  const hasEdit = Boolean(note.updated_at && note.updated_at !== note.created_at);
+
+  function startEditing() {
+    setDraftName(note.name);
+    setDraftBody(note.body);
+    setEditing(true);
+  }
+
+  function cancelEditing() {
+    setDraftName(note.name);
+    setDraftBody(note.body);
+    setEditing(false);
+  }
+
+  async function commitEditing() {
+    const name = draftName.trim();
+    if (!name) return;
+    setSaving(true);
+    try {
+      await onSave({
+        ...note,
+        name,
+        body: draftBody,
+        updated_at: new Date().toISOString()
+      });
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div
       className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/60 p-4"
-      onClick={onClose}
+      onClick={() => {
+        // Discard unsaved edits rather than silently persist them on
+        // background click — matches the header's Cancel button.
+        if (editing) return;
+        onClose();
+      }}
     >
       <div
         className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl border border-line bg-bg-elevated p-5 shadow-card"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h3 className="truncate text-base font-semibold">{note.name}</h3>
+          <div className="min-w-0 flex-1">
+            {editing ? (
+              <Input
+                value={draftName}
+                onChange={(e) => setDraftName(e.target.value)}
+                placeholder="Note name"
+                className="text-base font-semibold"
+              />
+            ) : (
+              <h3 className="truncate text-base font-semibold">{note.name}</h3>
+            )}
             <div className="mt-0.5 text-[11px] text-fg-subtle">
-              Saved {formatNoteTimestamp(note.created_at)}
+              {hasEdit ? "Edited" : "Saved"} {formatNoteTimestamp(savedLabel)}
             </div>
           </div>
           <div className="flex items-center gap-2" data-screenshot-ignore="true">
-            <button
-              type="button"
-              onClick={onDelete}
-              className="inline-flex items-center gap-1 rounded-lg border border-line px-2 py-1 text-xs text-fg-muted hover:border-danger hover:text-danger"
-            >
-              <Trash2 className="h-3.5 w-3.5" /> Delete
-            </button>
-            <ScreenshotButton
-              targetRef={captureRef}
-              filename={`note-${safeName}`}
-              label="Save note as PNG"
-            />
-            <button
-              type="button"
-              onClick={onClose}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-line bg-bg text-fg-muted transition hover:border-danger hover:text-danger"
-              aria-label="Close note"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            {editing ? (
+              <>
+                <button
+                  type="button"
+                  onClick={cancelEditing}
+                  disabled={saving}
+                  className="inline-flex items-center gap-1 rounded-lg border border-line px-2 py-1 text-xs text-fg-muted hover:border-fg hover:text-fg disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <Button onClick={commitEditing} disabled={saving || !draftName.trim()}>
+                  <Save className="h-4 w-4" /> {saving ? "Saving…" : "Save"}
+                </Button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={startEditing}
+                  className="inline-flex items-center gap-1 rounded-lg border border-line px-2 py-1 text-xs text-fg-muted hover:border-brand-400 hover:text-brand-200"
+                  aria-label="Edit note"
+                >
+                  <Pencil className="h-3.5 w-3.5" /> Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={onDelete}
+                  className="inline-flex items-center gap-1 rounded-lg border border-line px-2 py-1 text-xs text-fg-muted hover:border-danger hover:text-danger"
+                >
+                  <Trash2 className="h-3.5 w-3.5" /> Delete
+                </button>
+                <ScreenshotButton
+                  targetRef={captureRef}
+                  filename={`note-${safeName}`}
+                  label="Save note as PNG"
+                />
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-line bg-bg text-fg-muted transition hover:border-danger hover:text-danger"
+                  aria-label="Close note"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </>
+            )}
           </div>
         </div>
-        <div
-          ref={captureRef}
-          className="overflow-y-auto whitespace-pre-wrap rounded-xl border border-line bg-bg-soft/40 p-4 text-sm text-fg"
-        >
-          <div className="mb-3 border-b border-line pb-2 text-xs text-fg-muted">
-            <div className="font-semibold text-fg">{note.name}</div>
+        {editing ? (
+          <div className="flex flex-1 flex-col gap-2 overflow-hidden">
+            <Textarea
+              value={draftBody}
+              onChange={(e) => setDraftBody(e.target.value)}
+              placeholder="Type your note here…"
+              className="min-h-[300px] flex-1 resize-y whitespace-pre-wrap rounded-xl border border-line bg-bg-soft/40 p-4 text-sm text-fg"
+            />
             <div className="text-[11px] text-fg-subtle">
-              {formatNoteTimestamp(note.created_at)}
+              Tip: line breaks are preserved exactly as typed.
             </div>
           </div>
-          {note.body || <em className="text-fg-subtle">This note is empty.</em>}
-        </div>
+        ) : (
+          <div
+            ref={captureRef}
+            className="overflow-y-auto whitespace-pre-wrap rounded-xl border border-line bg-bg-soft/40 p-4 text-sm text-fg"
+          >
+            <div className="mb-3 border-b border-line pb-2 text-xs text-fg-muted">
+              <div className="font-semibold text-fg">{note.name}</div>
+              <div className="text-[11px] text-fg-subtle">
+                {formatNoteTimestamp(savedLabel)}
+              </div>
+            </div>
+            {note.body || <em className="text-fg-subtle">This note is empty.</em>}
+          </div>
+        )}
       </div>
     </div>
   );

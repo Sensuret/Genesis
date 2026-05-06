@@ -191,6 +191,8 @@ export type NotebookNote = {
   body: string;
   /** ISO timestamp of when the note was first saved. */
   created_at: string;
+  /** ISO timestamp of the most recent edit. Optional for legacy rows. */
+  updated_at?: string;
 };
 
 export type NotebookEmbed = {
