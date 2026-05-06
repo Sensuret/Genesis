@@ -69,18 +69,21 @@ function sameTradeSet(a: TradeRow[], b: TradeRow[]): boolean {
   return maxA === maxB;
 }
 
+/**
+ * TradeFileRow has no single `updated_at` timestamp to diff against, and we
+ * update individual fields (broker tz override, account metadata, trade
+ * counts, last-synced timestamps, balances…) from multiple code paths — so
+ * a narrow per-field list would silently drop any future editable column
+ * and reintroduce the "stale dropdown reverts" class of bugs. JSON.stringify
+ * on a small list (typically < 20 files per user) is cheap and catches every
+ * possible mutation, including future schema additions.
+ */
 function sameFileSet(a: TradeFileRow[], b: TradeFileRow[]): boolean {
   if (a === b) return true;
   if (a.length !== b.length) return false;
   if (a.length === 0) return true;
-  for (let i = 0; i < a.length; i++) {
-    const fa = a[i];
-    const fb = b[i];
-    if (fa.id !== fb.id) return false;
-    if (fa.trade_count !== fb.trade_count) return false;
-    if ((fa.last_synced_at ?? null) !== (fb.last_synced_at ?? null)) return false;
-  }
-  return true;
+  // PostgREST returns files sorted by created_at desc, so positions align.
+  return JSON.stringify(a) === JSON.stringify(b);
 }
 
 /**
