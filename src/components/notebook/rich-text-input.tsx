@@ -135,8 +135,19 @@ export const RichTextInput = forwardRef<RichTextInputHandle, RichTextInputProps>
     const fireChange = useCallback(() => {
       const el = elRef.current;
       if (!el) return;
-      const cleanHtml = sanitizeInlineHtml(el.innerHTML);
+      let cleanHtml = sanitizeInlineHtml(el.innerHTML);
       const plainText = htmlToPlainText(cleanHtml);
+      // When the user deletes all text, browsers keep a stray `<br>`
+      // inside the contentEditable so the caret has somewhere to sit.
+      // That stray `<br>` means the element no longer matches `:empty`,
+      // so the CSS placeholder (including the "/" hint) never comes
+      // back. Detect the effectively-empty state and flush the DOM +
+      // persisted html to "" so the next render shows the placeholder
+      // again.
+      if (!plainText.trim()) {
+        if (el.innerHTML !== "") el.innerHTML = "";
+        cleanHtml = "";
+      }
       lastSeededRef.current = cleanHtml;
       onChange({ html: cleanHtml, text: plainText });
     }, [onChange]);
