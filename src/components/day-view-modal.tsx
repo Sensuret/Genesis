@@ -163,7 +163,7 @@ export function DayViewModal({ date, trades, balanceFallback = null, onClose }: 
                 <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-5 py-3 text-xs">
                   <div className="text-fg-muted">
                     Average risk-to-reward for the day, calculated from each trade&apos;s entry,
-                    stop-loss and exit prices. Reads as &ldquo;risking $1 to make $X&rdquo;.
+                    stop-loss and exit prices.
                   </div>
                   <div className="flex flex-wrap items-center gap-4">
                     <div>
