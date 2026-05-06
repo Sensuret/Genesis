@@ -136,17 +136,21 @@ export const RichTextInput = forwardRef<RichTextInputHandle, RichTextInputProps>
       const el = elRef.current;
       if (!el) return;
       let cleanHtml = sanitizeInlineHtml(el.innerHTML);
-      const plainText = htmlToPlainText(cleanHtml);
+      let plainText = htmlToPlainText(cleanHtml);
       // When the user deletes all text, browsers keep a stray `<br>`
       // inside the contentEditable so the caret has somewhere to sit.
-      // That stray `<br>` means the element no longer matches `:empty`,
-      // so the CSS placeholder (including the "/" hint) never comes
-      // back. Detect the effectively-empty state and flush the DOM +
-      // persisted html to "" so the next render shows the placeholder
-      // again.
+      // That stray `<br>` means:
+      //  - the element no longer matches `:empty`, so the CSS
+      //    placeholder (including the "/" hint) never comes back, and
+      //  - `htmlToPlainText("<br>")` returns "\n", which leaks upstream
+      //    and breaks BlockEditor's `block.text === ""` check for
+      //    Backspace-to-delete-empty.
+      // Detect the effectively-empty state and flush BOTH the DOM and
+      // the emitted text/html to "".
       if (!plainText.trim()) {
         if (el.innerHTML !== "") el.innerHTML = "";
         cleanHtml = "";
+        plainText = "";
       }
       lastSeededRef.current = cleanHtml;
       onChange({ html: cleanHtml, text: plainText });
