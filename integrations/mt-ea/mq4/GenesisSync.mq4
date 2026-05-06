@@ -38,7 +38,8 @@ input string SupabaseUrl       = "https://YOUR-PROJECT-REF.supabase.co"; // Supa
 input string GenesisApiKey     = "gs_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"; // Generate in Genesis → Settings → Accounts
 input string AccountLabel      = "";                                      // Optional friendly label (defaults to AccountName())
 input int    PollSeconds       = 30;                                      // Background poll while idle
-input int    HistoryDays       = 30;                                      // How far back to scan on EA start
+input int    HistoryDays       = 365;                                     // Backfill window in days (0 = all history)
+input bool   VerboseLog        = true;                                    // Print every posted/skipped trade
 
 string g_endpoint = "";
 string g_seenFile = "";
@@ -65,6 +66,9 @@ int OnInit()
   Print("[Genesis] EA initialised. Endpoint=", g_endpoint, " Account=", AccountNumber());
   // Seed the seen-set so we don't blast the server with old history every restart.
   EnsureSeenFolder();
+  // Heartbeat first so the Genesis wizard flips to Connected even when
+  // there are zero closed trades in the lookback window.
+  SendHeartbeat();
   // Initial backfill of recent history
   BackfillHistory();
   return INIT_SUCCEEDED;
@@ -152,6 +156,25 @@ bool PostJson(string body)
     return false;
   }
   return true;
+}
+
+// Heartbeat: lets the Genesis app know this account is online even when
+// there are no closed trades in the lookback window. Without this, the
+// EA setup wizard's "Waiting for first ping…" banner would stay forever
+// on a fresh account that hasn't traded in the last `HistoryDays` days.
+void SendHeartbeat()
+{
+  string accLabel = (StringLen(AccountLabel) > 0) ? AccountLabel : AccountName();
+  string body = "{";
+  body += Q("kind",           "heartbeat");
+  body += Q("account_number", IntegerToString(AccountNumber()));
+  body += Q("account_name",   accLabel);
+  body += Q("broker",         AccountCompany());
+  body += Q("server",         AccountServer());
+  body += Q("platform",       "MT4");
+  body += Q("ticket",         "heartbeat", true);
+  body += "}";
+  PostJson(body);
 }
 
 //+------------------------------------------------------------------+
@@ -254,17 +277,34 @@ void ScanOpen()
 //+------------------------------------------------------------------+
 void ScanHistory()
 {
-  datetime cutoff = TimeCurrent() - (datetime)(HistoryDays * 86400);
-  for(int i = OrdersHistoryTotal() - 1; i >= 0; i--)
+  // HistoryDays = 0 means "everything". Treat any non-positive value as
+  // "no cutoff" so the cutoff comparison below always passes.
+  datetime cutoff = (HistoryDays <= 0) ? (datetime)0
+                                       : TimeCurrent() - (datetime)(HistoryDays * 86400);
+  int total = OrdersHistoryTotal();
+  if(VerboseLog) Print("[Genesis] ScanHistory cutoff=", TimeToString(cutoff, TIME_DATE), " total=", total);
+  int posted = 0, skipped = 0;
+  for(int i = total - 1; i >= 0; i--)
   {
     if(!OrderSelect(i, SELECT_BY_POS, MODE_HISTORY)) continue;
     if(OrderCloseTime() < cutoff) continue;
     if(OrderType() > OP_SELL) continue; // skip non-trade entries (deposits, etc.)
     string fp = Fingerprint(OrderTicket(), true, OrderStopLoss(), OrderTakeProfit(), OrderProfit());
-    if(IsSeen(fp)) continue;
+    if(IsSeen(fp))
+    {
+      skipped++;
+      if(VerboseLog) Print("[Genesis] skipped seen ticket=", OrderTicket(), " (", OrderSymbol(), ")");
+      continue;
+    }
     string body = BuildPayload(OrderTicket(), true);
-    if(PostJson(body)) MarkSeen(fp);
+    if(PostJson(body))
+    {
+      MarkSeen(fp);
+      posted++;
+      if(VerboseLog) Print("[Genesis] posted ticket=", OrderTicket(), " (", OrderSymbol(), " profit=", DoubleToString(OrderProfit(), 2), ")");
+    }
   }
+  if(VerboseLog) Print("[Genesis] ScanHistory done — posted=", posted, " skipped_seen=", skipped);
 }
 
 void BackfillHistory()
@@ -279,6 +319,7 @@ void BackfillHistory()
 //+------------------------------------------------------------------+
 void OnTimer()
 {
+  SendHeartbeat();
   ScanOpen();
   ScanHistory();
   g_lastPoll = TimeCurrent();

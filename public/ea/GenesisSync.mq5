@@ -22,7 +22,8 @@ input string SupabaseUrl    = "https://YOUR-PROJECT-REF.supabase.co"; // Supabas
 input string GenesisApiKey  = "gs_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"; // Generate in Genesis → Settings → Accounts
 input string AccountLabel   = "";                                     // Optional friendly label
 input int    PollSeconds    = 30;                                     // Background poll while idle
-input int    HistoryDays    = 30;                                     // Backfill window on EA start
+input int    HistoryDays    = 365;                                    // Backfill window in days (0 = all history)
+input bool   VerboseLog     = true;                                   // Print every posted/skipped trade
 
 string g_endpoint   = "";
 string g_seenFile   = "";
@@ -99,6 +100,25 @@ bool PostJson(string body)
     return false;
   }
   return true;
+}
+
+// Heartbeat: lets the Genesis app know this account is online even when
+// there are no closed trades in the lookback window. Without this, the
+// EA setup wizard's "Waiting for first ping…" banner would stay forever
+// on a fresh account that hasn't traded in the last `HistoryDays` days.
+void SendHeartbeat()
+{
+  string label = (StringLen(AccountLabel) > 0) ? AccountLabel : AccountInfoString(ACCOUNT_NAME);
+  string body = "{";
+  body += Q("kind",            "heartbeat");
+  body += Q("account_number",  (string)AccountInfoInteger(ACCOUNT_LOGIN));
+  body += Q("account_name",    label);
+  body += Q("broker",          AccountInfoString(ACCOUNT_COMPANY));
+  body += Q("server",          AccountInfoString(ACCOUNT_SERVER));
+  body += Q("platform",        "MT5");
+  body += Q("ticket",          "heartbeat", true);
+  body += "}";
+  PostJson(body);
 }
 
 string SideFromType(ENUM_POSITION_TYPE t)
@@ -195,9 +215,19 @@ void ScanOpenPositions()
 //+------------------------------------------------------------------+
 void ScanHistory()
 {
-  datetime from = TimeCurrent() - (datetime)(HistoryDays * 86400);
-  if(!HistorySelect(from, TimeCurrent())) return;
+  // HistoryDays = 0 means "everything the broker has". MT5's epoch (D'1970')
+  // is the safe lower bound that every server accepts.
+  datetime from = (HistoryDays <= 0)
+    ? (datetime)0
+    : TimeCurrent() - (datetime)(HistoryDays * 86400);
+  if(!HistorySelect(from, TimeCurrent()))
+  {
+    if(VerboseLog) Print("[Genesis] HistorySelect failed err=", GetLastError());
+    return;
+  }
   int total = HistoryDealsTotal();
+  if(VerboseLog) Print("[Genesis] ScanHistory from=", TimeToString(from, TIME_DATE), " total_deals=", total);
+  int posted = 0, skipped = 0;
   for(int i = total - 1; i >= 0; i--)
   {
     ulong dealTicket = HistoryDealGetTicket(i);
@@ -242,7 +272,12 @@ void ScanHistory()
     }
 
     string fp = Fingerprint(positionTicket, true, 0, 0, profit);
-    if(IsSeen(fp)) continue;
+    if(IsSeen(fp))
+    {
+      skipped++;
+      if(VerboseLog) Print("[Genesis] skipped seen ticket=", positionTicket, " (", symbol, ")");
+      continue;
+    }
 
     string label = (StringLen(AccountLabel) > 0) ? AccountLabel : AccountInfoString(ACCOUNT_NAME);
     string body = "{";
@@ -264,8 +299,14 @@ void ScanHistory()
     body += Q("open_time",      FormatTime(openTime));
     body += Q("close_time",     FormatTime(closeTime), true);
     body += "}";
-    if(PostJson(body)) MarkSeen(fp);
+    if(PostJson(body))
+    {
+      MarkSeen(fp);
+      posted++;
+      if(VerboseLog) Print("[Genesis] posted ticket=", positionTicket, " (", symbol, " ", side, " ", DoubleToString(lots, 2), " profit=", DoubleToString(profit, 2), ")");
+    }
   }
+  if(VerboseLog) Print("[Genesis] ScanHistory done — posted=", posted, " skipped_seen=", skipped);
 }
 
 int OnInit()
@@ -275,6 +316,7 @@ int OnInit()
   EventSetTimer(PollSeconds);
   EnsureSeenFolder();
   Print("[Genesis] EA initialised. Endpoint=", g_endpoint, " Account=", AccountInfoInteger(ACCOUNT_LOGIN));
+  SendHeartbeat();
   ScanHistory();
   ScanOpenPositions();
   g_lastPoll = TimeCurrent();
@@ -285,6 +327,7 @@ void OnDeinit(const int reason) { EventKillTimer(); }
 
 void OnTimer()
 {
+  SendHeartbeat();
   ScanOpenPositions();
   ScanHistory();
   g_lastPoll = TimeCurrent();

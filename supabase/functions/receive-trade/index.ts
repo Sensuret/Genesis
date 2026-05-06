@@ -69,6 +69,9 @@ async function sha256Hex(input: string): Promise<string> {
 }
 
 type TradePayload = {
+  // "heartbeat" → register/refresh the trade_files row only, no trade
+  // upsert. Anything else (or missing) is treated as a normal trade.
+  kind?: string | null;
   account_number: string;
   account_name?: string | null;
   broker?: string | null;
@@ -136,11 +139,15 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: "Invalid JSON body" }, 400);
   }
 
+  const isHeartbeat = body.kind === "heartbeat";
+
   let accountNumber: string;
   let ticket: string;
   try {
     accountNumber = requireString(body.account_number, "account_number");
-    ticket = requireString(body.ticket, "ticket");
+    // Heartbeat payloads carry a sentinel "heartbeat" ticket so this stays
+    // a string field, but we never write it into the trades table.
+    ticket = isHeartbeat ? "heartbeat" : requireString(body.ticket, "ticket");
   } catch (err) {
     return jsonResponse({ error: (err as Error).message }, 400);
   }
@@ -161,6 +168,27 @@ Deno.serve(async (req: Request) => {
   }
   if (!keyRow || keyRow.revoked_at) {
     return jsonResponse({ error: "Invalid or revoked API key" }, 401);
+  }
+
+  if (isHeartbeat) {
+    // Heartbeat path: just register/refresh the trade_files row so the
+    // Genesis app sees the account online. No trade rows touched.
+    const { error: hbErr } = await supabase.rpc("register_ea_account", {
+      p_user_id: keyRow.user_id,
+      p_account_number: accountNumber,
+      p_account_name: body.account_name ?? null,
+      p_broker: body.broker ?? null,
+      p_server: body.server ?? null,
+      p_platform: body.platform ?? null
+    });
+    if (hbErr) {
+      return jsonResponse({ error: hbErr.message }, 500);
+    }
+    await supabase
+      .from("genesis_api_keys")
+      .update({ last_used_at: new Date().toISOString() })
+      .eq("id", keyRow.id);
+    return jsonResponse({ ok: true, kind: "heartbeat" });
   }
 
   const { error: rpcErr, data: ingested } = await supabase.rpc("ingest_ea_trade", {
