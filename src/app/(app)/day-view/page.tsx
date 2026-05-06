@@ -90,7 +90,7 @@ export default function DayViewPage() {
             </CardBody>
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-5 py-3 text-xs">
               <div className="text-fg-muted">
-                Total R:R is the average planned risk-to-reward across the day, calculated from each trade&apos;s TP and SL levels. Reads as &ldquo;risking $1 to make $X&rdquo;.
+                Total R:R is the average planned risk-to-reward across the day, calculated from each trade&apos;s TP and SL levels.
               </div>
               <div className="flex flex-wrap items-center gap-4">
                 <div>
