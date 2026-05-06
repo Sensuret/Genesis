@@ -143,10 +143,25 @@ export function ResolutionCard({
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-2xl border border-line shadow-card",
+        "relative rounded-2xl border border-line shadow-card",
         !bg && "bg-bg-elevated text-fg",
-        isLandscape ? "aspect-[1.41/1]" : "aspect-[1/1.41]",
-        variant === "preview" && "max-h-[420px]"
+        // Preview (grid tile): keep fixed A4 aspect + crop overflow so every
+        // tile is the same shape.
+        variant === "preview" && [
+          "overflow-hidden max-h-[420px]",
+          isLandscape ? "aspect-[1.41/1]" : "aspect-[1/1.41]"
+        ],
+        // Full view (open modal / screenshot target): A4 is the MINIMUM —
+        // the card still looks like A4 when short, but grows with the
+        // content so nothing is clipped and the Finish-strong + GƎNƎSIS
+        // footer always lands below the last section instead of floating
+        // on top of Q3 / Q4. `flex-col` puts the footer in normal flow
+        // under the sections; `aspect-ratio` on a flex container with
+        // auto height gives the A4 floor without capping growth.
+        variant === "full" && [
+          "flex flex-col",
+          isLandscape ? "aspect-[1.41/1]" : "aspect-[1/1.41]"
+        ]
       )}
       style={bg ? { background: bg.css, color: bodyText } : undefined}
     >
@@ -254,9 +269,14 @@ export function ResolutionCard({
       {/* Sections */}
       <div
         className={cn(
-          "relative grid gap-5 px-5 pb-12 pt-5",
-          variant === "preview" ? "text-[11px]" : "text-sm",
-          isLandscape ? "md:grid-cols-2" : "md:grid-cols-2"
+          "relative grid gap-5 px-5 pt-5",
+          // Preview keeps the 12-unit bottom padding because Finish-strong
+          // + GƎNƎSIS sit absolutely in the bottom corners of the tile.
+          // Full view uses flex-col on the outer card + flow-footer, so
+          // the sections block grows (flex-1) and the footer sits in
+          // natural order below — no reserved padding needed.
+          variant === "preview" ? "pb-12 text-[11px]" : "flex-1 pb-4 text-sm",
+          "md:grid-cols-2"
         )}
       >
         {resolution.sections.map((section) => {
@@ -340,39 +360,76 @@ export function ResolutionCard({
         })}
       </div>
 
-      {/* Checker-finish flag — bottom-left default decoration. Stays legible
-          on every background (including the white/cream theme default). */}
-      <div
-        aria-hidden
-        className={cn(
-          "pointer-events-none absolute bottom-3 left-3 flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em]",
-          finishStrongClass
-        )}
-      >
-        <Flag className="h-3 w-3" />
-        Finish strong
-      </div>
-
-      {/* Genesis brand mark — always rendered. The `Ǝ` (U+018E) glyphs
-          mirror the regular E so the mark reads as the actual Genesis
-          word-mark used elsewhere in the app. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute bottom-3 right-3 inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.18em]"
-        style={
-          bg
-            ? {
-                color: onLight ? "rgb(15 23 42 / 0.7)" : "rgba(255,255,255,0.78)",
-                borderColor: onLight ? "rgb(15 23 42 / 0.2)" : "rgba(255,255,255,0.25)",
-                background: onLight ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.18)"
-              }
-            : undefined
-        }
-      >
-        <span className={!bg ? "text-fg-muted" : undefined} aria-label="Genesis">
-          GƎNƎSIS
-        </span>
-      </div>
+      {/*
+        Footer row: Finish-strong + GƎNƎSIS brand mark.
+        - In `preview` (grid tile) they stay absolute in the bottom corners
+          so every tile keeps the same A4 silhouette regardless of content.
+        - In `full` (open modal / screenshot target) they're normal flow
+          items sitting below the sections, so a long resolution pushes
+          them down instead of overlapping Q3 / Q4. The flex-col parent
+          gives us that ordering for free.
+      */}
+      {variant === "preview" ? (
+        <>
+          <div
+            aria-hidden
+            className={cn(
+              "pointer-events-none absolute bottom-3 left-3 flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em]",
+              finishStrongClass
+            )}
+          >
+            <Flag className="h-3 w-3" />
+            Finish strong
+          </div>
+          <div
+            aria-hidden
+            className="pointer-events-none absolute bottom-3 right-3 inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.18em]"
+            style={
+              bg
+                ? {
+                    color: onLight ? "rgb(15 23 42 / 0.7)" : "rgba(255,255,255,0.78)",
+                    borderColor: onLight ? "rgb(15 23 42 / 0.2)" : "rgba(255,255,255,0.25)",
+                    background: onLight ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.18)"
+                  }
+                : undefined
+            }
+          >
+            <span className={!bg ? "text-fg-muted" : undefined} aria-label="Genesis">
+              GƎNƎSIS
+            </span>
+          </div>
+        </>
+      ) : (
+        <div className="flex items-end justify-between gap-3 px-5 pb-4 pt-1">
+          <div
+            aria-hidden
+            className={cn(
+              "pointer-events-none inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em]",
+              finishStrongClass
+            )}
+          >
+            <Flag className="h-3 w-3" />
+            Finish strong
+          </div>
+          <div
+            aria-hidden
+            className="pointer-events-none inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.18em]"
+            style={
+              bg
+                ? {
+                    color: onLight ? "rgb(15 23 42 / 0.7)" : "rgba(255,255,255,0.78)",
+                    borderColor: onLight ? "rgb(15 23 42 / 0.2)" : "rgba(255,255,255,0.25)",
+                    background: onLight ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.18)"
+                  }
+                : undefined
+            }
+          >
+            <span className={!bg ? "text-fg-muted" : undefined} aria-label="Genesis">
+              GƎNƎSIS
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
