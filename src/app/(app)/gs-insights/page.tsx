@@ -126,7 +126,7 @@ function buildInsights(trades: TradeRow[], fmt: (n: number | null | undefined) =
       out.push({
         tone: "good",
         title: "Strong R:R discipline",
-        detail: `Avg planned setup is 1:${avgRR.toFixed(2)} reward-to-risk.`
+        detail: `Avg planned setup is 1:${avgRR.toFixed(2)} risk-to-reward — risking $1 to make $${avgRR.toFixed(2)}.`
       });
     }
   }
