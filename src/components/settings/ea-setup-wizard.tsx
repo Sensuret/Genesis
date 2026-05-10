@@ -90,21 +90,39 @@ export function EaSetupWizard({
     [supabaseUrl]
   );
 
-  // Snapshot the EA file ids at the moment the wizard opens so we can
-  // detect a brand-new account showing up at step 5 ("Connected!").
-  const [baselineFileIds, setBaselineFileIds] = useState<Set<string>>(new Set());
+  // Capture the wallclock moment the wizard was opened. Any EA-synced
+  // trade_files row whose `last_synced_at` is at or after this moment
+  // counts as "freshly active" and flips the wizard to Connected.
+  //
+  // We deliberately avoid the previous "snapshot file ids on step 1"
+  // approach because (a) when the EA posted its first trade while the
+  // user was still on step 1, the new file id got baked into the
+  // baseline before they reached step 5 — so "Waiting for first ping"
+  // never resolved, and (b) on a re-attach to a previously-connected
+  // account, the trade_files row id is the same as before, so the
+  // diff approach can never trip. `last_synced_at` covers both cases:
+  // fresh attaches AND re-attaches both bump it to `now()` via
+  // `register_ea_account` / `ingest_ea_trade`.
+  const [wizardOpenedAt, setWizardOpenedAt] = useState<number | null>(null);
   useEffect(() => {
-    if (open && step === 1) {
-      setBaselineFileIds(new Set(eaFiles.map((f) => f.id)));
+    if (open) {
+      // Only set on the open transition — re-renders shouldn't reset.
+      setWizardOpenedAt((prev) => (prev == null ? Date.now() : prev));
+    } else {
+      setWizardOpenedAt(null);
     }
-  }, [open, step, eaFiles]);
+  }, [open]);
 
-  // The first NEW EA-synced account that shows up after the wizard was
-  // opened becomes the "connected" account.
-  const newlyConnected = useMemo(
-    () => eaFiles.find((f) => !baselineFileIds.has(f.id)) ?? null,
-    [eaFiles, baselineFileIds]
-  );
+  const newlyConnected = useMemo(() => {
+    if (wizardOpenedAt == null) return null;
+    return (
+      eaFiles.find((f) => {
+        if (!f.last_synced_at) return false;
+        const t = new Date(f.last_synced_at).getTime();
+        return Number.isFinite(t) && t >= wizardOpenedAt;
+      }) ?? null
+    );
+  }, [eaFiles, wizardOpenedAt]);
 
   useEffect(() => {
     if (newlyConnected && step === 5) {
