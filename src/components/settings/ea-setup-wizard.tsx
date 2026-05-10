@@ -90,21 +90,79 @@ export function EaSetupWizard({
     [supabaseUrl]
   );
 
-  // Snapshot the EA file ids at the moment the wizard opens so we can
-  // detect a brand-new account showing up at step 5 ("Connected!").
-  const [baselineFileIds, setBaselineFileIds] = useState<Set<string>>(new Set());
-  useEffect(() => {
-    if (open && step === 1) {
-      setBaselineFileIds(new Set(eaFiles.map((f) => f.id)));
-    }
-  }, [open, step, eaFiles]);
+  // "Connected!" detection — needs to fire for the right account in
+  // three different scenarios without false-positives:
+  //
+  //  (1) Brand-new attach: a trade_files row that didn't exist when the
+  //      wizard was opened shows up.
+  //  (2) Re-attach to a previously-offline account: the row already
+  //      existed but its `last_synced_at` was stale at open time, and
+  //      now advances past the wizard-open moment.
+  //  (3) NOT a continuously-active account that simply heartbeated
+  //      mid-walkthrough — that account was already known to be live
+  //      and isn't what this wizard run is about.
+  //
+  // To distinguish them we snapshot ONCE on open: the set of existing
+  // file ids AND each one's `last_synced_at`. From there:
+  //   - new id  → connected (provided it has a fresh sync timestamp).
+  //   - known id where the snapshot showed it as stale (>60s old) and
+  //     it has now refreshed past wizardOpenedAt → connected (re-attach).
+  //   - known id that was already live at snapshot time → ignored.
+  //
+  // The snapshot is captured exactly once per open transition, so a
+  // realtime delta arriving mid-walkthrough cannot get baked back in.
+  type WizardBaseline = {
+    ids: Set<string>;
+    lastSyncedAt: Map<string, number>;
+    openedAt: number;
+  };
+  const [baseline, setBaseline] = useState<WizardBaseline | null>(null);
 
-  // The first NEW EA-synced account that shows up after the wizard was
-  // opened becomes the "connected" account.
-  const newlyConnected = useMemo(
-    () => eaFiles.find((f) => !baselineFileIds.has(f.id)) ?? null,
-    [eaFiles, baselineFileIds]
-  );
+  useEffect(() => {
+    if (!open) {
+      if (baseline !== null) setBaseline(null);
+      return;
+    }
+    if (baseline !== null) return;
+    setBaseline({
+      ids: new Set(eaFiles.map((f) => f.id)),
+      lastSyncedAt: new Map(
+        eaFiles.map((f) => [
+          f.id,
+          f.last_synced_at ? new Date(f.last_synced_at).getTime() : 0
+        ])
+      ),
+      openedAt: Date.now()
+    });
+  }, [open, eaFiles, baseline]);
+
+  const newlyConnected = useMemo(() => {
+    if (!baseline) return null;
+    return (
+      eaFiles.find((f) => {
+        if (!f.last_synced_at) return false;
+        const lastSync = new Date(f.last_synced_at).getTime();
+        if (!Number.isFinite(lastSync)) return false;
+
+        if (!baseline.ids.has(f.id)) {
+          // Brand-new account row. Require a fresh sync past wizard-open
+          // — guards against an empty trade_files row appearing before
+          // the EA actually pings.
+          return lastSync >= baseline.openedAt;
+        }
+
+        // Pre-existing account: only counts as freshly connected if it
+        // looked offline when the wizard opened (>60s since its last
+        // sync) AND has now refreshed past wizardOpenedAt. Anything
+        // less stale was already live and isn't what this wizard run
+        // is targeting, so ignore.
+        const baselineTime = baseline.lastSyncedAt.get(f.id) ?? 0;
+        const stalenessAtOpen = baseline.openedAt - baselineTime;
+        if (stalenessAtOpen < 60_000) return false;
+        return lastSync >= baseline.openedAt;
+      }) ?? null
+    );
+  }, [eaFiles, baseline]);
 
   useEffect(() => {
     if (newlyConnected && step === 5) {
