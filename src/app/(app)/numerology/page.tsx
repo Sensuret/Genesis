@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
 import { createClient } from "@/lib/supabase/client";
+import { cn } from "@/lib/utils";
 import {
   buildNumerologySnapshot, compatibility, advancedInsights,
   chineseZodiacForYear, chineseEmoji, yearOutlookFor, yearOutlookReason,
@@ -1928,6 +1929,142 @@ function Education() {
           </Def>
         </CardBody>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>How to navigate your Personal Year cycle</CardTitle>
+        </CardHeader>
+        <CardBody className="space-y-3 text-sm">
+          <p className="text-xs text-fg-muted">
+            Personal Years move in a 9-year cycle. Each year carries a different rhythm — knowing
+            yours lets you plan your trading, capital deployment, and growth bets to flow with it
+            instead of against it. Pair this with the Chinese-zodiac year context (whether you're
+            in your animal's <span className="text-emerald-300">great</span>,{" "}
+            <span className="text-amber-300">average</span>, or <span className="text-rose-300">tough</span>{" "}
+            year) for a richer read.
+          </p>
+
+          <PersonalYearGuidance
+            tone="great"
+            title="A great Personal Year (1, 3, 5, 8 — or harmony with your zodiac year)"
+            blurb={
+              "Energy is on your side. Markets feel cooperative, opportunities cluster, and " +
+              "your reads land more often. Don't waste it: this is when to scale up the strategies " +
+              "you've already proven, raise position size on your best edges, and take calculated " +
+              "swings rather than coast."
+            }
+            tradingDos={[
+              "Up-size your A+ setups by ~25–50%; these are the months your edge compounds",
+              "Open or fund the prop firm / live account you've been hesitating on",
+              "Lock in a quarterly profit-pull schedule — the wins are real, take some off the table",
+              "Document what's working — these patterns become your baseline for tougher years"
+            ]}
+            tradingDonts={[
+              "Don't get cocky and abandon your stop-loss / risk rules — euphoria-trading kills good years",
+              "Don't add 5 new strategies because everything looks bullish; stick to your edge",
+              "Don't assume next year's energy carries the same — bank gains while the cycle is hot"
+            ]}
+          />
+
+          <PersonalYearGuidance
+            tone="average"
+            title="An average / neutral Personal Year (2, 4, 6 — or steady zodiac year)"
+            blurb={
+              "Nothing dramatic — markets feel mixed, results sit close to expectancy, and " +
+              "patience pays better than aggression. This is the cycle for craft, study, and " +
+              "infrastructure: backtesting, system refinement, journal review, and skill building."
+            }
+            tradingDos={[
+              "Hold position size at baseline — this isn't the year to push leverage",
+              "Spend dedicated time on backtesting + reviewing past trades for pattern leaks",
+              "Tighten risk rules and rebuild discipline that may have slipped in a hot year",
+              "Keep a steady cadence — small consistent wins beat moonshots in a 4 / 6 year"
+            ]}
+            tradingDonts={[
+              "Don't force trades because you 'should be making more' — the cycle is the cycle",
+              "Don't compare your P&L to a Personal-Year-1 trader's — different fuel",
+              "Don't abandon your plan because it feels boring; that's exactly the test of the year"
+            ]}
+          />
+
+          <PersonalYearGuidance
+            tone="tough"
+            title="A tough Personal Year (7, 9 — or zodiac conflict / Tai Sui year)"
+            blurb={
+              "Headwinds and reflection. 7s slow you down for inner work; 9s close cycles and " +
+              "force letting-go. Markets may feel choppy, your usual setups misfire more often, " +
+              "and emotional discipline is harder. Default to capital preservation; this is the " +
+              "year you protect what you built so you have a base to scale from in your next 1-year."
+            }
+            tradingDos={[
+              "Cut size by 25–50%; risk less to feel less drawdown pressure",
+              "Reduce trade frequency — fewer, higher-conviction setups only",
+              "Keep an absolute monthly drawdown cutoff and honour it",
+              "Use the slower energy for journaling, deep review, and rebuilding your edge",
+              "If you're in a zodiac-conflict year (Tai Sui), wear your zodiac amulet daily and avoid major financial commitments at peak conflict months"
+            ]}
+            tradingDonts={[
+              "Don't revenge-trade after losing weeks — the cycle amplifies emotional reactions",
+              "Don't take on big new prop firm challenges with hard time-bound rules",
+              "Don't add leverage 'to make it back' — leverage in a 7/9 year typically blows accounts",
+              "Don't make permanent commitments (long-term contracts, partnerships) at the year's lowest months"
+            ]}
+          />
+
+          <p className="text-[11px] italic text-fg-subtle">
+            These are guidance heuristics rooted in numerology + Chinese-zodiac tradition — not
+            investment advice. Use them alongside your edge, your journal, and your own risk
+            framework.
+          </p>
+        </CardBody>
+      </Card>
+    </div>
+  );
+}
+
+function PersonalYearGuidance({
+  tone,
+  title,
+  blurb,
+  tradingDos,
+  tradingDonts
+}: {
+  tone: "great" | "average" | "tough";
+  title: string;
+  blurb: string;
+  tradingDos: string[];
+  tradingDonts: string[];
+}) {
+  const toneClass =
+    tone === "great"
+      ? "border-emerald-400/40 bg-emerald-500/5"
+      : tone === "average"
+        ? "border-amber-400/40 bg-amber-500/5"
+        : "border-rose-400/40 bg-rose-500/5";
+  const toneTextClass =
+    tone === "great" ? "text-emerald-200" : tone === "average" ? "text-amber-200" : "text-rose-200";
+  return (
+    <div className={cn("rounded-xl border p-3", toneClass)}>
+      <div className={cn("text-xs font-semibold", toneTextClass)}>{title}</div>
+      <p className="mt-1.5 text-xs text-fg-muted">{blurb}</p>
+      <div className="mt-2.5 grid gap-2 sm:grid-cols-2">
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-emerald-300/80">Lean in</div>
+          <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[11px] text-fg-muted marker:text-emerald-400/60">
+            {tradingDos.map((d, i) => (
+              <li key={i}>{d}</li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-rose-300/80">Avoid</div>
+          <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[11px] text-fg-muted marker:text-rose-400/60">
+            {tradingDonts.map((d, i) => (
+              <li key={i}>{d}</li>
+            ))}
+          </ul>
+        </div>
+      </div>
     </div>
   );
 }

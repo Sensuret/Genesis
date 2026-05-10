@@ -238,6 +238,11 @@ export type ResolutionItem = {
   kind?: ResolutionBlockKind;
   /** Toggle blocks: whether the disclosure is currently open. */
   open?: boolean;
+  /** Nested child blocks for container kinds (toggle, callout). Each
+   *  child is itself a full `ResolutionItem` so any block kind is
+   *  allowed inside, including more toggles / callouts (recursive).
+   *  Legacy rows without `children` render as before. */
+  children?: ResolutionItem[];
 };
 
 /** A focused area inside a Resolution section (e.g. "Personal account"). */
