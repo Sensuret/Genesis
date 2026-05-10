@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import type {
   Resolution,
   ResolutionBackground,
+  ResolutionItem,
   ResolutionSection,
   ResolutionSubsection
 } from "@/lib/supabase/types";
@@ -22,6 +23,27 @@ import { ResolutionBgPicker } from "./resolution-bg-picker";
 function newId(): string {
   if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
   return `nb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/**
+ * Recursively walk a `ResolutionItem` tree and toggle the `checked`
+ * state of the item whose id matches `itemId`. Used by the on-card
+ * checkbox handler so that ticks inside a toggle / callout's nested
+ * children also persist correctly. Falls through unchanged if the id
+ * isn't found at any depth.
+ */
+function toggleInItems(
+  items: ResolutionItem[],
+  itemId: string,
+  next: boolean
+): ResolutionItem[] {
+  return items.map((it) => {
+    if (it.id === itemId) return { ...it, checked: next };
+    if (it.children?.length) {
+      return { ...it, children: toggleInItems(it.children, itemId, next) };
+    }
+    return it;
+  });
 }
 
 const SECTION_COLORS: ResolutionSection["color"][] = [
@@ -218,12 +240,7 @@ function ResolutionGrid({
               subsections: s.subsections.map((ss) =>
                 ss.id !== subId
                   ? ss
-                  : {
-                      ...ss,
-                      items: ss.items.map((it) =>
-                        it.id === itemId ? { ...it, checked: next } : it
-                      )
-                    }
+                  : { ...ss, items: toggleInItems(ss.items, itemId, next) }
               )
             }
       )
@@ -1132,14 +1149,7 @@ function ResolutionModal({
                               subsections: s.subsections.map((ss) =>
                                 ss.id !== subId
                                   ? ss
-                                  : {
-                                      ...ss,
-                                      items: ss.items.map((it) =>
-                                        it.id === itemId
-                                          ? { ...it, checked: next }
-                                          : it
-                                      )
-                                    }
+                                  : { ...ss, items: toggleInItems(ss.items, itemId, next) }
                               )
                             }
                       )

@@ -347,9 +347,9 @@ export function ResolutionCard({
                           key={item.id}
                           item={item}
                           numberedIndex={numberedIndexFor(sub.items, idx)}
-                          onToggle={
+                          dispatchToggle={
                             onToggleItem
-                              ? (next) => onToggleItem(section.id, sub.id, item.id, next)
+                              ? (childId, next) => onToggleItem(section.id, sub.id, childId, next)
                               : undefined
                           }
                           mutedText={mutedText}
@@ -492,7 +492,7 @@ function numberedIndexFor(items: ResolutionItem[], idx: number): number | null {
 function ResolutionBlock({
   item,
   numberedIndex,
-  onToggle,
+  dispatchToggle,
   mutedText,
   bodyText,
   hasBg,
@@ -500,14 +500,19 @@ function ResolutionBlock({
 }: {
   item: ResolutionItem;
   numberedIndex: number | null;
-  onToggle?: (next: boolean) => void;
+  /** Recursive-friendly toggle dispatcher. The top-level caller closes
+   *  over (sectionId, subId) and passes a function `(itemId, next)`
+   *  that finds-and-updates the matching item anywhere in the tree.
+   *  Children rendered inside toggle / callout containers receive the
+   *  same dispatcher so their checkboxes are interactive too. */
+  dispatchToggle?: (itemId: string, next: boolean) => void;
   mutedText: string;
   bodyText: string;
   hasBg: boolean;
   onLight: boolean;
 }) {
   const kind = blockKindOf(item);
-  const interactive = !!onToggle;
+  const interactive = !!dispatchToggle;
   const baseColor = hasBg ? { color: mutedText } : undefined;
 
   if (kind === "divider") {
@@ -570,6 +575,7 @@ function ResolutionBlock({
                 key={child.id}
                 item={child}
                 numberedIndex={numberedIndexFor(children, cIdx)}
+                dispatchToggle={dispatchToggle}
                 mutedText={mutedText}
                 bodyText={bodyText}
                 hasBg={hasBg}
@@ -610,6 +616,7 @@ function ResolutionBlock({
                 key={child.id}
                 item={child}
                 numberedIndex={numberedIndexFor(children, cIdx)}
+                dispatchToggle={dispatchToggle}
                 mutedText={mutedText}
                 bodyText={bodyText}
                 hasBg={hasBg}
@@ -662,7 +669,7 @@ function ResolutionBlock({
           if (!interactive) return;
           e.preventDefault();
           e.stopPropagation();
-          onToggle?.(!item.checked);
+          dispatchToggle?.(item.id, !item.checked);
         }}
         className={cn(
           "shrink-0 inline-flex items-center justify-center leading-none",
