@@ -555,6 +555,7 @@ begin
            broker = coalesce(p_broker, broker),
            server = coalesce(p_server, server),
            platform = coalesce(p_platform, platform),
+           sync_kind = 'ea',
            last_synced_at = now()
      where id = v_file_id;
   end if;
@@ -671,6 +672,7 @@ begin
            broker = coalesce(p_broker, broker),
            server = coalesce(p_server, server),
            platform = coalesce(p_platform, platform),
+           sync_kind = 'ea',
            last_synced_at = now()
      where id = v_file_id;
   end if;
