@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, type CSSProperties, type ReactNode } from "react";
 import { ChevronRight, Flag, Megaphone, Quote as QuoteIcon } from "lucide-react";
 import { chineseZodiacEmoji, chineseZodiacOf } from "@/lib/zodiac";
 import { resolveBackgroundCss } from "@/lib/notebook/resolution-backgrounds";
@@ -478,6 +479,43 @@ function ItemBody({
   return <span className={className}>{item.text}</span>;
 }
 
+/**
+ * Native `<details>` wrapper that keeps the user's open / closed
+ * choice across re-renders. Using `<details open={...}>` declaratively
+ * makes React reconcile the open attribute on every render, which
+ * fights with the user — clicking the chevron flips the DOM, then a
+ * sibling re-render (e.g. ticking a nested checkbox) snaps it shut
+ * again. Local state seeded from `defaultOpen` plus an `onToggle`
+ * sync keeps React + DOM in lockstep, surviving any number of
+ * unrelated re-renders.
+ */
+function ToggleDetails({
+  defaultOpen,
+  summary,
+  style,
+  children
+}: {
+  defaultOpen: boolean;
+  summary: ReactNode;
+  style?: CSSProperties;
+  children?: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <details
+      className="group rounded-md text-xs"
+      style={style}
+      open={open}
+      onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}
+    >
+      <summary className="flex cursor-pointer list-none items-start gap-2">
+        {summary}
+      </summary>
+      {children}
+    </details>
+  );
+}
+
 /** Returns the 1-based ordinal of a "numbered" block among other
  *  numbered blocks in the same sub-section. Other kinds return null. */
 function numberedIndexFor(items: ResolutionItem[], idx: number): number | null {
@@ -600,15 +638,16 @@ function ResolutionBlock({
   if (kind === "toggle") {
     const children = item.children ?? [];
     return (
-      <details
-        className="group rounded-md text-xs"
+      <ToggleDetails
+        defaultOpen={!!item.open}
+        summary={
+          <>
+            <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-90" />
+            <ItemBody item={item} className="flex-1 font-medium" />
+          </>
+        }
         style={baseColor}
-        open={!!item.open}
       >
-        <summary className="flex cursor-pointer list-none items-start gap-2">
-          <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-90" />
-          <ItemBody item={item} className="flex-1 font-medium" />
-        </summary>
         {children.length > 0 && (
           <div className="mt-1 space-y-1 border-l border-line/40 pl-3 ml-1.5">
             {children.map((child, cIdx) => (
@@ -625,7 +664,7 @@ function ResolutionBlock({
             ))}
           </div>
         )}
-      </details>
+      </ToggleDetails>
     );
   }
 

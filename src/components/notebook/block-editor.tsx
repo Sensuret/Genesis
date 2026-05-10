@@ -154,6 +154,12 @@ export function BlockEditor({ blocks, onChange, placeholder, className }: BlockE
       // their nested content. Callouts don't have an open/closed state;
       // their children area is always rendered.
       if (kind === "toggle") next.open = true;
+      // Drop any leftover children when converting AWAY from a container
+      // kind. Non-container kinds never render children, but
+      // computeResolutionProgress recurses regardless of kind, so
+      // orphaned checkboxes inside a stranded children array would
+      // silently inflate the denominator and cap progress below 100%.
+      if (kind !== "toggle" && kind !== "callout") delete next.children;
       return next;
     });
     setMenu(null);
