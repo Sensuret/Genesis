@@ -10,6 +10,10 @@ import { useTrades } from "@/lib/hooks/use-trades";
 import type { PlaybookRow, ProfileRow, TradeFileRow } from "@/lib/supabase/types";
 import { useT } from "@/lib/i18n/context";
 import type { TranslateValues } from "@/lib/i18n/translate";
+import {
+  accountSourceLabel,
+  accountSourceChipClass
+} from "@/lib/accounts/source-label";
 
 /** Maps the filter-store DateRange ids to topbar.range_* translation keys.
  *  Keeps the canonical id list as the source of truth while still letting
@@ -489,6 +493,7 @@ function AccountsPicker({
       )}
       {accounts.map((a) => {
         const selected = value.includes(a.id);
+        const source = accountSourceLabel(a);
         return (
           <button
             key={a.id}
@@ -509,6 +514,16 @@ function AccountsPicker({
               <span className="text-fg-subtle">
                 {t("topbar.accounts_trades_suffix", { count: a.trade_count })}
               </span>
+            </span>
+            <span
+              className={cn(
+                "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide",
+                accountSourceChipClass(source.tone)
+              )}
+              title={source.description}
+              aria-label={source.description}
+            >
+              {source.text}
             </span>
           </button>
         );

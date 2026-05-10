@@ -10,7 +10,11 @@ import { detectSession } from "@/lib/parser";
 import { createClient } from "@/lib/supabase/client";
 import type { TradeFileRow, TradeRow } from "@/lib/supabase/types";
 import { AUDIT_EVENT, logAuditEvent } from "@/lib/audit/log";
-import { shortDate } from "@/lib/utils";
+import { cn, shortDate } from "@/lib/utils";
+import {
+  accountSourceLabel,
+  accountSourceChipClass
+} from "@/lib/accounts/source-label";
 
 /**
  * Detect the viewer's local timezone (via Intl API) — used as the Auto
@@ -224,7 +228,23 @@ export function ImportedFilesCard() {
                   return (
                     <tr key={f.id} className="border-t border-line/60 align-middle">
                       <td className="px-3 py-2.5">
-                        <div className="font-medium text-fg">{f.name}</div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium text-fg">{f.name}</span>
+                          {(() => {
+                            const source = accountSourceLabel(f);
+                            return (
+                              <span
+                                className={cn(
+                                  "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide",
+                                  accountSourceChipClass(source.tone)
+                                )}
+                                title={source.description}
+                              >
+                                {source.text}
+                              </span>
+                            );
+                          })()}
+                        </div>
                         <div className="text-xs text-fg-muted">
                           {f.source ?? "Generic"} · current: {tzLabel(f.broker_tz_offset_minutes, auto)}
                         </div>

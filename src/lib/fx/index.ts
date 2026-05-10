@@ -50,10 +50,28 @@ export function formatMoney(amount: number | null | undefined, currency: string)
   // KES doesn't have a glyph in older locale data on some browsers, so we
   // fall back to the ISO code prefix when the formatted output starts with
   // "KES" already (Intl will use that automatically).
+  // Choose enough fractional digits to keep the sign visible. The common
+  // failure mode this fixes is a small-but-non-zero loss like
+  // expectancy = -0.0034 rendering as "-$0.00", which reads as zero to
+  // humans and hides the negative sign entirely. When the absolute
+  // value is below 0.01 but non-zero, we expand to enough digits to
+  // surface at least one non-zero significant figure (capped at 6 to
+  // avoid exponential creep on subnormals). Larger values keep the
+  // existing "no decimals over $1000, two decimals otherwise" rule.
+  const abs = Math.abs(amount);
+  let maximumFractionDigits: number;
+  if (abs >= 1000) {
+    maximumFractionDigits = 0;
+  } else if (abs > 0 && abs < 0.01) {
+    const sigFig = Math.min(6, Math.ceil(-Math.log10(abs)) + 1);
+    maximumFractionDigits = Math.max(2, sigFig);
+  } else {
+    maximumFractionDigits = 2;
+  }
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency,
-    maximumFractionDigits: Math.abs(amount) >= 1000 ? 0 : 2
+    maximumFractionDigits
   }).format(amount);
 }
 
