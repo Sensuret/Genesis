@@ -3,6 +3,7 @@
 import { ChevronRight, Flag, Megaphone, Quote as QuoteIcon } from "lucide-react";
 import { chineseZodiacEmoji, chineseZodiacOf } from "@/lib/zodiac";
 import { resolveBackgroundCss } from "@/lib/notebook/resolution-backgrounds";
+import { sanitizeInlineHtml } from "@/lib/notebook/rich-text";
 import type {
   Resolution,
   ResolutionBlockKind,
@@ -447,6 +448,30 @@ function blockKindOf(item: ResolutionItem): ResolutionBlockKind {
   return item.kind ?? "todo";
 }
 
+/**
+ * Render a block's body. When the block has sanitized HTML (from the
+ * rich-text editor — bold / italic / underline) we inject that as
+ * innerHTML; otherwise fall back to the plain `text` field. Keeps
+ * legacy rows working without a migration.
+ */
+function ItemBody({
+  item,
+  className
+}: {
+  item: ResolutionItem;
+  className?: string;
+}) {
+  if (item.html && item.html.trim()) {
+    return (
+      <span
+        className={className}
+        dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(item.html) }}
+      />
+    );
+  }
+  return <span className={className}>{item.text}</span>;
+}
+
 /** Returns the 1-based ordinal of a "numbered" block among other
  *  numbered blocks in the same sub-section. Other kinds return null. */
 function numberedIndexFor(items: ResolutionItem[], idx: number): number | null {
@@ -503,7 +528,7 @@ function ResolutionBlock({
     // exact same colour as body text.
     return (
       <div className={cn(sizeClass, !hasBg && "text-fg")} style={hasBg ? { color: bodyText } : undefined}>
-        {item.text}
+        <ItemBody item={item} />
       </div>
     );
   }
@@ -520,7 +545,7 @@ function ResolutionBlock({
         )}
       >
         <Megaphone className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-        <span className="flex-1">{item.text}</span>
+        <ItemBody item={item} className="flex-1" />
       </div>
     );
   }
@@ -529,7 +554,7 @@ function ResolutionBlock({
     return (
       <div className="flex items-start gap-2 border-l-2 border-brand-400/60 pl-2 text-xs italic" style={baseColor}>
         <QuoteIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-300" />
-        <span className="flex-1">{item.text}</span>
+        <ItemBody item={item} className="flex-1" />
       </div>
     );
   }
@@ -539,7 +564,7 @@ function ResolutionBlock({
       <details className="group rounded-md text-xs" style={baseColor}>
         <summary className="flex cursor-pointer list-none items-start gap-2">
           <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-90" />
-          <span className="flex-1 font-medium">{item.text}</span>
+          <ItemBody item={item} className="flex-1 font-medium" />
         </summary>
       </details>
     );
@@ -549,7 +574,7 @@ function ResolutionBlock({
     return (
       <div className={cn("flex items-start gap-2 text-xs", !hasBg && "text-fg-muted")} style={baseColor}>
         <span className="mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-70" />
-        <span className="flex-1">{item.text}</span>
+        <ItemBody item={item} className="flex-1" />
       </div>
     );
   }
@@ -560,7 +585,7 @@ function ResolutionBlock({
         <span className="mt-0.5 inline-flex min-w-[1.1rem] shrink-0 justify-end text-[11px] font-medium">
           {numberedIndex ?? "•"}.
         </span>
-        <span className="flex-1">{item.text}</span>
+        <ItemBody item={item} className="flex-1" />
       </div>
     );
   }
@@ -568,7 +593,7 @@ function ResolutionBlock({
   if (kind === "text") {
     return (
       <div className={cn("text-xs", !hasBg && "text-fg-muted")} style={baseColor}>
-        {item.text}
+        <ItemBody item={item} />
       </div>
     );
   }
@@ -610,9 +635,10 @@ function ResolutionBlock({
       >
         {item.checked ? "✓" : ""}
       </button>
-      <span className={cn("flex-1", item.checked && "line-through opacity-70", isBig && "text-sm font-medium")}>
-        {item.text}
-      </span>
+      <ItemBody
+        item={item}
+        className={cn("flex-1", item.checked && "line-through opacity-70", isBig && "text-sm font-medium")}
+      />
     </div>
   );
 }

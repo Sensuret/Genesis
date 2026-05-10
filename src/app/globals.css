@@ -241,3 +241,17 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 
 
+
+/* Rich-text contentEditable placeholder.
+ *
+ * `<input placeholder>` doesn't exist on a contentEditable surface, so
+ * the Resolutions block editor encodes the placeholder via a data
+ * attribute and renders it through this empty-state pseudo. Empty is
+ * detected with the `:empty` selector — works as long as the editor
+ * leaves the node fully empty (no stray <br>) when there's no text. */
+.rich-text-input[data-placeholder]:empty::before {
+  content: attr(data-placeholder);
+  color: rgba(140, 140, 160, 0.7);
+  pointer-events: none;
+}
+
