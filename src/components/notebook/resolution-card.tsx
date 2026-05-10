@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, type CSSProperties, type ReactNode } from "react";
 import { ChevronRight, Flag, Megaphone, Quote as QuoteIcon } from "lucide-react";
 import { chineseZodiacEmoji, chineseZodiacOf } from "@/lib/zodiac";
 import { resolveBackgroundCss } from "@/lib/notebook/resolution-backgrounds";
@@ -85,17 +86,23 @@ export function computeResolutionProgress(resolution: Resolution): {
         total += 1;
         if (sub.target_checked) done += 1;
       }
-      for (const item of sub.items) {
-        if (!item.text.trim()) continue;
-        // Only count checkbox-style blocks toward the progress meter.
-        // Headings, dividers, callouts, quotes, plain text, bullets,
-        // numbered list items, and toggles aren't tickable, so they
-        // shouldn't pull the percentage down.
-        const kind = item.kind ?? "todo";
-        if (kind !== "todo" && kind !== "bigbox") continue;
-        total += 1;
-        if (item.checked) done += 1;
-      }
+      // Only count checkbox-style blocks toward the progress meter.
+      // Headings, dividers, callouts, quotes, plain text, bullets,
+      // numbered list items, and toggles aren't tickable, so they
+      // shouldn't pull the percentage down. Recurse into toggle /
+      // callout children so a checkbox tucked inside a toggle still
+      // contributes to the headline percentage.
+      const visit = (items: ResolutionItem[]): void => {
+        for (const item of items) {
+          const kind = item.kind ?? "todo";
+          if (item.text.trim() && (kind === "todo" || kind === "bigbox")) {
+            total += 1;
+            if (item.checked) done += 1;
+          }
+          if (item.children?.length) visit(item.children);
+        }
+      };
+      visit(sub.items);
     }
   }
   const pct = total === 0 ? 0 : Math.round((done / total) * 100);
@@ -341,9 +348,9 @@ export function ResolutionCard({
                           key={item.id}
                           item={item}
                           numberedIndex={numberedIndexFor(sub.items, idx)}
-                          onToggle={
+                          dispatchToggle={
                             onToggleItem
-                              ? (next) => onToggleItem(section.id, sub.id, item.id, next)
+                              ? (childId, next) => onToggleItem(section.id, sub.id, childId, next)
                               : undefined
                           }
                           mutedText={mutedText}
@@ -472,6 +479,43 @@ function ItemBody({
   return <span className={className}>{item.text}</span>;
 }
 
+/**
+ * Native `<details>` wrapper that keeps the user's open / closed
+ * choice across re-renders. Using `<details open={...}>` declaratively
+ * makes React reconcile the open attribute on every render, which
+ * fights with the user — clicking the chevron flips the DOM, then a
+ * sibling re-render (e.g. ticking a nested checkbox) snaps it shut
+ * again. Local state seeded from `defaultOpen` plus an `onToggle`
+ * sync keeps React + DOM in lockstep, surviving any number of
+ * unrelated re-renders.
+ */
+function ToggleDetails({
+  defaultOpen,
+  summary,
+  style,
+  children
+}: {
+  defaultOpen: boolean;
+  summary: ReactNode;
+  style?: CSSProperties;
+  children?: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <details
+      className="group rounded-md text-xs"
+      style={style}
+      open={open}
+      onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}
+    >
+      <summary className="flex cursor-pointer list-none items-start gap-2">
+        {summary}
+      </summary>
+      {children}
+    </details>
+  );
+}
+
 /** Returns the 1-based ordinal of a "numbered" block among other
  *  numbered blocks in the same sub-section. Other kinds return null. */
 function numberedIndexFor(items: ResolutionItem[], idx: number): number | null {
@@ -486,7 +530,7 @@ function numberedIndexFor(items: ResolutionItem[], idx: number): number | null {
 function ResolutionBlock({
   item,
   numberedIndex,
-  onToggle,
+  dispatchToggle,
   mutedText,
   bodyText,
   hasBg,
@@ -494,14 +538,19 @@ function ResolutionBlock({
 }: {
   item: ResolutionItem;
   numberedIndex: number | null;
-  onToggle?: (next: boolean) => void;
+  /** Recursive-friendly toggle dispatcher. The top-level caller closes
+   *  over (sectionId, subId) and passes a function `(itemId, next)`
+   *  that finds-and-updates the matching item anywhere in the tree.
+   *  Children rendered inside toggle / callout containers receive the
+   *  same dispatcher so their checkboxes are interactive too. */
+  dispatchToggle?: (itemId: string, next: boolean) => void;
   mutedText: string;
   bodyText: string;
   hasBg: boolean;
   onLight: boolean;
 }) {
   const kind = blockKindOf(item);
-  const interactive = !!onToggle;
+  const interactive = !!dispatchToggle;
   const baseColor = hasBg ? { color: mutedText } : undefined;
 
   if (kind === "divider") {
@@ -514,8 +563,14 @@ function ResolutionBlock({
   }
 
   if (!item.text.trim()) {
-    // Empty non-divider block — render nothing on the saved card.
-    return null;
+    // Empty non-divider block — render nothing on the saved card,
+    // EXCEPT toggle / callout containers that still have children:
+    // a callout whose header is empty but body has bullets is valid,
+    // and so is a toggle whose label is empty but children list is
+    // populated.
+    const isContainerWithChildren =
+      (kind === "toggle" || kind === "callout") && (item.children?.length ?? 0) > 0;
+    if (!isContainerWithChildren) return null;
   }
 
   if (kind === "h1" || kind === "h2" || kind === "h3") {
@@ -537,15 +592,36 @@ function ResolutionBlock({
     // On light card backgrounds (cream / white) `text-amber-100` is literally
     // the same colour as the cream swatch, so the callout text vanishes.
     // Flip to a dark amber tone whenever we're on a light background.
+    const children = item.children ?? [];
     return (
       <div
         className={cn(
-          "flex items-start gap-2 rounded-md border border-amber-400/40 bg-amber-500/10 px-2 py-1.5 text-xs",
+          "rounded-md border border-amber-400/40 bg-amber-500/10 px-2 py-1.5 text-xs",
           onLight ? "text-amber-900" : "text-amber-100"
         )}
       >
-        <Megaphone className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-        <ItemBody item={item} className="flex-1" />
+        {item.text.trim() && (
+          <div className="flex items-start gap-2">
+            <Megaphone className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <ItemBody item={item} className="flex-1" />
+          </div>
+        )}
+        {children.length > 0 && (
+          <div className={cn("space-y-1", item.text.trim() && "mt-1.5 pl-5")}>
+            {children.map((child, cIdx) => (
+              <ResolutionBlock
+                key={child.id}
+                item={child}
+                numberedIndex={numberedIndexFor(children, cIdx)}
+                dispatchToggle={dispatchToggle}
+                mutedText={mutedText}
+                bodyText={bodyText}
+                hasBg={hasBg}
+                onLight={onLight}
+              />
+            ))}
+          </div>
+        )}
       </div>
     );
   }
@@ -560,13 +636,35 @@ function ResolutionBlock({
   }
 
   if (kind === "toggle") {
+    const children = item.children ?? [];
     return (
-      <details className="group rounded-md text-xs" style={baseColor}>
-        <summary className="flex cursor-pointer list-none items-start gap-2">
-          <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-90" />
-          <ItemBody item={item} className="flex-1 font-medium" />
-        </summary>
-      </details>
+      <ToggleDetails
+        defaultOpen={!!item.open}
+        summary={
+          <>
+            <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-90" />
+            <ItemBody item={item} className="flex-1 font-medium" />
+          </>
+        }
+        style={baseColor}
+      >
+        {children.length > 0 && (
+          <div className="mt-1 space-y-1 border-l border-line/40 pl-3 ml-1.5">
+            {children.map((child, cIdx) => (
+              <ResolutionBlock
+                key={child.id}
+                item={child}
+                numberedIndex={numberedIndexFor(children, cIdx)}
+                dispatchToggle={dispatchToggle}
+                mutedText={mutedText}
+                bodyText={bodyText}
+                hasBg={hasBg}
+                onLight={onLight}
+              />
+            ))}
+          </div>
+        )}
+      </ToggleDetails>
     );
   }
 
@@ -610,7 +708,7 @@ function ResolutionBlock({
           if (!interactive) return;
           e.preventDefault();
           e.stopPropagation();
-          onToggle?.(!item.checked);
+          dispatchToggle?.(item.id, !item.checked);
         }}
         className={cn(
           "shrink-0 inline-flex items-center justify-center leading-none",

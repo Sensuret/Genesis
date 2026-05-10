@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import type {
   Resolution,
   ResolutionBackground,
+  ResolutionItem,
   ResolutionSection,
   ResolutionSubsection
 } from "@/lib/supabase/types";
@@ -22,6 +23,65 @@ import { ResolutionBgPicker } from "./resolution-bg-picker";
 function newId(): string {
   if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
   return `nb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/**
+ * Recursively walk a `ResolutionItem` tree and toggle the `checked`
+ * state of the item whose id matches `itemId`. Used by the on-card
+ * checkbox handler so that ticks inside a toggle / callout's nested
+ * children also persist correctly. Falls through unchanged if the id
+ * isn't found at any depth.
+ */
+function toggleInItems(
+  items: ResolutionItem[],
+  itemId: string,
+  next: boolean
+): ResolutionItem[] {
+  return items.map((it) => {
+    if (it.id === itemId) return { ...it, checked: next };
+    if (it.children?.length) {
+      return { ...it, children: toggleInItems(it.children, itemId, next) };
+    }
+    return it;
+  });
+}
+
+/**
+ * Recursively trims and prunes a list of items in preparation for save.
+ *
+ * Rules (matching the read-only card's "should this row be visible?"
+ * heuristic so what you save is what you get back on reload):
+ *  1. Trim text on every item.
+ *  2. For container kinds (toggle / callout): clean children first,
+ *     then keep the container if either its header text is non-empty
+ *     OR it has at least one surviving child. An empty toggle with no
+ *     children is genuine noise and gets dropped.
+ *  3. Dividers are always kept regardless of text (they're structural).
+ *  4. Everything else: drop if text is empty.
+ *  5. Non-container kinds get any orphan `children` removed so they
+ *     don't silently inflate `computeResolutionProgress` denominators.
+ */
+function cleanItemsForSave(items: ResolutionItem[]): ResolutionItem[] {
+  return items
+    .map((it) => {
+      const trimmed: ResolutionItem = { ...it, text: (it.text ?? "").trim() };
+      const isContainer = it.kind === "toggle" || it.kind === "callout";
+      if (isContainer) {
+        const cleanedChildren = cleanItemsForSave(it.children ?? []);
+        if (cleanedChildren.length) trimmed.children = cleanedChildren;
+        else delete trimmed.children;
+      } else if (trimmed.children) {
+        delete trimmed.children;
+      }
+      return trimmed;
+    })
+    .filter((it) => {
+      if (it.kind === "divider") return true;
+      if ((it.kind === "toggle" || it.kind === "callout") && (it.children?.length ?? 0) > 0) {
+        return true;
+      }
+      return Boolean(it.text);
+    });
 }
 
 const SECTION_COLORS: ResolutionSection["color"][] = [
@@ -218,12 +278,7 @@ function ResolutionGrid({
               subsections: s.subsections.map((ss) =>
                 ss.id !== subId
                   ? ss
-                  : {
-                      ...ss,
-                      items: ss.items.map((it) =>
-                        it.id === itemId ? { ...it, checked: next } : it
-                      )
-                    }
+                  : { ...ss, items: toggleInItems(ss.items, itemId, next) }
               )
             }
       )
@@ -386,12 +441,11 @@ function CreateForm({
             ...ss,
             label: ss.label.trim(),
             target: ss.target?.trim() || undefined,
-            items: ss.items
-              .map((it) => ({ ...it, text: it.text.trim() }))
-              // Keep blocks that have text OR are intentionally empty
-              // structural kinds (divider). Drop the rest so the saved
-              // card doesn't render blank rows.
-              .filter((it) => it.text || it.kind === "divider")
+            // Recursive trim + prune so toggle / callout containers
+            // with empty header text but populated children survive
+            // (they're useful — the children carry the content). See
+            // cleanItemsForSave for the full rule set.
+            items: cleanItemsForSave(ss.items)
           }))
       }))
       .filter((s) => s.subsections.length);
@@ -1132,14 +1186,7 @@ function ResolutionModal({
                               subsections: s.subsections.map((ss) =>
                                 ss.id !== subId
                                   ? ss
-                                  : {
-                                      ...ss,
-                                      items: ss.items.map((it) =>
-                                        it.id === itemId
-                                          ? { ...it, checked: next }
-                                          : it
-                                      )
-                                    }
+                                  : { ...ss, items: toggleInItems(ss.items, itemId, next) }
                               )
                             }
                       )

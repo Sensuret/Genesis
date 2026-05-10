@@ -147,7 +147,21 @@ export function BlockEditor({ blocks, onChange, placeholder, className }: BlockE
     // command itself. Always clear it (text + html) after selection —
     // otherwise the newly-typed Heading-1 block would render with the
     // literal "/h1" as its visible content.
-    patch(id, (b) => ({ ...b, kind, text: "", html: "" }));
+    patch(id, (b) => {
+      const next: ResolutionItem = { ...b, kind, text: "", html: "" };
+      // Toggles default to OPEN on creation so the empty children area
+      // is immediately visible — otherwise the user has nowhere to type
+      // their nested content. Callouts don't have an open/closed state;
+      // their children area is always rendered.
+      if (kind === "toggle") next.open = true;
+      // Drop any leftover children when converting AWAY from a container
+      // kind. Non-container kinds never render children, but
+      // computeResolutionProgress recurses regardless of kind, so
+      // orphaned checkboxes inside a stranded children array would
+      // silently inflate the denominator and cap progress below 100%.
+      if (kind !== "toggle" && kind !== "callout") delete next.children;
+      return next;
+    });
     setMenu(null);
     if (kind !== "divider") setPendingFocus(id);
   }
@@ -158,41 +172,68 @@ export function BlockEditor({ blocks, onChange, placeholder, className }: BlockE
 
   return (
     <div className={cn("space-y-1", className)}>
-      {blocks.map((block, idx) => (
-        <BlockRow
-          key={block.id}
-          block={block}
-          isFirst={idx === 0}
-          placeholder={idx === 0 ? (placeholder ?? "") : ""}
-          inputRef={(el) => { inputRefs.current[block.id] = el; }}
-          onBodyChange={(next) => patch(block.id, (b) => ({ ...b, text: next.text, html: next.html }))}
-          onToggleChecked={() => patch(block.id, (b) => ({ ...b, checked: !b.checked }))}
-          onToggleOpen={() => patch(block.id, (b) => ({ ...b, open: !b.open }))}
-          onEnter={() => insertAfter(block.id, blockKindOf(block))}
-          onBackspaceEmpty={() => removeBlock(block.id)}
-          onSlashOpen={(query) => openMenuOn(block.id, query)}
-          onSlashUpdate={(query) => menu?.blockId === block.id && setMenu({ ...menu!, query, activeIdx: 0 })}
-          onSlashClose={() => setMenu(null)}
-          isMenuOpen={menu?.blockId === block.id}
-          menu={menu?.blockId === block.id ? menu : null}
-          onMenuPick={(kind) => changeKind(block.id, kind)}
-          onMenuMove={(delta) => {
-            if (menu?.blockId !== block.id) return;
-            const filtered = filterOptions(menu.query);
-            if (filtered.length === 0) return;
-            const next = (menu.activeIdx + delta + filtered.length) % filtered.length;
-            setMenu({ ...menu, activeIdx: next });
-          }}
-          onMenuConfirm={() => {
-            if (menu?.blockId !== block.id) return;
-            const filtered = filterOptions(menu.query);
-            const choice = filtered[menu.activeIdx];
-            if (choice) changeKind(block.id, choice.kind);
-          }}
-          onAddBelow={() => insertAfter(block.id, "todo")}
-          onDelete={() => removeBlock(block.id)}
-        />
-      ))}
+      {blocks.map((block, idx) => {
+        const kind = blockKindOf(block);
+        // Container kinds get a nested BlockEditor rendered indented
+        // below their row. Toggles only show children when open (so
+        // the disclosure actually does something). Callouts always
+        // show their children — collapsing a callout would make the
+        // slash-commands-inside feature unreachable.
+        const showChildren =
+          (kind === "toggle" && !!block.open) || kind === "callout";
+        return (
+          <div key={block.id}>
+            <BlockRow
+              block={block}
+              isFirst={idx === 0}
+              placeholder={idx === 0 ? (placeholder ?? "") : ""}
+              inputRef={(el) => { inputRefs.current[block.id] = el; }}
+              onBodyChange={(next) => patch(block.id, (b) => ({ ...b, text: next.text, html: next.html }))}
+              onToggleChecked={() => patch(block.id, (b) => ({ ...b, checked: !b.checked }))}
+              onToggleOpen={() => patch(block.id, (b) => ({ ...b, open: !b.open }))}
+              onEnter={() => insertAfter(block.id, blockKindOf(block))}
+              onBackspaceEmpty={() => removeBlock(block.id)}
+              onSlashOpen={(query) => openMenuOn(block.id, query)}
+              onSlashUpdate={(query) => menu?.blockId === block.id && setMenu({ ...menu!, query, activeIdx: 0 })}
+              onSlashClose={() => setMenu(null)}
+              isMenuOpen={menu?.blockId === block.id}
+              menu={menu?.blockId === block.id ? menu : null}
+              onMenuPick={(kind) => changeKind(block.id, kind)}
+              onMenuMove={(delta) => {
+                if (menu?.blockId !== block.id) return;
+                const filtered = filterOptions(menu.query);
+                if (filtered.length === 0) return;
+                const next = (menu.activeIdx + delta + filtered.length) % filtered.length;
+                setMenu({ ...menu, activeIdx: next });
+              }}
+              onMenuConfirm={() => {
+                if (menu?.blockId !== block.id) return;
+                const filtered = filterOptions(menu.query);
+                const choice = filtered[menu.activeIdx];
+                if (choice) changeKind(block.id, choice.kind);
+              }}
+              onAddBelow={() => insertAfter(block.id, "todo")}
+              onDelete={() => removeBlock(block.id)}
+            />
+
+            {showChildren && (
+              <div className="ml-7 mt-1 border-l border-line/40 pl-3">
+                <BlockEditor
+                  blocks={block.children ?? []}
+                  onChange={(nextChildren) =>
+                    patch(block.id, (b) => ({ ...b, children: nextChildren }))
+                  }
+                  placeholder={
+                    kind === "toggle"
+                      ? "Empty toggle — type '/' for commands"
+                      : "Type '/' for commands"
+                  }
+                />
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
