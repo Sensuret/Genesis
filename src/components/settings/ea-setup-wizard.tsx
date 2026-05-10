@@ -90,79 +90,43 @@ export function EaSetupWizard({
     [supabaseUrl]
   );
 
-  // "Connected!" detection — needs to fire for the right account in
-  // three different scenarios without false-positives:
+  // "Connected!" detection — keep it dead simple: any EA-synced
+  // trade_files row that has been touched (heartbeat or trade) within
+  // the last 90 seconds is considered live. We don't try to
+  // distinguish "the account being set up right now" vs "another
+  // account that was already live" — that distinction is too noisy
+  // and the user-facing intent is just "is my EA pinging Supabase".
+  // If yes, show the most recently active account on step 5.
   //
-  //  (1) Brand-new attach: a trade_files row that didn't exist when the
-  //      wizard was opened shows up.
-  //  (2) Re-attach to a previously-offline account: the row already
-  //      existed but its `last_synced_at` was stale at open time, and
-  //      now advances past the wizard-open moment.
-  //  (3) NOT a continuously-active account that simply heartbeated
-  //      mid-walkthrough — that account was already known to be live
-  //      and isn't what this wizard run is about.
-  //
-  // To distinguish them we snapshot ONCE on open: the set of existing
-  // file ids AND each one's `last_synced_at`. From there:
-  //   - new id  → connected (provided it has a fresh sync timestamp).
-  //   - known id where the snapshot showed it as stale (>60s old) and
-  //     it has now refreshed past wizardOpenedAt → connected (re-attach).
-  //   - known id that was already live at snapshot time → ignored.
-  //
-  // The snapshot is captured exactly once per open transition, so a
-  // realtime delta arriving mid-walkthrough cannot get baked back in.
-  type WizardBaseline = {
-    ids: Set<string>;
-    lastSyncedAt: Map<string, number>;
-    openedAt: number;
-  };
-  const [baseline, setBaseline] = useState<WizardBaseline | null>(null);
-
+  // We keep a `tick` state that bumps every 5s so the live/stale
+  // boundary is re-evaluated even when no realtime delta has arrived.
+  const FRESH_WINDOW_MS = 90_000;
+  const [tick, setTick] = useState(0);
   useEffect(() => {
-    if (!open) {
-      if (baseline !== null) setBaseline(null);
-      return;
-    }
-    if (baseline !== null) return;
-    setBaseline({
-      ids: new Set(eaFiles.map((f) => f.id)),
-      lastSyncedAt: new Map(
-        eaFiles.map((f) => [
-          f.id,
-          f.last_synced_at ? new Date(f.last_synced_at).getTime() : 0
-        ])
-      ),
-      openedAt: Date.now()
-    });
-  }, [open, eaFiles, baseline]);
+    if (!open) return;
+    const id = setInterval(() => setTick((n) => n + 1), 5_000);
+    return () => clearInterval(id);
+  }, [open]);
 
   const newlyConnected = useMemo(() => {
-    if (!baseline) return null;
-    return (
-      eaFiles.find((f) => {
-        if (!f.last_synced_at) return false;
-        const lastSync = new Date(f.last_synced_at).getTime();
-        if (!Number.isFinite(lastSync)) return false;
-
-        if (!baseline.ids.has(f.id)) {
-          // Brand-new account row. Require a fresh sync past wizard-open
-          // — guards against an empty trade_files row appearing before
-          // the EA actually pings.
-          return lastSync >= baseline.openedAt;
-        }
-
-        // Pre-existing account: only counts as freshly connected if it
-        // looked offline when the wizard opened (>60s since its last
-        // sync) AND has now refreshed past wizardOpenedAt. Anything
-        // less stale was already live and isn't what this wizard run
-        // is targeting, so ignore.
-        const baselineTime = baseline.lastSyncedAt.get(f.id) ?? 0;
-        const stalenessAtOpen = baseline.openedAt - baselineTime;
-        if (stalenessAtOpen < 60_000) return false;
-        return lastSync >= baseline.openedAt;
-      }) ?? null
-    );
-  }, [eaFiles, baseline]);
+    const now = Date.now();
+    let best: TradeFileRow | null = null;
+    let bestT = 0;
+    for (const f of eaFiles) {
+      if (!f.last_synced_at) continue;
+      const t = new Date(f.last_synced_at).getTime();
+      if (!Number.isFinite(t)) continue;
+      if (now - t > FRESH_WINDOW_MS) continue;
+      if (t > bestT) {
+        bestT = t;
+        best = f;
+      }
+    }
+    return best;
+    // `tick` intentionally listed so the memo recomputes as time
+    // passes even when eaFiles itself hasn't changed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eaFiles, tick]);
 
   useEffect(() => {
     if (newlyConnected && step === 5) {
