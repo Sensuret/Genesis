@@ -82,15 +82,48 @@ function resolveEmbed(rawUrl: string): { kind: EmbedKind; src: string; provider:
     }
   }
 
-  // TradingView — only the publish-to-web snapshot URLs (/x/<id>/) and
-  // the symbol-overview embed widgets allow iframing. Chart pages and
-  // ideas don't, so they fall through to the blocked branch below.
+  // TradingView — full URL matrix:
+  //   1. /x/<id>/ snapshots and existing /embed-widget/ URLs allow
+  //      iframe directly.
+  //   2. /chart/?symbol=NASDAQ%3AAAPL  → rebuild as a widget embed.
+  //   3. /chart/<id>/?symbol=…         → same as #2.
+  //   4. /symbols/NASDAQ-AAPL/         → derive exchange:symbol and
+  //                                       rebuild as a widget embed.
+  // Anything else (ideas pages, profile pages, screener) falls through
+  // to "blocked" so the helpful CTA explains the share-menu workaround.
   if (host === "tradingview.com" || host.endsWith(".tradingview.com")) {
     if (/^\/x\/[a-zA-Z0-9]+/.test(u.pathname)) {
       return { kind: "iframe", src: u.toString(), provider: "tradingview" };
     }
     if (host.startsWith("s.") || u.pathname.startsWith("/embed-widget/")) {
       return { kind: "iframe", src: u.toString(), provider: "tradingview" };
+    }
+    // Try to derive a symbol so we can render the official chart widget
+    // (which DOES allow iframing — `s.tradingview.com/widgetembed/`).
+    let symbol: string | null = u.searchParams.get("symbol");
+    if (!symbol) {
+      // /symbols/NASDAQ-AAPL/ → NASDAQ:AAPL
+      const m = u.pathname.match(/^\/symbols\/([A-Za-z0-9]+)-([A-Za-z0-9._-]+)/);
+      if (m) symbol = `${m[1]}:${m[2]}`;
+    }
+    if (symbol) {
+      const params = new URLSearchParams({
+        symbol,
+        interval: u.searchParams.get("interval") ?? "D",
+        theme: "dark",
+        style: "1",
+        timezone: "Etc/UTC",
+        withdateranges: "1",
+        hide_side_toolbar: "0",
+        allow_symbol_change: "1",
+        save_image: "1",
+        details: "1"
+      });
+      return {
+        kind: "iframe",
+        src: `https://s.tradingview.com/widgetembed/?${params.toString()}`,
+        provider: "tradingview"
+      };
     }
     return { kind: "blocked", src: u.toString(), provider: "tradingview" };
   }
@@ -102,10 +135,21 @@ function resolveEmbed(rawUrl: string): { kind: EmbedKind; src: string; provider:
     return { kind: "image", src: u.toString(), provider: "image" };
   }
 
-  // Notion public pages refuse iframe; mark blocked so we can show a
-  // helpful "Open in new tab" fallback rather than a blank rectangle.
-  if (host.endsWith("notion.so") || host.endsWith("notion.site")) {
+  // Notion has two URL families:
+  //  - notion.so/<workspace>/<page-id>: the private workspace URL.
+  //    These are the ones that absolutely refuse iframe — the
+  //    fallback CTA explains how to publish-to-web instead.
+  //  - <workspace>.notion.site/<slug>: the publish-to-web URL.
+  //    Notion's CDN sets X-Frame-Options: SAMEORIGIN on the bare
+  //    page, but a `?embed=true` query produces a stripped-down
+  //    page without the same restriction so iframe works. We always
+  //    append it so users can paste their public URL straight in.
+  if (host.endsWith("notion.so")) {
     return { kind: "blocked", src: u.toString(), provider: "notion" };
+  }
+  if (host.endsWith("notion.site")) {
+    if (!u.searchParams.has("embed")) u.searchParams.set("embed", "true");
+    return { kind: "iframe", src: u.toString(), provider: "notion" };
   }
 
   // Pinterest pin pages also refuse iframe.
@@ -619,7 +663,7 @@ export default function NotebookPage() {
                         : resolved.provider === "tradingview"
                         ? "Use the share menu on a chart → 'Get image link' to publish a snapshot. The snapshot URL (looks like tradingview.com/x/abc123/) embeds inline."
                         : resolved.provider === "notion"
-                        ? "Notion forces every iframe to fail. Publish the page as a public site, then paste the public URL through a free third-party embed helper (e.g. potion.so / fruitionsite.com) — the resulting URL embeds here."
+                        ? "This is a private notion.so URL — those refuse iframe. Click Share → 'Publish to web' on the Notion page, then paste the public *.notion.site URL here and it'll embed inline."
                         : "Most modern sites block iframe embedding for security. Use the link below to open it in a new tab, or paste a direct image / video URL instead."}
                     </div>
                     <a
