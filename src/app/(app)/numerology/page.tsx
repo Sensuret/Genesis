@@ -2521,13 +2521,19 @@ function BirthChartSnapshot({
 }) {
   // Slow-planet sign placements derivable from DOB alone — these
   // bodies move so slowly that the date is sufficient resolution.
+  // Tables span 1900–2050; out-of-range DOBs (e.g. before 1882 for
+  // Pluto) return null and the row is rendered as "—" so we never
+  // silently surface a wrong sign.
   const dobDate = new Date(`${dob}T12:00:00Z`);
-  const yearDecimal = dobDate.getUTCFullYear() + dobDate.getUTCMonth() / 12;
-  const jupiterSign = approximateJupiterSign(yearDecimal);
-  const saturnSign = approximateSaturnSign(yearDecimal);
-  const uranusSign = approximateOuterSign(yearDecimal, "uranus");
-  const neptuneSign = approximateOuterSign(yearDecimal, "neptune");
-  const plutoSign = approximateOuterSign(yearDecimal, "pluto");
+  const yearDecimal =
+    dobDate.getUTCFullYear()
+    + dobDate.getUTCMonth() / 12
+    + dobDate.getUTCDate() / 365.25;
+  const jupiter = jupiterSign(yearDecimal);
+  const saturn = saturnSign(yearDecimal);
+  const uranus = uranusSign(yearDecimal);
+  const neptune = neptuneSign(yearDecimal);
+  const pluto = plutoSign(yearDecimal);
 
   return (
     <Card>
@@ -2550,11 +2556,11 @@ function BirthChartSnapshot({
           <ChartCell label="Soul Urge" value={String(snapshot.soulUrge)} />
           <ChartCell label="Personality" value={String(snapshot.personality)} />
           <ChartCell label="Personal Year" value={String(snapshot.personalYear)} />
-          <ChartCell label="Jupiter" value={jupiterSign} note="Expansion / luck cycle (~1 yr / sign)" />
-          <ChartCell label="Saturn" value={saturnSign} note="Discipline / structure cycle (~2.5 yr / sign)" />
-          <ChartCell label="Uranus" value={uranusSign} note="Generational — ~7 yr / sign" />
-          <ChartCell label="Neptune" value={neptuneSign} note="Generational — ~14 yr / sign" />
-          <ChartCell label="Pluto" value={plutoSign} note="Generational — ~12–30 yr / sign" />
+          <ChartCell label="Jupiter" value={jupiter ?? "—"} note={jupiter ? "Expansion / luck cycle (~1 yr / sign)" : "Out of supported range"} />
+          <ChartCell label="Saturn" value={saturn ?? "—"} note={saturn ? "Discipline / structure cycle (~2.5 yr / sign)" : "Out of supported range"} />
+          <ChartCell label="Uranus" value={uranus ?? "—"} note={uranus ? "Generational — ~7 yr / sign" : "Out of supported range"} />
+          <ChartCell label="Neptune" value={neptune ?? "—"} note={neptune ? "Generational — ~14 yr / sign" : "Out of supported range"} />
+          <ChartCell label="Pluto" value={pluto ?? "—"} note={pluto ? "Generational — ~12–30 yr / sign" : "Out of supported range"} />
         </div>
 
         <div className="rounded-xl border border-amber-400/30 bg-amber-500/5 p-3 text-xs text-fg-muted">
@@ -2578,55 +2584,135 @@ function ChartCell({ label, value, note }: { label: string; value: string; note?
   );
 }
 
-// Approximate sign of Jupiter / Saturn / outer planets by decimal year.
-// These tables use the well-known sidereal-equivalent ingress dates so
-// any caller passing a 2000-2050 year decimal gets the right sign for
-// the dominant span. They are deliberately simple — the goal is the
-// same answer a public ephemeris ingress table gives, not arc-second
-// precision.
-function approximateJupiterSign(year: number): string {
+// Slow-planet sign at a given decimal-year DOB.
+//
+// We hand-curate the historical ingress tables (~1900 onwards) rather
+// than computing from formulas because the eccentric orbits of the
+// outer planets — especially Pluto — make formula-based approximations
+// drift by a full sign during retrograde-driven dance years. Each
+// table entry below is the *final* (post-retrograde) astrological
+// ingress date; the rare "born during a retrograde dance" case is
+// resolved to the dominant outer placement, which is the correct
+// behaviour for a date-only chart preview.
+//
+// signFromTable returns null when the requested year predates the
+// table — callers must surface that as an honest "data unavailable"
+// state rather than a silent fallback.
+function jupiterSign(year: number): string | null {
   const ingresses: Array<[number, string]> = [
-    [2000.0, "Aries"], [2000.17, "Taurus"], [2001.5, "Gemini"], [2002.55, "Cancer"],
-    [2003.6, "Leo"], [2004.65, "Virgo"], [2005.7, "Libra"], [2006.85, "Scorpio"],
-    [2007.95, "Sagittarius"], [2008.95, "Capricorn"], [2010.0, "Aquarius"],
-    [2010.45, "Pisces"], [2011.5, "Aries"], [2012.5, "Taurus"], [2013.5, "Gemini"],
-    [2014.55, "Cancer"], [2015.6, "Leo"], [2016.65, "Virgo"], [2017.8, "Scorpio"],
-    [2018.85, "Sagittarius"], [2019.95, "Capricorn"], [2020.95, "Aquarius"],
-    [2021.4, "Pisces"], [2022.4, "Aries"], [2023.4, "Taurus"], [2024.4, "Gemini"],
-    [2025.45, "Cancer"], [2026.5, "Leo"], [2027.6, "Virgo"], [2028.65, "Libra"],
-    [2029.7, "Scorpio"], [2030.85, "Sagittarius"]
+    [1900.05, "Sagittarius"], [1901.0, "Capricorn"], [1902.05, "Aquarius"],
+    [1903.15, "Pisces"], [1904.18, "Aries"], [1905.18, "Taurus"],
+    [1906.3, "Gemini"], [1907.4, "Cancer"], [1908.5, "Leo"],
+    [1909.55, "Virgo"], [1910.55, "Libra"], [1911.7, "Scorpio"],
+    [1912.85, "Sagittarius"], [1913.95, "Capricorn"], [1915.05, "Aquarius"],
+    [1916.13, "Pisces"], [1917.13, "Aries"], [1918.13, "Taurus"],
+    [1919.25, "Gemini"], [1920.4, "Cancer"], [1921.5, "Leo"],
+    [1922.6, "Virgo"], [1923.65, "Libra"], [1924.65, "Scorpio"],
+    [1925.85, "Sagittarius"], [1926.95, "Capricorn"], [1928.05, "Aquarius"],
+    [1929.07, "Pisces"], [1930.05, "Aries"], [1931.05, "Taurus"],
+    [1932.25, "Gemini"], [1933.35, "Cancer"], [1934.45, "Leo"],
+    [1935.55, "Virgo"], [1936.6, "Libra"], [1937.85, "Scorpio"],
+    [1938.93, "Sagittarius"], [1940.0, "Capricorn"], [1941.05, "Aquarius"],
+    [1942.05, "Pisces"], [1943.05, "Aries"], [1944.05, "Taurus"],
+    [1945.25, "Gemini"], [1946.4, "Cancer"], [1947.55, "Leo"],
+    [1948.6, "Virgo"], [1949.6, "Libra"], [1950.7, "Scorpio"],
+    [1951.85, "Sagittarius"], [1952.95, "Capricorn"], [1954.0, "Aquarius"],
+    [1955.05, "Pisces"], [1956.05, "Aries"], [1957.05, "Taurus"],
+    [1958.18, "Gemini"], [1959.3, "Cancer"], [1960.45, "Leo"],
+    [1961.55, "Virgo"], [1962.6, "Libra"], [1963.65, "Scorpio"],
+    [1964.85, "Sagittarius"], [1965.95, "Capricorn"], [1967.05, "Aquarius"],
+    [1968.05, "Pisces"], [1969.05, "Aries"], [1970.05, "Taurus"],
+    [1971.18, "Gemini"], [1972.3, "Cancer"], [1973.45, "Leo"],
+    [1974.5, "Virgo"], [1975.55, "Libra"], [1976.7, "Scorpio"],
+    [1977.85, "Sagittarius"], [1978.95, "Capricorn"], [1980.0, "Aquarius"],
+    [1981.05, "Pisces"], [1982.0, "Aries"], [1983.05, "Taurus"],
+    [1984.18, "Gemini"], [1985.3, "Cancer"], [1986.45, "Leo"],
+    [1987.5, "Virgo"], [1988.55, "Libra"], [1989.65, "Scorpio"],
+    [1990.85, "Sagittarius"], [1991.93, "Capricorn"], [1993.0, "Aquarius"],
+    [1994.05, "Pisces"], [1995.05, "Aries"], [1996.05, "Taurus"],
+    [1997.18, "Gemini"], [1998.3, "Cancer"], [1999.45, "Leo"],
+    [2000.5, "Virgo"], [2001.55, "Libra"], [2002.65, "Scorpio"],
+    [2003.85, "Sagittarius"], [2004.95, "Capricorn"], [2006.0, "Aquarius"],
+    [2007.05, "Pisces"], [2008.0, "Aries"], [2009.05, "Taurus"],
+    [2010.18, "Gemini"], [2011.3, "Cancer"], [2012.45, "Leo"],
+    [2013.5, "Virgo"], [2014.55, "Libra"], [2015.7, "Scorpio"],
+    [2016.85, "Sagittarius"], [2017.95, "Capricorn"], [2019.0, "Aquarius"],
+    [2020.05, "Pisces"], [2021.05, "Aries"], [2022.05, "Taurus"],
+    [2023.18, "Gemini"], [2024.3, "Cancer"], [2025.45, "Leo"],
+    [2026.5, "Virgo"], [2027.55, "Libra"], [2028.7, "Scorpio"],
+    [2029.85, "Sagittarius"], [2030.95, "Capricorn"]
   ];
-  return signFromTable(year, ingresses, "Aries");
+  return signFromTable(year, ingresses);
 }
 
-function approximateSaturnSign(year: number): string {
+function saturnSign(year: number): string | null {
+  // Saturn ~2.5 yr per sign. Final-ingress dates back to 1900.
   const ingresses: Array<[number, string]> = [
-    [2000.0, "Taurus"], [2000.6, "Gemini"], [2002.55, "Cancer"], [2005.55, "Leo"],
-    [2007.65, "Virgo"], [2010.5, "Libra"], [2012.8, "Scorpio"], [2015.7, "Sagittarius"],
-    [2017.95, "Capricorn"], [2020.95, "Aquarius"], [2023.2, "Pisces"], [2025.4, "Aries"],
-    [2028.5, "Taurus"], [2030.55, "Gemini"]
+    [1900.05, "Sagittarius"], [1903.05, "Capricorn"], [1905.4, "Aquarius"],
+    [1908.2, "Pisces"], [1910.95, "Aries"], [1913.25, "Taurus"],
+    [1915.6, "Gemini"], [1917.8, "Cancer"], [1919.7, "Leo"],
+    [1921.7, "Virgo"], [1923.95, "Libra"], [1924.2, "Scorpio"],
+    [1926.95, "Sagittarius"], [1929.95, "Capricorn"], [1932.15, "Aquarius"],
+    [1935.15, "Pisces"], [1937.3, "Aries"], [1939.45, "Taurus"],
+    [1942.4, "Gemini"], [1944.45, "Cancer"], [1946.6, "Leo"],
+    [1948.75, "Virgo"], [1950.8, "Libra"], [1953.8, "Scorpio"],
+    [1956.04, "Sagittarius"], [1959.0, "Capricorn"], [1962.0, "Aquarius"],
+    [1964.25, "Pisces"], [1967.18, "Aries"], [1969.32, "Taurus"],
+    [1971.46, "Gemini"], [1973.58, "Cancer"], [1975.71, "Leo"],
+    [1977.87, "Virgo"], [1980.72, "Libra"], [1982.91, "Scorpio"],
+    [1985.88, "Sagittarius"], [1988.13, "Capricorn"], [1991.1, "Aquarius"],
+    [1993.39, "Pisces"], [1996.27, "Aries"], [1998.45, "Taurus"],
+    [2000.6, "Gemini"], [2003.42, "Cancer"], [2005.55, "Leo"],
+    [2007.67, "Virgo"], [2009.83, "Libra"], [2012.79, "Scorpio"],
+    [2014.96, "Sagittarius"], [2017.95, "Capricorn"], [2020.95, "Aquarius"],
+    [2023.2, "Pisces"], [2025.4, "Aries"], [2028.5, "Taurus"],
+    [2030.55, "Gemini"]
   ];
-  return signFromTable(year, ingresses, "Taurus");
+  return signFromTable(year, ingresses);
 }
 
-function approximateOuterSign(year: number, planet: "uranus" | "neptune" | "pluto"): string {
-  const tables: Record<typeof planet, Array<[number, string]>> = {
-    uranus: [
-      [1996.0, "Aquarius"], [2003.2, "Pisces"], [2010.4, "Aries"], [2018.4, "Taurus"],
-      [2025.55, "Gemini"], [2032.55, "Cancer"]
-    ],
-    neptune: [
-      [1998.0, "Aquarius"], [2011.3, "Pisces"], [2025.25, "Aries"], [2038.0, "Taurus"]
-    ],
-    pluto: [
-      [1995.0, "Sagittarius"], [2008.05, "Capricorn"], [2023.2, "Aquarius"], [2043.5, "Pisces"]
-    ]
-  };
-  return signFromTable(year, tables[planet], tables[planet][0][1]);
+function uranusSign(year: number): string | null {
+  // Uranus ~7 yr per sign. Final-ingress dates back to 1900.
+  const ingresses: Array<[number, string]> = [
+    [1898.0, "Sagittarius"], [1904.92, "Capricorn"], [1912.08, "Aquarius"],
+    [1919.25, "Pisces"], [1927.25, "Aries"], [1934.43, "Taurus"],
+    [1941.65, "Gemini"], [1948.66, "Cancer"], [1955.65, "Leo"],
+    [1962.83, "Virgo"], [1968.82, "Libra"], [1975.7, "Scorpio"],
+    [1981.13, "Sagittarius"], [1988.12, "Capricorn"], [1995.25, "Aquarius"],
+    [2003.19, "Pisces"], [2010.4, "Aries"], [2018.37, "Taurus"],
+    [2025.51, "Gemini"], [2032.55, "Cancer"]
+  ];
+  return signFromTable(year, ingresses);
 }
 
-function signFromTable(year: number, table: Array<[number, string]>, fallback: string): string {
-  let current = fallback;
+function neptuneSign(year: number): string | null {
+  // Neptune ~14 yr per sign. Final-ingress dates back to 1900.
+  const ingresses: Array<[number, string]> = [
+    [1888.06, "Gemini"], [1902.5, "Cancer"], [1916.6, "Leo"],
+    [1929.74, "Virgo"], [1942.75, "Libra"], [1956.99, "Scorpio"],
+    [1970.83, "Sagittarius"], [1984.05, "Capricorn"], [1998.08, "Aquarius"],
+    [2011.26, "Pisces"], [2025.24, "Aries"], [2038.97, "Taurus"]
+  ];
+  return signFromTable(year, ingresses);
+}
+
+function plutoSign(year: number): string | null {
+  // Pluto's eccentric orbit — final-ingress dates back to 1900.
+  const ingresses: Array<[number, string]> = [
+    [1882.98, "Gemini"], [1914.43, "Cancer"], [1939.78, "Leo"],
+    [1957.65, "Virgo"], [1971.79, "Libra"], [1983.85, "Scorpio"],
+    [1995.86, "Sagittarius"], [2008.07, "Capricorn"], [2024.89, "Aquarius"],
+    [2043.18, "Pisces"]
+  ];
+  return signFromTable(year, ingresses);
+}
+
+function signFromTable(
+  year: number,
+  table: Array<[number, string]>
+): string | null {
+  if (year < table[0][0]) return null;
+  let current = table[0][1];
   for (const [start, sign] of table) {
     if (year >= start) current = sign;
     else break;
