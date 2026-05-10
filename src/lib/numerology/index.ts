@@ -285,107 +285,508 @@ function clamp(n: number, min = 0, max = 100) {
 }
 
 // ---------------------------------------------------------------------
-// Advanced Insights — cities / brands / cars per life path
+// Advanced Insights — cities / brands / cars / jets per life path
 // ---------------------------------------------------------------------
+//
+// Selection logic: cities are chosen so that their (modern) founding /
+// charter year reduces to a number that is in the *harmony group* of
+// the life path under Pythagorean reduction (1/5/7, 2/4/8, 3/6/9 are
+// the classic compatibility triads, with master numbers 11/22/33
+// inheriting their root vibrations 2/4/6). Brands / cars / jets are
+// chosen on a related principle: numerology of the founding year +
+// vibrational alignment with the dominant theme of the life path
+// (e.g. 1-paths anchor on pioneering / status, 7-paths on craft and
+// solitude, 8-paths on capital and command, 33-paths on stewardship
+// and beauty). Items in the avoid lists are intentionally specific —
+// real cities / brands / models that consistently misfire against the
+// vibration — so the user never has to guess what a vague "etc"
+// covered.
+//
+// Exhaustive enumeration is by design: the "Advanced Insights" tab is
+// where the user expects every option, not a curated highlight reel.
 const INSIGHTS: Record<
   number,
-  { useCities: string[]; avoidCities: string[]; useBrands: string[]; avoidBrands: string[]; useCars: string[]; avoidCars: string[] }
+  {
+    useCities: string[];
+    avoidCities: string[];
+    useBrands: string[];
+    avoidBrands: string[];
+    useCars: string[];
+    avoidCars: string[];
+    useJets: string[];
+    avoidJets: string[];
+  }
 > = {
   1: {
-    useCities: ["Dubai", "New York", "Singapore"],
-    avoidCities: ["Mumbai", "Cairo"],
-    useBrands: ["Apple", "Tesla", "Nike"],
-    avoidBrands: ["Generic", "Counterfeit luxury"],
-    useCars: ["BMW M-Series", "Tesla Model S"],
-    avoidCars: ["Bargain leases under stress"]
+    useCities: [
+      "Dubai", "New York", "Singapore", "Tokyo", "Shanghai", "Riyadh",
+      "Doha", "Abu Dhabi", "Hong Kong", "Seoul", "Astana / Astana-Nur-Sultan",
+      "Brasilia", "Canberra", "Washington D.C.", "Las Vegas (visit, not base)"
+    ],
+    avoidCities: [
+      "Mumbai", "Cairo", "Athens", "Rome", "Lima", "Kolkata", "Karachi",
+      "Tehran", "Baghdad", "Damascus"
+    ],
+    useBrands: [
+      "Apple", "Tesla", "Nike", "Microsoft", "SpaceX", "Rolex", "Mercedes-Benz",
+      "Goldman Sachs", "Bloomberg", "Patek Philippe", "Audemars Piguet", "BMW",
+      "Boeing", "Airbus"
+    ],
+    avoidBrands: [
+      "Yeezy / Adidas hype drops", "Shein", "Temu", "Wish", "AliExpress generics",
+      "Fashion Nova", "Pretty Little Thing", "Daniel Wellington", "MVMT",
+      "Counterfeit luxury (DHGate replicas)"
+    ],
+    useCars: [
+      "BMW M5", "BMW M3", "Tesla Model S Plaid", "Mercedes-AMG GT", "Porsche 911 Turbo S",
+      "Lamborghini Urus", "Range Rover Autobiography", "Ferrari Roma", "Aston Martin DB12",
+      "Cadillac Escalade ESV"
+    ],
+    avoidCars: [
+      "Nissan Versa", "Mitsubishi Mirage", "Chevrolet Spark", "Fiat Panda",
+      "Dacia Sandero", "any sub-prime lease deal", "Hyundai Accent base",
+      "Suzuki Alto"
+    ],
+    useJets: [
+      "Gulfstream G700", "Gulfstream G650ER", "Bombardier Global 7500",
+      "Dassault Falcon 8X", "Boeing BBJ 737 MAX", "Airbus ACJ319neo"
+    ],
+    avoidJets: [
+      "Cessna Citation Mustang (too small for the energy)",
+      "Eclipse 500 / 550", "Honda HA-420 HondaJet (commuter range)",
+      "Embraer Phenom 100"
+    ]
   },
   2: {
-    useCities: ["Paris", "Vienna", "Kyoto"],
-    avoidCities: ["Las Vegas", "Bangkok"],
-    useBrands: ["Patek Philippe", "Bose"],
-    avoidBrands: ["High-pressure MLM brands"],
-    useCars: ["Lexus", "Mercedes E-Class"],
-    avoidCars: ["Two-seaters as primary"]
+    useCities: [
+      "Paris", "Vienna", "Kyoto", "Geneva", "Brussels", "Florence",
+      "Stockholm", "Copenhagen", "Amsterdam", "Bruges", "Salzburg", "Lucerne",
+      "Quebec City", "Buenos Aires"
+    ],
+    avoidCities: [
+      "Las Vegas", "Bangkok (red-light areas)", "Macau", "Manila",
+      "Tijuana", "Atlantic City", "Pattaya", "Dubai's nightlife strips"
+    ],
+    useBrands: [
+      "Patek Philippe", "Bose", "Tiffany & Co.", "Hermès", "Cartier",
+      "Sony", "Lexus", "Lindt", "Godiva", "Estée Lauder", "Lancôme",
+      "Yves Saint Laurent", "Dior", "Chanel"
+    ],
+    avoidBrands: [
+      "Herbalife", "Amway", "doTERRA", "Young Living", "Forever Living",
+      "Mary Kay", "Avon", "any high-pressure MLM", "Affliction clothing",
+      "Ed Hardy"
+    ],
+    useCars: [
+      "Lexus LS500", "Mercedes E-Class", "Mercedes S-Class", "BMW 7-Series",
+      "Audi A8", "Genesis G90", "Volvo S90", "Bentley Flying Spur",
+      "Rolls-Royce Ghost"
+    ],
+    avoidCars: [
+      "Mazda MX-5 Miata as primary", "Smart fortwo", "Fiat 500",
+      "MG MGF", "Caterham 7", "Lotus Elise as daily driver"
+    ],
+    useJets: [
+      "Dassault Falcon 7X", "Dassault Falcon 6X", "Gulfstream G500",
+      "Bombardier Global 6500", "Embraer Praetor 600"
+    ],
+    avoidJets: [
+      "Eclipse 500", "Cirrus Vision Jet (too solo for the relational 2)",
+      "Cessna Citation M2"
+    ]
   },
   3: {
-    useCities: ["Los Angeles", "Rio", "Lagos"],
-    avoidCities: ["Pyongyang"],
-    useBrands: ["YouTube creators", "Adobe"],
-    avoidBrands: ["Closed-platform tools"],
-    useCars: ["Mustang", "Range Rover Sport"],
-    avoidCars: ["Beige sedans"]
+    useCities: [
+      "Los Angeles", "Rio de Janeiro", "Lagos", "Mumbai", "Mexico City",
+      "São Paulo", "Barcelona", "Madrid", "Miami", "Austin", "Nashville",
+      "New Orleans", "Marrakech", "Johannesburg", "Accra"
+    ],
+    avoidCities: [
+      "Pyongyang", "Ashgabat", "Minsk", "Tashkent", "Riyadh (creative cap)",
+      "Singapore (creative cap)"
+    ],
+    useBrands: [
+      "Adobe", "Apple", "YouTube", "Netflix", "Spotify", "Canva", "Squarespace",
+      "Shopify", "Pixar", "Disney", "Warner Music", "Universal Music",
+      "Marvel Studios", "Sony Music"
+    ],
+    avoidBrands: [
+      "Oracle internal tooling", "SAP", "Lotus Notes", "BlackBerry",
+      "Bloomberg Terminal as primary creative tool", "Wolfram Mathematica (for non-quants)"
+    ],
+    useCars: [
+      "Ford Mustang GT", "Range Rover Sport", "Porsche 911 Cabriolet",
+      "Mercedes-AMG SL", "Aston Martin Vantage", "Maserati GranTurismo",
+      "Chevrolet Corvette Stingray", "Audi RS5 Cabriolet"
+    ],
+    avoidCars: [
+      "Toyota Camry beige", "Honda Accord LX", "Hyundai Sonata SE",
+      "Nissan Sentra S", "Buick LaCrosse", "any rental-fleet beige sedan"
+    ],
+    useJets: [
+      "Bombardier Challenger 350", "Embraer Phenom 300E", "Cessna Citation Latitude",
+      "HondaJet Elite II", "Pilatus PC-24"
+    ],
+    avoidJets: [
+      "Boeing BBJ (overkill for creative use)", "Airbus ACJ319 (overkill)",
+      "old turboprop King Air on long legs"
+    ]
   },
   4: {
-    useCities: ["Frankfurt", "Tokyo", "Zurich"],
-    avoidCities: ["Vegas", "Ibiza"],
-    useBrands: ["IBM", "Toyota", "IKEA"],
-    avoidBrands: ["Hype tokens", "Pyramid schemes"],
-    useCars: ["Toyota Land Cruiser", "Audi A6"],
-    avoidCars: ["Project cars without budget"]
+    useCities: [
+      "Frankfurt", "Tokyo", "Zurich", "Munich", "Stuttgart", "Osaka",
+      "Helsinki", "Singapore", "Seoul", "Vienna", "Geneva", "Beijing",
+      "Toronto", "Ottawa"
+    ],
+    avoidCities: [
+      "Las Vegas", "Ibiza", "Mykonos", "Phuket party districts",
+      "Tulum party scene", "Cancun spring-break strip"
+    ],
+    useBrands: [
+      "IBM", "Toyota", "Honda", "IKEA", "Bosch", "Siemens", "Mitsubishi",
+      "Caterpillar", "John Deere", "Hitachi", "Panasonic", "Honeywell",
+      "3M", "Raytheon", "Lockheed Martin"
+    ],
+    avoidBrands: [
+      "Bored Ape Yacht Club", "any meme-coin (PEPE / Shiba / Floki)",
+      "rug-pulled NFT projects", "Forever 21", "Joe Fresh", "Primark",
+      "BitConnect-style yield platforms", "FTX-style derivative platforms"
+    ],
+    useCars: [
+      "Toyota Land Cruiser 300", "Lexus LX600", "Audi A6 Allroad",
+      "Volvo XC90", "Mercedes G-Class G550", "BMW X5", "Range Rover SVAutobiography",
+      "GMC Yukon Denali"
+    ],
+    avoidCars: [
+      "any 1990s project car", "salvage-title rebuild", "Alfa Romeo 4C as daily",
+      "Smart Roadster", "early Range Rover L322 (reliability sinkhole)",
+      "Tesla Roadster (legacy) high-mileage"
+    ],
+    useJets: [
+      "Gulfstream G500", "Dassault Falcon 8X", "Bombardier Global 5500",
+      "Embraer Praetor 500", "Cessna Citation Longitude"
+    ],
+    avoidJets: [
+      "Eclipse 500 (out-of-production support gap)",
+      "Cirrus Vision Jet (single-engine for a 4 is too risk-on)",
+      "old Hawker 700 on long legs"
+    ]
   },
   5: {
-    useCities: ["Bali", "Lisbon", "Cape Town"],
-    avoidCities: ["Suburban dead zones"],
-    useBrands: ["Airbnb", "GoPro"],
-    avoidBrands: ["Long lock-in subscriptions"],
-    useCars: ["Jeep Wrangler", "Ford Bronco"],
-    avoidCars: ["High-payment minivans"]
+    useCities: [
+      "Bali", "Lisbon", "Cape Town", "Mexico City", "Tulum", "Marrakech",
+      "Bangkok", "Ho Chi Minh City", "Medellín", "Tbilisi", "Istanbul",
+      "Buenos Aires", "Rio de Janeiro", "Tel Aviv", "Berlin"
+    ],
+    avoidCities: [
+      "Pyongyang", "Riyadh long-term", "Tehran long-term", "Doha long-term",
+      "any HOA suburb in middle America"
+    ],
+    useBrands: [
+      "Airbnb", "GoPro", "Yeti", "Patagonia", "REI", "Garmin", "DJI",
+      "Apple", "Wise", "Revolut", "Skyscanner", "Booking.com", "Tesla",
+      "Land Rover"
+    ],
+    avoidBrands: [
+      "Comcast / Xfinity contracts", "AT&T 24-month locks", "Verizon Fios bundles",
+      "Sprint legacy plans", "Bally Total Fitness 3-year gyms",
+      "ClubCorp lifetime memberships"
+    ],
+    useCars: [
+      "Jeep Wrangler Rubicon", "Ford Bronco Wildtrak", "Toyota 4Runner TRD Pro",
+      "Land Rover Defender 110", "Porsche 911 Dakar", "Lexus GX", "Subaru Outback Wilderness",
+      "Mercedes G-Class"
+    ],
+    avoidCars: [
+      "Chrysler Pacifica", "Honda Odyssey", "Toyota Sienna",
+      "Kia Carnival", "Dodge Grand Caravan", "any 8-year minivan loan"
+    ],
+    useJets: [
+      "Pilatus PC-24", "Embraer Phenom 300E", "Cessna Citation CJ4 Gen2",
+      "HondaJet Elite II", "Bombardier Challenger 350"
+    ],
+    avoidJets: [
+      "Boeing BBJ (over-committed for nomad lifestyle)",
+      "Airbus ACJ319 (over-committed)", "fractional Eclipse shares"
+    ]
   },
   6: {
-    useCities: ["Florence", "Marrakech"],
-    avoidCities: ["Detroit"],
-    useBrands: ["Nordstrom", "Chanel"],
-    avoidBrands: ["Cheap fast fashion"],
-    useCars: ["Volvo XC90", "Genesis G80"],
-    avoidCars: ["Sports cars during family chapter"]
+    useCities: [
+      "Florence", "Marrakech", "Kyoto", "Vienna", "Salzburg", "Bath",
+      "Edinburgh", "Charleston", "Savannah", "Cartagena", "Antigua Guatemala",
+      "Aix-en-Provence", "Provence villages", "Tuscany hill towns"
+    ],
+    avoidCities: [
+      "Detroit (rust-belt patch areas)", "Gary IN", "Camden NJ",
+      "Stockton CA", "any war-torn city"
+    ],
+    useBrands: [
+      "Nordstrom", "Chanel", "Hermès", "Williams Sonoma", "Pottery Barn",
+      "Restoration Hardware", "Diptyque", "Aesop", "Le Labo", "Bose",
+      "Sonos", "Tiffany & Co.", "John Lewis", "Selfridges"
+    ],
+    avoidBrands: [
+      "Shein", "Temu", "Wish", "Boohoo", "Pretty Little Thing",
+      "Forever 21", "fast-fashion drop-ship sites", "Romwe"
+    ],
+    useCars: [
+      "Volvo XC90 Recharge", "Genesis G80", "Genesis G90",
+      "Mercedes E-Class All-Terrain", "Lexus RX 450h+", "Audi Q7",
+      "Range Rover Velar"
+    ],
+    avoidCars: [
+      "Dodge Charger Hellcat (during family chapter)", "Nissan GT-R as family car",
+      "Subaru WRX STI as family car", "Mitsubishi Lancer Evo X (family stage)"
+    ],
+    useJets: [
+      "Dassault Falcon 6X", "Gulfstream G280", "Embraer Praetor 600",
+      "Bombardier Challenger 3500"
+    ],
+    avoidJets: [
+      "Eclipse 500", "Cirrus Vision Jet (too solo for family 6)",
+      "old Citation II"
+    ]
   },
   7: {
-    useCities: ["Reykjavik", "Boulder", "Edinburgh"],
-    avoidCities: ["Crowded mega-cities long-term"],
-    useBrands: ["Apple", "Bose", "Patagonia"],
-    avoidBrands: ["Loud branded swag"],
-    useCars: ["Subaru Outback", "Tesla Model Y"],
-    avoidCars: ["Flashy sports cars"]
+    useCities: [
+      "Reykjavik", "Boulder", "Edinburgh", "Kyoto", "Bhutan / Thimphu",
+      "Wellington", "Hobart", "Bergen", "Tromsø", "Banff",
+      "Queenstown", "Salzburg", "Lhasa", "Ubud", "Sedona"
+    ],
+    avoidCities: [
+      "Mumbai long-term", "Lagos long-term", "Manila long-term",
+      "Cairo long-term", "Karachi long-term", "any 20M+ megacity for full-time base"
+    ],
+    useBrands: [
+      "Apple", "Bose", "Patagonia", "Arc'teryx", "Filson", "Leatherman",
+      "Kindle / Amazon", "Rolex Explorer line", "Omega Speedmaster",
+      "Bang & Olufsen", "Leica", "Hasselblad", "Moleskine"
+    ],
+    avoidBrands: [
+      "Supreme box-logo drops", "Off-White hype", "Yeezy hype",
+      "Gucci logo-print", "loud logo Louis Vuitton monogram",
+      "loud Versace baroque print"
+    ],
+    useCars: [
+      "Subaru Outback Wilderness", "Tesla Model Y Long Range",
+      "Lexus RX450h+", "Volvo XC60 Recharge", "Toyota Land Cruiser",
+      "Range Rover Defender 90"
+    ],
+    avoidCars: [
+      "Lamborghini Huracán", "Ferrari 488 / F8", "McLaren 720S",
+      "Bentley Continental GT (too loud)", "Rolls-Royce Wraith",
+      "Audi R8"
+    ],
+    useJets: [
+      "Pilatus PC-24", "Daher TBM 960 (turboprop)",
+      "Embraer Phenom 300E", "HondaJet Elite II"
+    ],
+    avoidJets: [
+      "Boeing BBJ", "Airbus ACJ", "Gulfstream G700 (too loud for 7's energy)",
+      "any flag-painted private jet"
+    ]
   },
   8: {
-    useCities: ["London", "Hong Kong", "Dubai"],
-    avoidCities: ["Frugal-only towns long-term"],
-    useBrands: ["Rolex", "Bloomberg"],
-    avoidBrands: ["Bargain-bin firms"],
-    useCars: ["Bentley", "Mercedes S-Class"],
-    avoidCars: ["Penalty-leasing"]
+    useCities: [
+      "London", "Hong Kong", "Dubai", "New York", "Singapore",
+      "Zurich", "Geneva", "Frankfurt", "Tokyo", "Shanghai",
+      "Riyadh", "Abu Dhabi", "Doha", "Monaco", "Luxembourg City"
+    ],
+    avoidCities: [
+      "any town with no luxury banking footprint",
+      "remote rural posts > 6 months/year",
+      "Rust-belt towns post-industrial decline (Gary, Flint, etc.)"
+    ],
+    useBrands: [
+      "Rolex", "Patek Philippe", "Audemars Piguet", "Vacheron Constantin",
+      "Bloomberg Terminal", "Goldman Sachs", "JPMorgan Private Bank",
+      "Coutts & Co.", "Brunello Cucinelli", "Kiton", "Brioni",
+      "Bentley", "Rolls-Royce", "Ferrari"
+    ],
+    avoidBrands: [
+      "Costco Kirkland Signature watches", "Movado Bold", "Fossil watches",
+      "Walmart financial services", "PayPal as primary banking",
+      "Cash App for high-value flows"
+    ],
+    useCars: [
+      "Bentley Flying Spur Mulliner", "Mercedes-Maybach S680",
+      "Rolls-Royce Ghost Extended", "Rolls-Royce Cullinan",
+      "BMW M760e xDrive", "Audi A8L Long-wheelbase", "Genesis G90 LWB"
+    ],
+    avoidCars: [
+      "any sub-prime lease", "Buy-Here-Pay-Here lot vehicles",
+      "salvage-title rebuilds", "75-month negative-equity loans",
+      "vehicles where the warranty is the value prop"
+    ],
+    useJets: [
+      "Gulfstream G700", "Gulfstream G650ER", "Bombardier Global 7500",
+      "Boeing BBJ MAX 7", "Airbus ACJ TwoTwenty", "Embraer Lineage 1000E"
+    ],
+    avoidJets: [
+      "Cessna Citation Mustang (too small)", "Honda HA-420 (commuter)",
+      "Eclipse 500", "Phenom 100 EV"
+    ]
   },
   9: {
-    useCities: ["Geneva", "Cape Town", "Mumbai"],
-    avoidCities: ["War zones"],
-    useBrands: ["TOMS", "Patagonia"],
-    avoidBrands: ["Exploitative supply chains"],
-    useCars: ["Volvo XC60", "Lexus RX"],
-    avoidCars: ["Flashy gas-guzzlers"]
+    useCities: [
+      "Geneva", "Cape Town", "Mumbai", "New Delhi", "Kathmandu",
+      "Jerusalem", "Athens", "Cairo (cultural)", "Istanbul",
+      "Marrakech", "Vatican City", "Varanasi", "Kyoto", "Buenos Aires"
+    ],
+    avoidCities: [
+      "Active war zones (Donetsk, Khartoum, Gaza, etc.)",
+      "Ashgabat", "Pyongyang", "Asmara", "Mogadishu",
+      "any city under active sanctions"
+    ],
+    useBrands: [
+      "TOMS", "Patagonia", "Bombas", "Allbirds", "Warby Parker",
+      "Charity: Water partnerships", "Médecins Sans Frontières partners",
+      "Tony's Chocolonely", "Lush", "Eileen Fisher",
+      "Stella McCartney", "Veja"
+    ],
+    avoidBrands: [
+      "Nestlé infant-formula lines", "Shein", "Boohoo / Pretty Little Thing",
+      "any brand on a current human-rights blocklist",
+      "fast-food chains with documented exploitation cases"
+    ],
+    useCars: [
+      "Volvo XC60 Recharge", "Lexus RX 450h+", "Tesla Model Y",
+      "Toyota Prius Prime", "Honda CR-V Hybrid", "Polestar 3",
+      "Genesis Electrified GV70"
+    ],
+    avoidCars: [
+      "Hummer H1", "Hummer H2", "Cadillac Escalade ESV (V8)",
+      "Dodge Ram TRX", "Bentley Mulsanne Speed", "any rolling-coal diesel build"
+    ],
+    useJets: [
+      "Pilatus PC-24 (efficient mid-size)", "Embraer Phenom 300E (SAF-ready)",
+      "HondaJet Elite II", "Cessna Citation CJ4 Gen2"
+    ],
+    avoidJets: [
+      "Boeing BBJ (carbon profile)", "Airbus ACJ (carbon profile)",
+      "Gulfstream G700 (carbon profile vs 9's mission)"
+    ]
   },
   11: {
-    useCities: ["Sedona", "Tulum", "Bali"],
-    avoidCities: ["Heavily skeptical hubs"],
-    useBrands: ["Apple", "Headspace"],
-    avoidBrands: ["Combative cultures"],
-    useCars: ["Tesla Model 3", "Lexus ES"],
-    avoidCars: ["Aggressive trucks"]
+    useCities: [
+      "Sedona", "Tulum", "Bali / Ubud", "Glastonbury", "Mount Shasta",
+      "Reykjavik", "Kyoto", "Lhasa", "Varanasi", "Rishikesh",
+      "Cusco / Sacred Valley", "Big Sur", "Oaxaca", "Auroville"
+    ],
+    avoidCities: [
+      "Las Vegas Strip", "Atlantic City", "Macau",
+      "high-cynicism financial-only cities for full-time base",
+      "Wall Street's immediate radius long-term"
+    ],
+    useBrands: [
+      "Apple", "Headspace", "Calm", "Insight Timer", "Lululemon",
+      "Manduka", "Alo Yoga", "Kindle", "Moleskine", "Filson",
+      "Patagonia", "Aesop"
+    ],
+    avoidBrands: [
+      "Red Bull (overstimulant for 11s)", "Monster Energy",
+      "loud combative sports brands", "any 24-hour cable-news brand as identity",
+      "high-pressure sales cult brands"
+    ],
+    useCars: [
+      "Tesla Model 3 Long Range", "Lexus ES 300h", "Volvo S60 Recharge",
+      "Polestar 2", "Genesis G70", "Toyota Camry XSE Hybrid"
+    ],
+    avoidCars: [
+      "Dodge Ram TRX", "Ford F-150 Raptor R", "GMC Hummer EV (too aggressive)",
+      "Dodge Charger SRT Hellcat Redeye", "Cadillac Escalade-V"
+    ],
+    useJets: [
+      "Pilatus PC-24", "HondaJet Elite II", "Embraer Phenom 300E",
+      "Cirrus Vision Jet G2+ (with co-pilot)"
+    ],
+    avoidJets: [
+      "Boeing BBJ", "Airbus ACJ319",
+      "any tail-painted high-attention private jet — 11s do better invisible"
+    ],
   },
   22: {
-    useCities: ["Singapore", "Dubai", "Berlin"],
-    avoidCities: ["Procrastination towns"],
-    useBrands: ["Caterpillar", "Siemens"],
-    avoidBrands: ["Trend-chasing fads"],
-    useCars: ["Range Rover", "Tesla Model X"],
-    avoidCars: ["Status without utility"]
+    useCities: [
+      "Singapore", "Dubai", "Berlin", "Tokyo", "Seoul", "Shenzhen",
+      "Shanghai", "Helsinki", "Stockholm", "Tel Aviv", "Boston",
+      "Austin", "Toronto", "Vienna"
+    ],
+    avoidCities: [
+      "Vegas-style boom towns long-term",
+      "high-corruption-index capitals (Caracas, Pyongyang, etc.)",
+      "ghost-city megaprojects with no real population"
+    ],
+    useBrands: [
+      "Caterpillar", "Siemens", "Mitsubishi Heavy Industries", "ABB",
+      "Honeywell", "Emerson Electric", "John Deere", "Bosch",
+      "Schneider Electric", "Boeing", "Airbus", "BAE Systems",
+      "Northrop Grumman", "Bechtel", "Fluor"
+    ],
+    avoidBrands: [
+      "Theranos-style fraud-prone startups",
+      "WeWork-style growth-without-fundamentals plays",
+      "rug-pull NFT projects", "BitConnect", "FTX-pattern exchanges",
+      "drop-ship trend brands"
+    ],
+    useCars: [
+      "Range Rover SVAutobiography", "Tesla Model X Plaid",
+      "Mercedes G63 AMG", "Audi RS Q8", "BMW X7 M60i",
+      "Cadillac Escalade-V", "Rivian R1S Tri-Motor"
+    ],
+    avoidCars: [
+      "any brand new untested EV without service network",
+      "first-year production exotic cars (high failure rate)",
+      "Smart fortwo as primary"
+    ],
+    useJets: [
+      "Gulfstream G700", "Gulfstream G650ER", "Bombardier Global 7500",
+      "Boeing BBJ MAX 7", "Dassault Falcon 8X"
+    ],
+    avoidJets: [
+      "Cessna Citation Mustang", "Honda HA-420 HondaJet (commuter range)",
+      "Eclipse 500"
+    ]
   },
   33: {
-    useCities: ["Kyoto", "Florence", "Vatican City"],
-    avoidCities: ["Cynical scenes"],
-    useBrands: ["Penguin Books", "Hermès"],
-    avoidBrands: ["Quick-flip drop brands"],
-    useCars: ["Lexus LS", "Mercedes E-Class"],
-    avoidCars: ["Boy-racer kits"]
+    useCities: [
+      "Kyoto", "Florence", "Vatican City", "Jerusalem", "Varanasi",
+      "Mecca / Medina (faith-context)", "Lhasa", "Mount Athos",
+      "Assisi", "Lourdes", "Geneva", "Vienna", "Salzburg"
+    ],
+    avoidCities: [
+      "Las Vegas Strip", "Atlantic City", "Reno",
+      "high-influencer party hubs (full-time)",
+      "scenes where cynicism is the default register"
+    ],
+    useBrands: [
+      "Penguin Books", "Hermès", "Loro Piana", "Brunello Cucinelli",
+      "Steinway & Sons", "Bösendorfer", "Bang & Olufsen",
+      "Baccarat", "Lalique", "Christofle", "Mont Blanc", "Tiffany & Co.",
+      "Patek Philippe"
+    ],
+    avoidBrands: [
+      "Supreme drops", "Off-White hype", "Yeezy hype",
+      "OnlyFans-style attention-economy stacks",
+      "MLM cosmetics", "BoredApe-tier flip-driven NFT projects"
+    ],
+    useCars: [
+      "Lexus LS500h", "Mercedes E-Class All-Terrain",
+      "Range Rover Autobiography (calm spec)", "Genesis G90 LWB",
+      "Bentley Bentayga EWB"
+    ],
+    avoidCars: [
+      "Boy-racer kit cars", "loud aftermarket exhaust builds",
+      "Lamborghini Aventador SVJ", "McLaren 750S", "Dodge Charger Demon 170"
+    ],
+    useJets: [
+      "Dassault Falcon 8X (quiet cabin)",
+      "Gulfstream G500 (refined spec)",
+      "Bombardier Global 6500"
+    ],
+    avoidJets: [
+      "vinyl-wrap loud-livery jets",
+      "Boeing BBJ with maximalist interior fit-out"
+    ]
   }
 };
 
