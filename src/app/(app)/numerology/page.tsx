@@ -1936,33 +1936,93 @@ function Education() {
         </CardHeader>
         <CardBody className="space-y-3 text-sm">
           <p className="text-xs text-fg-muted">
-            Personal Years move in a 9-year cycle. Each year carries a different rhythm — knowing
-            yours lets you plan your trading, capital deployment, and growth bets to flow with it
-            instead of against it. Pair this with the Chinese-zodiac year context (whether you're
-            in your animal's <span className="text-emerald-300">great</span>,{" "}
-            <span className="text-amber-300">average</span>, or <span className="text-rose-300">tough</span>{" "}
-            year) for a richer read.
+            Personal Years move in a 9-year cycle. The energy of the year colours{" "}
+            <span className="text-fg">every dimension of your life</span> — not just trading.
+            Below each tone (great / average / tough) we walk you through how the same energy
+            tends to express itself across <span className="text-fg">life in general, business,
+            relationships, health, and trading</span>. Pair this with the Chinese-zodiac year
+            context (whether you're in your animal's{" "}
+            <span className="text-emerald-300">great</span>,{" "}
+            <span className="text-amber-300">average</span>, or{" "}
+            <span className="text-rose-300">tough</span> year) for a richer read.
           </p>
 
           <PersonalYearGuidance
             tone="great"
             title="A great Personal Year (1, 3, 5, 8 — or harmony with your zodiac year)"
             blurb={
-              "Energy is on your side. Markets feel cooperative, opportunities cluster, and " +
-              "your reads land more often. Don't waste it: this is when to scale up the strategies " +
-              "you've already proven, raise position size on your best edges, and take calculated " +
-              "swings rather than coast."
+              "Energy is on your side. Doors open easily, people say yes, ideas land, and your " +
+              "instincts run truer than usual. This is the year to plant ambitious flags, take " +
+              "calculated swings, and build infrastructure you'll harvest from in the lower years."
             }
-            tradingDos={[
-              "Up-size your A+ setups by ~25–50%; these are the months your edge compounds",
-              "Open or fund the prop firm / live account you've been hesitating on",
-              "Lock in a quarterly profit-pull schedule — the wins are real, take some off the table",
-              "Document what's working — these patterns become your baseline for tougher years"
-            ]}
-            tradingDonts={[
-              "Don't get cocky and abandon your stop-loss / risk rules — euphoria-trading kills good years",
-              "Don't add 5 new strategies because everything looks bullish; stick to your edge",
-              "Don't assume next year's energy carries the same — bank gains while the cycle is hot"
+            dimensions={[
+              {
+                label: "Life in general",
+                dos: [
+                  "Plant new flags — moves, projects, public commitments tend to take root",
+                  "Say yes to introductions, invitations, and rooms you've been hesitating on",
+                  "Document what's working in a journal — your future self in a tough year will thank you",
+                  "Travel, especially to places that align with your Personal Year theme (1 = north, 3 = creative cities, 5 = movement / hubs, 8 = capitals / power centres)"
+                ],
+                donts: [
+                  "Don't let euphoria make you skip rest, sleep, or basic discipline",
+                  "Don't assume the same momentum carries into next year — harvest while it's hot",
+                  "Don't take success as proof you no longer need a plan"
+                ]
+              },
+              {
+                label: "Business / career",
+                dos: [
+                  "Launch the brand, ship the product, send the pitch you've been sitting on",
+                  "Take the promotion / role / contract; expand team or capacity",
+                  "Set the bigger price — confidence year, the market tends to accept it",
+                  "Lock in long-term partnerships and investor commitments while the energy is high"
+                ],
+                donts: [
+                  "Don't stack 5 new ventures at once — pick the one or two with the strongest pull",
+                  "Don't take on debt you wouldn't take on in a neutral year just because it 'feels good'",
+                  "Don't ignore contracts and operating systems — euphoria papers over weak ops"
+                ]
+              },
+              {
+                label: "Relationships",
+                dos: [
+                  "Make commitments — propose, marry, move in, formalise what's already real",
+                  "Initiate the difficult conversation you've been avoiding — outcomes lean kind",
+                  "Celebrate publicly: weddings, anniversaries, recognition events all carry well"
+                ],
+                donts: [
+                  "Don't confuse momentum for compatibility — slow down with new partners",
+                  "Don't neglect existing close relationships chasing new ones in your hot year",
+                  "Don't make permanent decisions in the very first 30 days of a 1-year — settle first"
+                ]
+              },
+              {
+                label: "Health",
+                dos: [
+                  "Start the training plan, the sport, the new diet — habits you build now stick",
+                  "Tackle elective surgeries / dental work / corrections you've delayed",
+                  "Do the full health check — proactive baselines pay dividends in tougher years"
+                ],
+                donts: [
+                  "Don't push so hard you injure — Personal Year 1 / 5 spikes drive overtraining",
+                  "Don't dismiss small symptoms as 'just busy' — easy fixes now beat surgeries later"
+                ]
+              },
+              {
+                label: "Trading",
+                dos: [
+                  "Up-size your A+ setups by ~25–50%; these are the months your edge compounds",
+                  "Open or fund the prop firm / live account you've been hesitating on",
+                  "Lock in a quarterly profit-pull schedule — the wins are real, take some off the table",
+                  "Document what's working — these patterns become your baseline for tougher years"
+                ],
+                donts: [
+                  "Don't get cocky and abandon your stop-loss / risk rules — euphoria-trading kills good years",
+                  "Don't add 5 new strategies because everything looks bullish; stick to your edge",
+                  "Don't assume next year's energy carries the same — bank gains while the cycle is hot"
+                ]
+              }
             ]}
           />
 
@@ -1970,20 +2030,78 @@ function Education() {
             tone="average"
             title="An average / neutral Personal Year (2, 4, 6 — or steady zodiac year)"
             blurb={
-              "Nothing dramatic — markets feel mixed, results sit close to expectancy, and " +
-              "patience pays better than aggression. This is the cycle for craft, study, and " +
-              "infrastructure: backtesting, system refinement, journal review, and skill building."
+              "Nothing dramatic — life feels steady, results match expectancy, and patience pays " +
+              "better than aggression. This is the cycle for craft, infrastructure, family, and " +
+              "deep-work. The compounding you do this year doesn't show up until your next 1- or 3-year."
             }
-            tradingDos={[
-              "Hold position size at baseline — this isn't the year to push leverage",
-              "Spend dedicated time on backtesting + reviewing past trades for pattern leaks",
-              "Tighten risk rules and rebuild discipline that may have slipped in a hot year",
-              "Keep a steady cadence — small consistent wins beat moonshots in a 4 / 6 year"
-            ]}
-            tradingDonts={[
-              "Don't force trades because you 'should be making more' — the cycle is the cycle",
-              "Don't compare your P&L to a Personal-Year-1 trader's — different fuel",
-              "Don't abandon your plan because it feels boring; that's exactly the test of the year"
+            dimensions={[
+              {
+                label: "Life in general",
+                dos: [
+                  "Build the routine — daily, weekly, monthly. Small consistent reps win this year",
+                  "Get your paperwork in order: insurance, will, taxes, identity documents",
+                  "Deepen one or two existing relationships rather than meet 30 new people",
+                  "Read, study, take the course; intellectual investment compounds quietly"
+                ],
+                donts: [
+                  "Don't force big visible breakthroughs — the year doesn't reward them",
+                  "Don't move country / change major life direction unless something's actually broken",
+                  "Don't measure yourself by a 1- or 8-year peer's headline year"
+                ]
+              },
+              {
+                label: "Business / career",
+                dos: [
+                  "Tighten ops, refine pricing, build SOPs and systems — boring work, big payoff",
+                  "Hire one or two key people; let teams settle rather than restructure",
+                  "Renegotiate contracts and renew partnerships at fair value",
+                  "Pay down operational debt — both literal and process debt"
+                ],
+                donts: [
+                  "Don't launch a brand new SKU / market just to feel busy — wait for a 1-year energy",
+                  "Don't make brash hire/fire decisions; this year rewards stability",
+                  "Don't burn cash on speculative bets the way you would in a 1- or 8-year"
+                ]
+              },
+              {
+                label: "Relationships",
+                dos: [
+                  "Show up consistently — birthdays, anniversaries, weekly calls",
+                  "Have the small recurring conversations that prevent bigger blow-ups later",
+                  "Invest in family infrastructure: family office, group chats, shared traditions"
+                ],
+                donts: [
+                  "Don't manufacture drama because the year feels boring",
+                  "Don't make permanent break-up / divorce decisions during a 6-year unless the harm is real — 6 over-amplifies family duty",
+                  "Don't let resentment compound silently — flag the small stuff"
+                ]
+              },
+              {
+                label: "Health",
+                dos: [
+                  "Lock in 7–9 hours of sleep on average; this is the year sleep credit accrues",
+                  "Strength train 3×/week — capacity built in a 4-year banks for a 5-year hustle",
+                  "Get the routine bloods, dental, eye check; baseline data compounds in value"
+                ],
+                donts: [
+                  "Don't crash-diet or jump to extreme protocols; sustainable beats spectacular this year",
+                  "Don't ignore early-warning niggles — quick PT visits now prevent injuries in your 5-year"
+                ]
+              },
+              {
+                label: "Trading",
+                dos: [
+                  "Hold position size at baseline — this isn't the year to push leverage",
+                  "Spend dedicated time on backtesting + reviewing past trades for pattern leaks",
+                  "Tighten risk rules and rebuild discipline that may have slipped in a hot year",
+                  "Keep a steady cadence — small consistent wins beat moonshots in a 4 / 6 year"
+                ],
+                donts: [
+                  "Don't force trades because you 'should be making more' — the cycle is the cycle",
+                  "Don't compare your P&L to a Personal-Year-1 trader's — different fuel",
+                  "Don't abandon your plan because it feels boring; that's exactly the test of the year"
+                ]
+              }
             ]}
           />
 
@@ -1991,30 +2109,90 @@ function Education() {
             tone="tough"
             title="A tough Personal Year (7, 9 — or zodiac conflict / Tai Sui year)"
             blurb={
-              "Headwinds and reflection. 7s slow you down for inner work; 9s close cycles and " +
-              "force letting-go. Markets may feel choppy, your usual setups misfire more often, " +
-              "and emotional discipline is harder. Default to capital preservation; this is the " +
-              "year you protect what you built so you have a base to scale from in your next 1-year."
+              "Headwinds and closure. 7s slow you down for inner work; 9s close cycles and " +
+              "force letting-go. Things break, contracts end, relationships shift, and the body " +
+              "asks for rest. The right play is preservation — protect what you built so you " +
+              "have a base to launch from in your next 1-year."
             }
-            tradingDos={[
-              "Cut size by 25–50%; risk less to feel less drawdown pressure",
-              "Reduce trade frequency — fewer, higher-conviction setups only",
-              "Keep an absolute monthly drawdown cutoff and honour it",
-              "Use the slower energy for journaling, deep review, and rebuilding your edge",
-              "If you're in a zodiac-conflict year (Tai Sui), wear your zodiac amulet daily and avoid major financial commitments at peak conflict months"
-            ]}
-            tradingDonts={[
-              "Don't revenge-trade after losing weeks — the cycle amplifies emotional reactions",
-              "Don't take on big new prop firm challenges with hard time-bound rules",
-              "Don't add leverage 'to make it back' — leverage in a 7/9 year typically blows accounts",
-              "Don't make permanent commitments (long-term contracts, partnerships) at the year's lowest months"
+            dimensions={[
+              {
+                label: "Life in general",
+                dos: [
+                  "Lean into rest, retreat, therapy, journaling — inner-work years actually demand it",
+                  "Close out things that are clearly finished — a stale job, a dying friendship, an old story",
+                  "Keep your living and financial overhead low; cash buffers matter most this year",
+                  "Wear / carry your zodiac amulet during a Tai Sui year and avoid taboo months"
+                ],
+                donts: [
+                  "Don't take on permanent commitments at the year's lowest months",
+                  "Don't medicate the discomfort with shopping, alcohol, or speculative bets — they amplify the headwind",
+                  "Don't isolate fully — keep one or two trusted people close even when you want to hide"
+                ]
+              },
+              {
+                label: "Business / career",
+                dos: [
+                  "Cut what's bleeding cash; this year exposes weak business lines",
+                  "Renegotiate contracts down rather than walk away cold",
+                  "Pre-pay obligations where possible to reduce stress on the worst months",
+                  "Document everything you'd otherwise carry in your head — sickness / fatigue years are when single-points-of-failure hurt"
+                ],
+                donts: [
+                  "Don't sign a brand new 5-year lease or take on long-tenor debt at peak 7/9 stress",
+                  "Don't fire your strongest senior staff in frustration — you'll need them on the 1-year",
+                  "Don't pivot the whole company; small cuts, not a relaunch"
+                ]
+              },
+              {
+                label: "Relationships",
+                dos: [
+                  "Have the long-overdue closure conversation — 9-year energy supports it",
+                  "Honour grief: deaths, breakups and farewells are heavier; give yourself space",
+                  "Lean on chosen family — calls, low-key gatherings, no big crowd events"
+                ],
+                donts: [
+                  "Don't propose, marry, or move in during a Tai Sui month if you can avoid it",
+                  "Don't break up a fundamentally healthy relationship just because the year feels bleak — the year is the year, not the partner",
+                  "Don't pick fights to manufacture aliveness; sit with the flatness"
+                ]
+              },
+              {
+                label: "Health",
+                dos: [
+                  "Sleep is non-negotiable; build a strict bed-by-X protocol",
+                  "Take the routine and follow-up tests — early detection saves you in 7/9 years",
+                  "Walk daily; gentle aerobic work is more useful than peak intensity right now",
+                  "Be deliberate with alcohol, caffeine, and screen time — the body holds less buffer"
+                ],
+                donts: [
+                  "Don't elective-surgery during the 9-year peak unless medically necessary",
+                  "Don't push through clear pain signals — strains in a 7/9 escalate faster",
+                  "Don't travel on an 11-day during a 9-year if you can avoid it (master-number emotional spike + closure year is a heavy combination)"
+                ]
+              },
+              {
+                label: "Trading",
+                dos: [
+                  "Cut size by 25–50%; risk less to feel less drawdown pressure",
+                  "Reduce trade frequency — fewer, higher-conviction setups only",
+                  "Keep an absolute monthly drawdown cutoff and honour it",
+                  "Use the slower energy for journaling, deep review, and rebuilding your edge",
+                  "If you're in a zodiac-conflict year (Tai Sui), wear your zodiac amulet daily and avoid major financial commitments at peak conflict months"
+                ],
+                donts: [
+                  "Don't revenge-trade after losing weeks — the cycle amplifies emotional reactions",
+                  "Don't take on big new prop firm challenges with hard time-bound rules",
+                  "Don't add leverage 'to make it back' — leverage in a 7/9 year typically blows accounts",
+                  "Don't make permanent commitments (long-term contracts, partnerships) at the year's lowest months"
+                ]
+              }
             ]}
           />
 
           <p className="text-[11px] italic text-fg-subtle">
             These are guidance heuristics rooted in numerology + Chinese-zodiac tradition — not
-            investment advice. Use them alongside your edge, your journal, and your own risk
-            framework.
+            investment, medical, or relationship advice. Use them alongside your edge, your
+            journal, and your own framework.
           </p>
         </CardBody>
       </Card>
@@ -2026,14 +2204,12 @@ function PersonalYearGuidance({
   tone,
   title,
   blurb,
-  tradingDos,
-  tradingDonts
+  dimensions
 }: {
   tone: "great" | "average" | "tough";
   title: string;
   blurb: string;
-  tradingDos: string[];
-  tradingDonts: string[];
+  dimensions: Array<{ label: string; dos: string[]; donts: string[] }>;
 }) {
   const toneClass =
     tone === "great"
@@ -2047,23 +2223,32 @@ function PersonalYearGuidance({
     <div className={cn("rounded-xl border p-3", toneClass)}>
       <div className={cn("text-xs font-semibold", toneTextClass)}>{title}</div>
       <p className="mt-1.5 text-xs text-fg-muted">{blurb}</p>
-      <div className="mt-2.5 grid gap-2 sm:grid-cols-2">
-        <div>
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-emerald-300/80">Lean in</div>
-          <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[11px] text-fg-muted marker:text-emerald-400/60">
-            {tradingDos.map((d, i) => (
-              <li key={i}>{d}</li>
-            ))}
-          </ul>
-        </div>
-        <div>
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-rose-300/80">Avoid</div>
-          <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[11px] text-fg-muted marker:text-rose-400/60">
-            {tradingDonts.map((d, i) => (
-              <li key={i}>{d}</li>
-            ))}
-          </ul>
-        </div>
+      <div className="mt-3 space-y-3">
+        {dimensions.map((dim) => (
+          <div key={dim.label} className="rounded-lg border border-line/60 bg-bg/40 p-2.5">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-fg">
+              {dim.label}
+            </div>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-emerald-300/80">Lean in</div>
+                <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[11px] text-fg-muted marker:text-emerald-400/60">
+                  {dim.dos.map((d, i) => (
+                    <li key={i}>{d}</li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-rose-300/80">Avoid</div>
+                <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[11px] text-fg-muted marker:text-rose-400/60">
+                  {dim.donts.map((d, i) => (
+                    <li key={i}>{d}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
