@@ -13,6 +13,7 @@ import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type {
   NotebookEmbed,
+  NotebookEmbedFormat,
   NotebookNote,
   Resolution,
   UserSettingsData
@@ -163,6 +164,122 @@ function resolveEmbed(rawUrl: string): { kind: EmbedKind; src: string; provider:
   return { kind: "iframe", src: u.toString(), provider: host };
 }
 
+/**
+ * Pull the most embed-worthy URL out of an HTML or JSX snippet. Tries,
+ * in order:
+ *
+ *  1. `<iframe src="...">` — the canonical embed shape.
+ *  2. JSX-style `src={"..."}` or `src='...'` / `src="..."` — when the
+ *     user pasted React code with an iframe-like element.
+ *  3. A TradingView `new TradingView.widget({ symbol: "...", ...})`
+ *     config block — extract `symbol` and build the widget URL.
+ *  4. Any bare http(s) URL in the snippet.
+ *
+ * Returns null if nothing usable is found.
+ */
+function extractUrlFromSnippet(snippet: string): string | null {
+  if (!snippet) return null;
+  const trimmed = snippet.trim();
+
+  // 1. <iframe src="...">
+  const ifr = trimmed.match(/<iframe\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/i);
+  if (ifr && ifr[1]) return ifr[1];
+
+  // 2. JSX `src=` (handles src="…" / src='…' / src={"…"})
+  const jsx = trimmed.match(/\bsrc\s*=\s*\{?\s*["']([^"']+)["']\s*\}?/i);
+  if (jsx && jsx[1]) return jsx[1];
+
+  // 3. TradingView widget config — `new TradingView.widget({...})`
+  //    or a JSX `<TradingViewWidget symbol="..." />` style component.
+  const tvSymbol = trimmed.match(/["']symbol["']\s*:\s*["']([A-Z0-9._:-]+)["']/i)
+    ?? trimmed.match(/\bsymbol\s*=\s*["']([A-Z0-9._:-]+)["']/i);
+  if (tvSymbol && tvSymbol[1]) {
+    const interval = trimmed.match(/["']?interval["']?\s*[:=]\s*["']([A-Za-z0-9]+)["']/i)?.[1] ?? "D";
+    const params = new URLSearchParams({
+      symbol: tvSymbol[1],
+      interval,
+      theme: "dark",
+      style: "1",
+      timezone: "Etc/UTC",
+      withdateranges: "1",
+      hide_side_toolbar: "0",
+      allow_symbol_change: "1",
+      save_image: "1",
+      details: "1"
+    });
+    return `https://s.tradingview.com/widgetembed/?${params.toString()}`;
+  }
+
+  // 4. First bare URL found in the snippet.
+  const bare = trimmed.match(/https?:\/\/[^\s"'<>)]+/i);
+  if (bare) return bare[0];
+
+  return null;
+}
+
+/**
+ * Strip JSX-specific bits so a React snippet becomes valid HTML the
+ * browser can render inside an iframe `srcdoc`. We do not try to be a
+ * full JSX→HTML compiler — that would need a parser. We just handle
+ * the simplest common cases:
+ *
+ *  - `className=` → `class=`
+ *  - `htmlFor=`   → `for=`
+ *  - boolean / numeric JSX expressions: `{true}` → ``, `{42}` → `42`
+ *  - self-closing void elements stay self-closing (HTML tolerates this)
+ *
+ * For anything more elaborate (state, JSX fragments, function calls)
+ * we fall back to the snippet's verbatim text — the iframe will show
+ * the literal JSX. The user can switch to URL mode and paste the iframe
+ * src directly, which is what extractUrlFromSnippet preferred anyway.
+ */
+function jsxToHtmlIsh(snippet: string): string {
+  return snippet
+    .replace(/\bclassName=/g, "class=")
+    .replace(/\bhtmlFor=/g, "for=")
+    .replace(/=\{["']([^"']+)["']\}/g, '="$1"')
+    .replace(/=\{(\d+(?:\.\d+)?)\}/g, '="$1"');
+}
+
+/**
+ * Format-aware entry point used by the renderer. Returns either the
+ * existing `{ kind, src, provider }` shape (which routes through the
+ * standard iframe / image / blocked renderer) or a new "srcdoc" kind
+ * that asks the renderer to drop the HTML into a sandboxed iframe so
+ * full embed-code blocks (TradingView's div+script HTML, e.g.) render
+ * end-to-end without us having to interpret their JavaScript.
+ */
+type ResolvedFormat =
+  | { kind: EmbedKind; src: string; provider: string }
+  | { kind: "srcdoc"; html: string; provider: string };
+
+function resolveByFormat(
+  format: NotebookEmbedFormat,
+  primary: string,
+  content?: string
+): ResolvedFormat {
+  if (format === "url") return resolveEmbed(primary);
+
+  const snippet = (content ?? primary ?? "").trim();
+  if (!snippet) return { kind: "blocked", src: snippet, provider: format };
+
+  // Prefer the cleanest extractable URL — it lets us keep all our
+  // provider-specific embed treatments (YouTube → /embed/, Notion →
+  // ?embed=true, TradingView → widget URL, etc.) regardless of input
+  // format. Only fall back to srcdoc rendering when we genuinely
+  // can't extract a URL.
+  const extracted = extractUrlFromSnippet(snippet);
+  if (extracted) {
+    return resolveEmbed(extracted);
+  }
+
+  // Couldn't extract a URL — render the snippet inside a sandboxed
+  // iframe so full embed scripts (TradingView div+script blocks,
+  // arbitrary widgets, etc.) execute in isolation from our app.
+  const html = format === "react" ? jsxToHtmlIsh(snippet) : snippet;
+  return { kind: "srcdoc", html, provider: format };
+}
+
 function isJsonObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
@@ -171,13 +288,25 @@ function readSettings(data: unknown): UserSettingsData {
   if (!isJsonObject(data)) return {};
   const out: UserSettingsData = {};
   if (Array.isArray(data.notebook_embeds)) {
-    out.notebook_embeds = data.notebook_embeds.filter(
-      (x): x is NotebookEmbed =>
-        isJsonObject(x) &&
-        typeof x.id === "string" &&
-        typeof x.label === "string" &&
-        typeof x.url === "string"
-    );
+    out.notebook_embeds = data.notebook_embeds
+      .filter(
+        (x): x is Record<string, unknown> =>
+          isJsonObject(x) &&
+          typeof x.id === "string" &&
+          typeof x.label === "string" &&
+          typeof x.url === "string"
+      )
+      .map((x): NotebookEmbed => {
+        const base: NotebookEmbed = {
+          id: x.id as string,
+          label: x.label as string,
+          url: x.url as string
+        };
+        const fmt = x.format;
+        if (fmt === "url" || fmt === "html" || fmt === "react") base.format = fmt;
+        if (typeof x.content === "string") base.content = x.content;
+        return base;
+      });
   }
   if (typeof data.notebook_active_id === "string" || data.notebook_active_id === null) {
     out.notebook_active_id = data.notebook_active_id ?? null;
@@ -212,11 +341,30 @@ type TopTab = "general" | "resolutions";
 
 const MAX_EMBEDS = 5;
 
-type DraftEmbed = { id: string; label: string; url: string };
+type DraftEmbed = {
+  id: string;
+  label: string;
+  /** Body the user is typing. Its meaning depends on `format`: a URL
+   *  for "url", a snippet for "html" / "react". */
+  body: string;
+  format: NotebookEmbedFormat;
+};
 
 function blankDraft(): DraftEmbed {
-  return { id: newId(), label: "", url: "" };
+  return { id: newId(), label: "", body: "", format: "url" };
 }
+
+const FORMAT_TABS: ReadonlyArray<{ value: NotebookEmbedFormat; short: string }> = [
+  { value: "url", short: "URL" },
+  { value: "html", short: "HTML" },
+  { value: "react", short: "React" }
+];
+
+const FORMAT_PLACEHOLDER: Record<NotebookEmbedFormat, string> = {
+  url: "YouTube / Vimeo / Loom / Notion / TradingView /x/ snapshot / direct image",
+  html: 'Paste embed-code HTML — e.g. <iframe src="…"></iframe> or TradingView\'s Embed widget block',
+  react: 'Paste JSX — e.g. <iframe src="…" /> or <TradingViewWidget symbol="NASDAQ:AAPL" />'
+};
 
 export default function NotebookPage() {
   const [userId, setUserId] = useState<string | null>(null);
@@ -304,16 +452,34 @@ export default function NotebookPage() {
 
   async function saveDrafts() {
     const valid = drafts
-      .map((d) => ({ id: d.id, label: d.label.trim(), url: d.url.trim() }))
-      .filter((d) => d.label && d.url);
+      .map((d) => ({
+        id: d.id,
+        label: d.label.trim(),
+        body: d.body.trim(),
+        format: d.format
+      }))
+      .filter((d) => d.label && d.body);
     if (!valid.length) return;
     const remaining = MAX_EMBEDS - embeds.length;
     const accepted = valid.slice(0, Math.max(0, remaining));
     if (!accepted.length) return;
     const newEntries: NotebookEmbed[] = accepted.map((d) => {
-      let url = d.url;
-      if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
-      return { id: newId(), label: d.label, url };
+      if (d.format === "url") {
+        let url = d.body;
+        if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
+        return { id: newId(), label: d.label, url, format: "url" };
+      }
+      // html / react: keep the raw snippet in `content`; also stash an
+      // extracted URL (if any) on `url` so the "Open in new tab" link
+      // still has something useful to open.
+      const fallbackUrl = extractUrlFromSnippet(d.body) ?? "";
+      return {
+        id: newId(),
+        label: d.label,
+        url: fallbackUrl,
+        format: d.format,
+        content: d.body
+      };
     });
     const next = [...embeds, ...newEntries];
     setEmbeds(next);
@@ -393,13 +559,20 @@ export default function NotebookPage() {
             : "Define yearly resolutions in the Genesis template — section headers, sub-sections and bullets render as a printable card with the year's Chinese-zodiac figure."
         }
         actions={
-          tab === "general" && active ? (
-            <a href={active.url} target="_blank" rel="noreferrer">
-              <Button variant="secondary">
-                <ExternalLink className="h-4 w-4" /> Open in new tab
-              </Button>
-            </a>
-          ) : null
+          tab === "general" && active
+            ? (() => {
+                const href =
+                  active.url ||
+                  (active.content ? extractUrlFromSnippet(active.content) : null);
+                return href ? (
+                  <a href={href} target="_blank" rel="noreferrer">
+                    <Button variant="secondary">
+                      <ExternalLink className="h-4 w-4" /> Open in new tab
+                    </Button>
+                  </a>
+                ) : null;
+              })()
+            : null
         }
       />
 
@@ -488,18 +661,62 @@ export default function NotebookPage() {
                       />
                     </div>
                     <div>
-                      <Label>URL</Label>
-                      <Input
-                        value={draft.url}
-                        onChange={(e) => updateDraft(draft.id, { url: e.target.value })}
-                        placeholder="YouTube / Vimeo / Loom / Pinterest direct image / TradingView /x/ snapshot"
-                      />
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <Label>
+                          {draft.format === "url"
+                            ? "URL"
+                            : draft.format === "html"
+                              ? "HTML"
+                              : "React"}
+                        </Label>
+                        {/* Format switcher pills, same row as the label so
+                          * the input space stays constant — only the
+                          * placeholder + parser swap. */}
+                        <div
+                          role="tablist"
+                          aria-label="Embed format"
+                          className="inline-flex items-center gap-0.5 rounded-lg border border-line bg-bg p-0.5 text-[10.5px]"
+                        >
+                          {FORMAT_TABS.map((tab) => (
+                            <button
+                              key={tab.value}
+                              type="button"
+                              role="tab"
+                              aria-selected={draft.format === tab.value}
+                              onClick={() => updateDraft(draft.id, { format: tab.value })}
+                              className={cn(
+                                "rounded-md px-2 py-0.5 font-medium transition",
+                                draft.format === tab.value
+                                  ? "bg-brand-500/20 text-brand-200"
+                                  : "text-fg-subtle hover:text-fg"
+                              )}
+                            >
+                              {tab.short}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      {draft.format === "url" ? (
+                        <Input
+                          value={draft.body}
+                          onChange={(e) => updateDraft(draft.id, { body: e.target.value })}
+                          placeholder={FORMAT_PLACEHOLDER[draft.format]}
+                        />
+                      ) : (
+                        <Textarea
+                          rows={3}
+                          value={draft.body}
+                          onChange={(e) => updateDraft(draft.id, { body: e.target.value })}
+                          placeholder={FORMAT_PLACEHOLDER[draft.format]}
+                          className="font-mono text-[11px]"
+                        />
+                      )}
                     </div>
                     <button
                       type="button"
                       onClick={() => removeDraftRow(draft.id)}
                       className="inline-flex h-9 w-9 items-center justify-center self-end rounded-xl border border-line bg-bg text-fg-subtle transition hover:border-danger hover:text-danger disabled:opacity-30"
-                      disabled={drafts.length === 1 && !draft.label && !draft.url}
+                      disabled={drafts.length === 1 && !draft.label && !draft.body}
                       aria-label="Remove row"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -523,7 +740,7 @@ export default function NotebookPage() {
                   </Button>
                   <Button
                     onClick={saveDrafts}
-                    disabled={!drafts.some((d) => d.label.trim() && d.url.trim())}
+                    disabled={!drafts.some((d) => d.label.trim() && d.body.trim())}
                   >
                     Save
                   </Button>
@@ -579,8 +796,15 @@ export default function NotebookPage() {
           )}
 
           {active && (() => {
-            const resolved = resolveEmbed(active.url);
-            const isVideo = ["youtube", "vimeo", "loom"].includes(resolved.provider);
+            const fmt: NotebookEmbedFormat = active.format ?? "url";
+            const resolved = resolveByFormat(fmt, active.url, active.content);
+            const isVideo =
+              resolved.kind !== "srcdoc" &&
+              ["youtube", "vimeo", "loom"].includes(resolved.provider);
+            const openHref =
+              active.url ||
+              (active.content ? extractUrlFromSnippet(active.content) : null) ||
+              "";
             return (
               <div className="space-y-2">
                 <div className="flex items-center justify-between rounded-xl border border-line bg-bg-soft/40 px-3 py-2 text-xs">
@@ -589,15 +813,22 @@ export default function NotebookPage() {
                     <span className="rounded bg-bg-elevated px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-fg-subtle">
                       {resolved.provider}
                     </span>
+                    {fmt !== "url" && (
+                      <span className="rounded border border-line bg-bg px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-fg-subtle">
+                        {fmt}
+                      </span>
+                    )}
                   </div>
-                  <a
-                    href={active.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-brand-300 hover:text-brand-200"
-                  >
-                    Open in new tab <ExternalLink className="h-3 w-3" />
-                  </a>
+                  {openHref ? (
+                    <a
+                      href={openHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-brand-300 hover:text-brand-200"
+                    >
+                      Open in new tab <ExternalLink className="h-3 w-3" />
+                    </a>
+                  ) : null}
                 </div>
                 {resolved.kind === "iframe" && isVideo && (
                   // Video providers (YouTube / Vimeo / Loom) get a fixed
@@ -646,6 +877,23 @@ export default function NotebookPage() {
                     />
                   </div>
                 )}
+                {resolved.kind === "srcdoc" && (
+                  // HTML / JSX snippets that we couldn't reduce to a
+                  // canonical URL get rendered inside a sandboxed iframe
+                  // so embed scripts (TradingView's div+script blocks,
+                  // arbitrary widgets) execute in isolation from our
+                  // app — no access to cookies, localStorage, or our
+                  // top-level DOM.
+                  <div className="overflow-hidden rounded-xl border border-line bg-black">
+                    <iframe
+                      srcDoc={resolved.html}
+                      title={active.label}
+                      className="h-[calc(100vh-300px)] min-h-[480px] w-full"
+                      sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox allow-forms"
+                      referrerPolicy="strict-origin-when-cross-origin"
+                    />
+                  </div>
+                )}
                 {resolved.kind === "blocked" && (
                   <div className="rounded-xl border border-amber-400/30 bg-amber-500/5 p-6 text-center text-sm">
                     <div className="font-medium text-fg">
@@ -666,14 +914,16 @@ export default function NotebookPage() {
                         ? "This is a private notion.so URL — those refuse iframe. Click Share → 'Publish to web' on the Notion page, then paste the public *.notion.site URL here and it'll embed inline."
                         : "Most modern sites block iframe embedding for security. Use the link below to open it in a new tab, or paste a direct image / video URL instead."}
                     </div>
-                    <a
-                      href={active.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-3 inline-flex items-center gap-1 rounded-lg border border-line bg-bg-elevated px-3 py-1.5 text-xs text-brand-300 hover:border-brand-400"
-                    >
-                      Open <ExternalLink className="h-3 w-3" />
-                    </a>
+                    {openHref ? (
+                      <a
+                        href={openHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-3 inline-flex items-center gap-1 rounded-lg border border-line bg-bg-elevated px-3 py-1.5 text-xs text-brand-300 hover:border-brand-400"
+                      >
+                        Open <ExternalLink className="h-3 w-3" />
+                      </a>
+                    ) : null}
                   </div>
                 )}
               </div>

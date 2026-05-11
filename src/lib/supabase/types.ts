@@ -195,10 +195,34 @@ export type NotebookNote = {
   updated_at?: string;
 };
 
+/**
+ * Notebook → Embeds entries support three input formats so the user
+ * can paste whichever shape their embed source gave them:
+ *
+ *  - "url"   → plain shareable URL (default; backwards-compatible with
+ *              every legacy entry which has no `format` field).
+ *  - "html"  → an arbitrary embed-code HTML snippet (e.g. the chunk
+ *              TradingView's "Embed widget" button copies, or any
+ *              `<iframe>` snippet from a `<details>` page).
+ *  - "react" → a JSX/React component snippet (e.g.
+ *              `<TradingViewWidget symbol="NASDAQ:AAPL" />` or a JSX
+ *              `<iframe src="…" />`).
+ *
+ * `url` is kept on every row for legacy entries and for "Open in new
+ * tab" support (we try to extract a canonical URL from html/react
+ * snippets too, so that link still works).
+ *
+ * `content` only matters for html/react formats and holds the raw
+ * snippet as the user pasted it.
+ */
+export type NotebookEmbedFormat = "url" | "html" | "react";
+
 export type NotebookEmbed = {
   id: string;
   label: string;
   url: string;
+  format?: NotebookEmbedFormat;
+  content?: string;
 };
 
 /** A single block inside a sub-section of a Yearly Resolution.
