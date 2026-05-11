@@ -175,10 +175,11 @@ function resolveEmbed(rawUrl: string): { kind: EmbedKind; src: string; provider:
  *     copy-paste HTML embed is a `<div>` + `<script src="tv.js">` +
  *     `new TradingView.widget({...})` block — if we matched the script
  *     `src=` first we'd resolve to `tv.js` instead of a real widget URL.
- *  3. JSX-style `src={"..."}` or `src='...'` / `src="..."` — when the
- *     user pasted React code with an iframe-like element. We filter out
- *     loader assets (`.js`, `.css`, `.mjs`, `.json`, `.map`) since those
- *     never embed standalone.
+ *  3. JSX / HTML `src={"..."}` / `src='...'` / `src="..."` — when the
+ *     user pasted React code with an iframe-like element. The matcher
+ *     is tag-aware: we skip any `src=` whose parent tag is `<script>`,
+ *     `<link>` or `<img>`, and we skip URLs that end in `.js`, `.css`,
+ *     `.mjs`, `.json`, `.map` since those never embed standalone.
  *  4. Any bare http(s) URL in the snippet.
  *
  * Returns null if nothing usable is found, in which case the caller
@@ -218,10 +219,13 @@ function extractUrlFromSnippet(snippet: string): string | null {
   const isLoaderAsset = (url: string) =>
     /\.(?:js|mjs|css|json|map)(?:\?.*)?$/i.test(url);
 
-  // 3. JSX `src=` — but skip <script>/<link>/<img> tags. We do this
-  //    by scanning all `src=` matches and rejecting any whose preceding
-  //    tag is a loader tag, or whose URL ends in a loader extension.
-  const srcRe = /<(\w+)[^>]*?\bsrc\s*=\s*\{?\s*["']([^"']+)["']\s*\}?/gi;
+  // 3. JSX / HTML `src=` — but skip <script>/<link>/<img> tags and
+  //    loader assets. We use a single tag-aware regex because the
+  //    `[^>]*?` charclass crosses newlines, so multi-line JSX (the
+  //    tag opener on one line, `src=` on the next) is still anchored
+  //    to its tag name. A separate tag-less fallback would re-match
+  //    URLs from the very tags we're trying to skip.
+  const srcRe = /<(\w+)\b[^>]*?\bsrc\s*=\s*\{?\s*["']([^"']+)["']\s*\}?/gi;
   let m: RegExpExecArray | null;
   while ((m = srcRe.exec(trimmed)) !== null) {
     const tagName = m[1].toLowerCase();
@@ -230,18 +234,18 @@ function extractUrlFromSnippet(snippet: string): string | null {
     if (isLoaderAsset(url)) continue;
     return url;
   }
-  // Also try a tag-less JSX `src=` form (e.g. `src={"…"}` on the next
-  // line of a multi-line JSX element), filtered the same way.
-  const bareSrcRe = /\bsrc\s*=\s*\{?\s*["']([^"']+)["']\s*\}?/gi;
-  while ((m = bareSrcRe.exec(trimmed)) !== null) {
-    const url = m[1];
-    if (isLoaderAsset(url)) continue;
-    return url;
-  }
 
-  // 4. First bare URL found in the snippet — filtered to skip loaders.
+  // 4. First bare URL found in the snippet — but strip out the
+  //    contents of `<script>`, `<link>`, `<img>` tags first so we
+  //    don't resurrect URLs that step 3 deliberately skipped. The
+  //    `srcdoc` fallback can still render those tags verbatim.
+  const sanitized = trimmed
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
+    .replace(/<script\b[^>]*\/?>/gi, "")
+    .replace(/<link\b[^>]*\/?>/gi, "")
+    .replace(/<img\b[^>]*\/?>/gi, "");
   const urlRe = /https?:\/\/[^\s"'<>)]+/gi;
-  while ((m = urlRe.exec(trimmed)) !== null) {
+  while ((m = urlRe.exec(sanitized)) !== null) {
     const url = m[0];
     if (isLoaderAsset(url)) continue;
     return url;
