@@ -169,28 +169,31 @@ function resolveEmbed(rawUrl: string): { kind: EmbedKind; src: string; provider:
  * in order:
  *
  *  1. `<iframe src="...">` — the canonical embed shape.
- *  2. JSX-style `src={"..."}` or `src='...'` / `src="..."` — when the
- *     user pasted React code with an iframe-like element.
- *  3. A TradingView `new TradingView.widget({ symbol: "...", ...})`
- *     config block — extract `symbol` and build the widget URL.
+ *  2. A TradingView `new TradingView.widget({ symbol: "...", ...})`
+ *     config block — extract `symbol` and build the widget URL. This
+ *     runs *before* the generic `src=` fallback because TradingView's
+ *     copy-paste HTML embed is a `<div>` + `<script src="tv.js">` +
+ *     `new TradingView.widget({...})` block — if we matched the script
+ *     `src=` first we'd resolve to `tv.js` instead of a real widget URL.
+ *  3. JSX-style `src={"..."}` or `src='...'` / `src="..."` — when the
+ *     user pasted React code with an iframe-like element. We filter out
+ *     loader assets (`.js`, `.css`, `.mjs`, `.json`, `.map`) since those
+ *     never embed standalone.
  *  4. Any bare http(s) URL in the snippet.
  *
- * Returns null if nothing usable is found.
+ * Returns null if nothing usable is found, in which case the caller
+ * falls back to sandboxed `srcdoc` rendering for the full snippet.
  */
 function extractUrlFromSnippet(snippet: string): string | null {
   if (!snippet) return null;
   const trimmed = snippet.trim();
 
-  // 1. <iframe src="...">
+  // 1. <iframe src="..."> — strongest signal.
   const ifr = trimmed.match(/<iframe\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/i);
   if (ifr && ifr[1]) return ifr[1];
 
-  // 2. JSX `src=` (handles src="…" / src='…' / src={"…"})
-  const jsx = trimmed.match(/\bsrc\s*=\s*\{?\s*["']([^"']+)["']\s*\}?/i);
-  if (jsx && jsx[1]) return jsx[1];
-
-  // 3. TradingView widget config — `new TradingView.widget({...})`
-  //    or a JSX `<TradingViewWidget symbol="..." />` style component.
+  // 2. TradingView widget config (must run before generic src= so a
+  //    pasted div+script+widget block doesn't resolve to tv.js).
   const tvSymbol = trimmed.match(/["']symbol["']\s*:\s*["']([A-Z0-9._:-]+)["']/i)
     ?? trimmed.match(/\bsymbol\s*=\s*["']([A-Z0-9._:-]+)["']/i);
   if (tvSymbol && tvSymbol[1]) {
@@ -210,9 +213,39 @@ function extractUrlFromSnippet(snippet: string): string | null {
     return `https://s.tradingview.com/widgetembed/?${params.toString()}`;
   }
 
-  // 4. First bare URL found in the snippet.
-  const bare = trimmed.match(/https?:\/\/[^\s"'<>)]+/i);
-  if (bare) return bare[0];
+  // Helper: skip loader / asset URLs that can never be a standalone
+  // embed target (TradingView's tv.js, Twitter's widgets.js, etc.).
+  const isLoaderAsset = (url: string) =>
+    /\.(?:js|mjs|css|json|map)(?:\?.*)?$/i.test(url);
+
+  // 3. JSX `src=` — but skip <script>/<link>/<img> tags. We do this
+  //    by scanning all `src=` matches and rejecting any whose preceding
+  //    tag is a loader tag, or whose URL ends in a loader extension.
+  const srcRe = /<(\w+)[^>]*?\bsrc\s*=\s*\{?\s*["']([^"']+)["']\s*\}?/gi;
+  let m: RegExpExecArray | null;
+  while ((m = srcRe.exec(trimmed)) !== null) {
+    const tagName = m[1].toLowerCase();
+    const url = m[2];
+    if (tagName === "script" || tagName === "link" || tagName === "img") continue;
+    if (isLoaderAsset(url)) continue;
+    return url;
+  }
+  // Also try a tag-less JSX `src=` form (e.g. `src={"…"}` on the next
+  // line of a multi-line JSX element), filtered the same way.
+  const bareSrcRe = /\bsrc\s*=\s*\{?\s*["']([^"']+)["']\s*\}?/gi;
+  while ((m = bareSrcRe.exec(trimmed)) !== null) {
+    const url = m[1];
+    if (isLoaderAsset(url)) continue;
+    return url;
+  }
+
+  // 4. First bare URL found in the snippet — filtered to skip loaders.
+  const urlRe = /https?:\/\/[^\s"'<>)]+/gi;
+  while ((m = urlRe.exec(trimmed)) !== null) {
+    const url = m[0];
+    if (isLoaderAsset(url)) continue;
+    return url;
+  }
 
   return null;
 }
