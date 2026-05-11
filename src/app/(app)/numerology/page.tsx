@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { ScreenshotButton } from "@/components/ui/screenshot-button";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,6 +33,17 @@ import {
   type HoroscopeTimeframe
 } from "@/lib/astrology";
 import { westernZodiac, type WesternSign } from "@/lib/numerology";
+import {
+  CHINESE_SIGN_TRAITS,
+  LIFE_PATH_TRAITS,
+  WESTERN_SIGN_TRAITS
+} from "@/lib/numerology/traits";
+import {
+  LIFE_PATH_STONES,
+  WESTERN_SIGN_STONES,
+  CHINESE_SIGN_STONES,
+  type GemstoneRecommendation
+} from "@/lib/numerology/gemstones";
 import type { NumerologyOtherRow, NumerologyProfileRow } from "@/lib/supabase/types";
 import { Pencil, Plus, Sparkles, Trash2, X } from "lucide-react";
 import {
@@ -536,6 +547,19 @@ function MyProfile({
               against this sign expect extra friction — it just means you have to <em>communicate edge</em> more carefully.
             </CardBody>
           </Card>
+
+          <BirthChartSnapshot
+            fullName={name}
+            dob={dob}
+            sign={sign}
+            snapshot={snapshot}
+          />
+
+          <GemstonesCard
+            lifePath={snapshot.lifePath}
+            western={sign.sign}
+            chinese={snapshot.chinese}
+          />
         </>
       )}
     </div>
@@ -1193,6 +1217,20 @@ function OtherDetailModalContent({
             </div>
           </div>
         </div>
+
+        <div className="mt-4 space-y-4">
+          <BirthChartSnapshot
+            fullName={row.full_name}
+            dob={row.dob}
+            sign={sign}
+            snapshot={snap}
+          />
+          <GemstonesCard
+            lifePath={snap.lifePath}
+            western={sign.sign}
+            chinese={snap.chinese}
+          />
+        </div>
       </div>
     </div>
   );
@@ -1473,6 +1511,8 @@ function Lunar() {
           })}
         </CardBody>
       </Card>
+
+      <WesternZodiacTraitsCard />
     </div>
   );
 }
@@ -1708,6 +1748,10 @@ function YearCycle({ profile }: { profile: NumerologyProfileRow | null }) {
         </CardBody>
       </Card>
 
+      <ChineseZodiacTraitsCard />
+
+      <LifePathTraitsCard mineLifePath={mySnap?.lifePath ?? null} />
+
       <Card>
         <CardHeader><CardTitle>How to use numbers in your favour</CardTitle></CardHeader>
         <CardBody className="space-y-2 text-sm text-fg-muted">
@@ -1759,26 +1803,156 @@ function Insights({ profile }: { profile: NumerologyProfileRow | null }) {
           <CardTitle>Advanced Insights</CardTitle>
           <Sparkles className="h-4 w-4 text-brand-300" />
         </CardHeader>
-        <CardBody className="grid gap-4 md:grid-cols-3">
+        <CardBody className="grid gap-4 md:grid-cols-2">
           <Block title="Cities to use" items={ins.useCities} variant="success" />
           <Block title="Cities to avoid" items={ins.avoidCities} variant="danger" />
           <Block title="Brands to use" items={ins.useBrands} variant="success" />
           <Block title="Brands to avoid" items={ins.avoidBrands} variant="danger" />
           <Block title="Cars to use" items={ins.useCars} variant="success" />
           <Block title="Cars to avoid" items={ins.avoidCars} variant="danger" />
+          <Block title="Private jets to use" items={ins.useJets} variant="success" />
+          <Block title="Private jets to avoid" items={ins.avoidJets} variant="danger" />
         </CardBody>
       </Card>
 
-      <Card>
-        <CardHeader><CardTitle>Reflection prompts</CardTitle></CardHeader>
-        <CardBody>
-          <Textarea placeholder="Write what came up reading the above…" rows={6} />
-          <div className="mt-2 text-xs text-fg-subtle">
-            Reflections are a free-form notebook entry and are not stored server-side yet.
+      <ReflectionPromptsCard profileId={profile.id} fullName={profile.full_name} />
+    </div>
+  );
+}
+
+/**
+ * Reflection prompts card — stores the user's free-form journal entry
+ * locally (per profile id) so it survives navigation / refresh, with
+ * explicit Save / Edit / Download / Screenshot affordances. We keep
+ * storage local rather than server-side at this stage because a
+ * reflections schema isn't worth a migration round-trip yet — the
+ * user can copy-export to the Notebook scratchpad once they're ready
+ * to commit.
+ */
+function ReflectionPromptsCard({
+  profileId,
+  fullName
+}: {
+  profileId: string;
+  fullName: string;
+}) {
+  const storageKey = `numerology.reflections.${profileId}`;
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [text, setText] = useState("");
+  const [savedText, setSavedText] = useState("");
+  const [editing, setEditing] = useState(true);
+  const [saveState, setSaveState] = useState<"idle" | "saved">("idle");
+
+  // Hydrate from localStorage on first mount and whenever the active
+  // profile changes (Calculate For Others swaps profiles in place).
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      if (raw !== null) {
+        setText(raw);
+        setSavedText(raw);
+        // If the user already has saved content, default to read mode
+        // so the card renders the saved entry instead of an empty
+        // edit field — they can click Edit to amend.
+        setEditing(raw.length === 0);
+      } else {
+        setText("");
+        setSavedText("");
+        setEditing(true);
+      }
+    } catch {
+      // localStorage may be unavailable in some embedded contexts —
+      // fall back to in-memory only.
+    }
+  }, [storageKey]);
+
+  function save() {
+    try {
+      window.localStorage.setItem(storageKey, text);
+    } catch {
+      // ignore storage failures — text remains in component state
+    }
+    setSavedText(text);
+    setEditing(false);
+    setSaveState("saved");
+    window.setTimeout(() => setSaveState("idle"), 1400);
+  }
+
+  function downloadTxt() {
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const safeName = fullName.replace(/[^A-Za-z0-9_-]+/g, "_");
+    const blob = new Blob([editing ? text : savedText], { type: "text/plain;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `numerology-reflections-${safeName}-${stamp}.txt`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  return (
+    <Card>
+      <div ref={cardRef}>
+        <CardHeader>
+          <CardTitle>Reflection prompts</CardTitle>
+        </CardHeader>
+        <CardBody className="space-y-3">
+          {editing ? (
+            <Textarea
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder="Write what came up reading the above…"
+              rows={8}
+            />
+          ) : (
+            <div className="min-h-[160px] whitespace-pre-wrap rounded-xl border border-line bg-bg/40 p-3 text-sm text-fg">
+              {savedText || (
+                <span className="text-fg-subtle">
+                  Nothing saved yet — click Edit to start a reflection.
+                </span>
+              )}
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center gap-2">
+            {editing ? (
+              <>
+                <Button onClick={save} disabled={text === savedText}>
+                  {saveState === "saved" ? "Saved" : "Save"}
+                </Button>
+                {savedText.length > 0 && (
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setText(savedText);
+                      setEditing(false);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                )}
+              </>
+            ) : (
+              <Button variant="ghost" onClick={() => setEditing(true)}>
+                Edit
+              </Button>
+            )}
+            <Button variant="ghost" onClick={downloadTxt}>
+              Download .txt
+            </Button>
+            <ScreenshotButton
+              targetRef={cardRef as RefObject<HTMLElement>}
+              filename={`numerology-reflections-${fullName.replace(/[^A-Za-z0-9_-]+/g, "_")}`}
+              label="Save reflection as PNG"
+            />
+          </div>
+
+          <div className="text-[11px] text-fg-subtle">
+            Saved locally to this device per profile. Use Download .txt to keep
+            a copy or paste it into the Notebook → Scratchpad.
           </div>
         </CardBody>
-      </Card>
-    </div>
+      </div>
+    </Card>
   );
 }
 
@@ -2508,4 +2682,434 @@ function galaxyStarsLayer3(): string {
   return stars
     .map(([x, y]) => `radial-gradient(circle at ${x}% ${y}%, rgba(255,236,180,0.95) 0px, rgba(255,236,180,0) 1.7px)`) 
     .join(",");
+}
+
+/**
+ * Birth Chart Snapshot — a DOB-only natal chart preview. We don't yet
+ * collect birth time / place, so we render the placements that are
+ * derivable from date alone (Sun, slow planets, numerology layer) and
+ * label the time-dependent placements (Moon, Ascendant, Houses) as
+ * needing additional data. Once a birth-time / location migration
+ * lands the same component will accept those props and switch to a
+ * full ephemeris compute.
+ */
+function BirthChartSnapshot({
+  fullName,
+  dob,
+  sign,
+  snapshot
+}: {
+  fullName: string;
+  dob: string;
+  sign: { sign: string; element: string; modality: string; ruler: string; symbol: string };
+  snapshot: { lifePath: number; personalYear: number; chinese: string; destiny: number; soulUrge: number; personality: number };
+}) {
+  // Slow-planet sign placements derivable from DOB alone — these
+  // bodies move so slowly that the date is sufficient resolution.
+  // Tables span 1900–2050; out-of-range DOBs (e.g. before 1882 for
+  // Pluto) return null and the row is rendered as "—" so we never
+  // silently surface a wrong sign.
+  const dobDate = new Date(`${dob}T12:00:00Z`);
+  // Decimal year as the fraction of the calendar year already elapsed,
+  // computed against the actual year length so Dec 31 always lands on
+  // ~year+0.997 (never overflows into the next year and never
+  // double-counts month+day like a naïve `m/12 + d/365.25` formula).
+  const yearDecimal = (() => {
+    const y = dobDate.getUTCFullYear();
+    const startOfYear = Date.UTC(y, 0, 1);
+    const startOfNext = Date.UTC(y + 1, 0, 1);
+    return y + (dobDate.getTime() - startOfYear) / (startOfNext - startOfYear);
+  })();
+  const jupiter = jupiterSign(yearDecimal);
+  const saturn = saturnSign(yearDecimal);
+  const uranus = uranusSign(yearDecimal);
+  const neptune = neptuneSign(yearDecimal);
+  const pluto = plutoSign(yearDecimal);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Birth chart snapshot — {fullName}</CardTitle>
+      </CardHeader>
+      <CardBody className="space-y-3 text-sm">
+        <p className="text-xs text-fg-muted">
+          A natal chart preview using everything derivable from your date of
+          birth. Time-of-birth-only placements (Moon, Ascendant, House cusps,
+          Midheaven) need your birth time and city to compute precisely —
+          adding those is on the roadmap.
+        </p>
+
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+          <ChartCell label="Sun (Western)" value={`${sign.sign} ${sign.symbol}`} note={`${sign.element} · ${sign.modality} · ruled by ${sign.ruler}`} />
+          <ChartCell label="Chinese animal" value={snapshot.chinese} />
+          <ChartCell label="Life Path" value={String(snapshot.lifePath)} />
+          <ChartCell label="Destiny" value={String(snapshot.destiny)} />
+          <ChartCell label="Soul Urge" value={String(snapshot.soulUrge)} />
+          <ChartCell label="Personality" value={String(snapshot.personality)} />
+          <ChartCell label="Personal Year" value={String(snapshot.personalYear)} />
+          <ChartCell label="Jupiter" value={jupiter ?? "—"} note={jupiter ? "Expansion / luck cycle (~1 yr / sign)" : "Out of supported range"} />
+          <ChartCell label="Saturn" value={saturn ?? "—"} note={saturn ? "Discipline / structure cycle (~2.5 yr / sign)" : "Out of supported range"} />
+          <ChartCell label="Uranus" value={uranus ?? "—"} note={uranus ? "Generational — ~7 yr / sign" : "Out of supported range"} />
+          <ChartCell label="Neptune" value={neptune ?? "—"} note={neptune ? "Generational — ~14 yr / sign" : "Out of supported range"} />
+          <ChartCell label="Pluto" value={pluto ?? "—"} note={pluto ? "Generational — ~12–30 yr / sign" : "Out of supported range"} />
+        </div>
+
+        <div className="rounded-xl border border-amber-400/30 bg-amber-500/5 p-3 text-xs text-fg-muted">
+          <span className="font-medium text-amber-200">Time-of-birth required:</span>{" "}
+          Moon sign, Ascendant (Rising), Midheaven, House placements and exact
+          inner-planet degrees all need your birth time and birthplace. Add
+          them on the profile editor when that field ships.
+        </div>
+      </CardBody>
+    </Card>
+  );
+}
+
+function ChartCell({ label, value, note }: { label: string; value: string; note?: string }) {
+  return (
+    <div className="rounded-xl border border-line bg-bg-soft/40 p-3">
+      <div className="text-[10px] uppercase tracking-wider text-fg-subtle">{label}</div>
+      <div className="mt-0.5 text-base font-semibold text-fg">{value}</div>
+      {note ? <div className="mt-1 text-[11px] text-fg-muted">{note}</div> : null}
+    </div>
+  );
+}
+
+// Slow-planet sign at a given decimal-year DOB.
+//
+// We hand-curate the historical ingress tables (~1900 onwards) rather
+// than computing from formulas because the eccentric orbits of the
+// outer planets — especially Pluto — make formula-based approximations
+// drift by a full sign during retrograde-driven dance years. Each
+// table entry below is the *final* (post-retrograde) astrological
+// ingress date; the rare "born during a retrograde dance" case is
+// resolved to the dominant outer placement, which is the correct
+// behaviour for a date-only chart preview.
+//
+// signFromTable returns null when the requested year predates the
+// table — callers must surface that as an honest "data unavailable"
+// state rather than a silent fallback.
+function jupiterSign(year: number): string | null {
+  const ingresses: Array<[number, string]> = [
+    [1900.05, "Sagittarius"], [1901.0, "Capricorn"], [1902.05, "Aquarius"],
+    [1903.15, "Pisces"], [1904.18, "Aries"], [1905.18, "Taurus"],
+    [1906.3, "Gemini"], [1907.4, "Cancer"], [1908.5, "Leo"],
+    [1909.55, "Virgo"], [1910.55, "Libra"], [1911.7, "Scorpio"],
+    [1912.85, "Sagittarius"], [1913.95, "Capricorn"], [1915.05, "Aquarius"],
+    [1916.13, "Pisces"], [1917.13, "Aries"], [1918.13, "Taurus"],
+    [1919.25, "Gemini"], [1920.4, "Cancer"], [1921.5, "Leo"],
+    [1922.6, "Virgo"], [1923.65, "Libra"], [1924.65, "Scorpio"],
+    [1925.85, "Sagittarius"], [1926.95, "Capricorn"], [1928.05, "Aquarius"],
+    [1929.07, "Pisces"], [1930.05, "Aries"], [1931.05, "Taurus"],
+    [1932.25, "Gemini"], [1933.35, "Cancer"], [1934.45, "Leo"],
+    [1935.55, "Virgo"], [1936.6, "Libra"], [1937.85, "Scorpio"],
+    [1938.93, "Sagittarius"], [1940.0, "Capricorn"], [1941.05, "Aquarius"],
+    [1942.05, "Pisces"], [1943.05, "Aries"], [1944.05, "Taurus"],
+    [1945.25, "Gemini"], [1946.4, "Cancer"], [1947.55, "Leo"],
+    [1948.6, "Virgo"], [1949.6, "Libra"], [1950.7, "Scorpio"],
+    [1951.85, "Sagittarius"], [1952.95, "Capricorn"], [1954.0, "Aquarius"],
+    [1955.05, "Pisces"], [1956.05, "Aries"], [1957.05, "Taurus"],
+    [1958.18, "Gemini"], [1959.3, "Cancer"], [1960.45, "Leo"],
+    [1961.55, "Virgo"], [1962.6, "Libra"], [1963.65, "Scorpio"],
+    [1964.85, "Sagittarius"], [1965.95, "Capricorn"], [1967.05, "Aquarius"],
+    [1968.05, "Pisces"], [1969.05, "Aries"], [1970.05, "Taurus"],
+    [1971.18, "Gemini"], [1972.3, "Cancer"], [1973.45, "Leo"],
+    [1974.5, "Virgo"], [1975.55, "Libra"], [1976.7, "Scorpio"],
+    [1977.85, "Sagittarius"], [1978.95, "Capricorn"], [1980.0, "Aquarius"],
+    [1981.05, "Pisces"], [1982.0, "Aries"], [1983.05, "Taurus"],
+    [1984.18, "Gemini"], [1985.3, "Cancer"], [1986.45, "Leo"],
+    [1987.5, "Virgo"], [1988.55, "Libra"], [1989.65, "Scorpio"],
+    [1990.85, "Sagittarius"], [1991.93, "Capricorn"], [1993.0, "Aquarius"],
+    [1994.05, "Pisces"], [1995.05, "Aries"], [1996.05, "Taurus"],
+    [1997.18, "Gemini"], [1998.3, "Cancer"], [1999.45, "Leo"],
+    [2000.5, "Virgo"], [2001.55, "Libra"], [2002.65, "Scorpio"],
+    [2003.85, "Sagittarius"], [2004.95, "Capricorn"], [2006.0, "Aquarius"],
+    [2007.05, "Pisces"], [2008.0, "Aries"], [2009.05, "Taurus"],
+    [2010.18, "Gemini"], [2011.3, "Cancer"], [2012.45, "Leo"],
+    [2013.5, "Virgo"], [2014.55, "Libra"], [2015.7, "Scorpio"],
+    [2016.85, "Sagittarius"], [2017.95, "Capricorn"], [2019.0, "Aquarius"],
+    [2020.05, "Pisces"], [2021.05, "Aries"], [2022.05, "Taurus"],
+    [2023.18, "Gemini"], [2024.3, "Cancer"], [2025.45, "Leo"],
+    [2026.5, "Virgo"], [2027.55, "Libra"], [2028.7, "Scorpio"],
+    [2029.85, "Sagittarius"], [2030.95, "Capricorn"]
+  ];
+  return signFromTable(year, ingresses);
+}
+
+function saturnSign(year: number): string | null {
+  // Saturn ~2.5 yr per sign. Final-ingress dates back to 1900.
+  const ingresses: Array<[number, string]> = [
+    [1900.05, "Sagittarius"], [1903.05, "Capricorn"], [1905.4, "Aquarius"],
+    [1908.2, "Pisces"], [1910.95, "Aries"], [1913.25, "Taurus"],
+    [1915.6, "Gemini"], [1917.8, "Cancer"], [1919.7, "Leo"],
+    [1921.7, "Virgo"], [1923.95, "Libra"], [1924.2, "Scorpio"],
+    [1926.95, "Sagittarius"], [1929.95, "Capricorn"], [1932.15, "Aquarius"],
+    [1935.15, "Pisces"], [1937.3, "Aries"], [1939.45, "Taurus"],
+    [1942.4, "Gemini"], [1944.45, "Cancer"], [1946.6, "Leo"],
+    [1948.75, "Virgo"], [1950.8, "Libra"], [1953.8, "Scorpio"],
+    [1956.04, "Sagittarius"], [1959.0, "Capricorn"], [1962.0, "Aquarius"],
+    [1964.25, "Pisces"], [1967.18, "Aries"], [1969.32, "Taurus"],
+    [1971.46, "Gemini"], [1973.58, "Cancer"], [1975.71, "Leo"],
+    [1977.87, "Virgo"], [1980.72, "Libra"], [1982.91, "Scorpio"],
+    [1985.88, "Sagittarius"], [1988.13, "Capricorn"], [1991.1, "Aquarius"],
+    [1993.39, "Pisces"], [1996.27, "Aries"], [1998.45, "Taurus"],
+    [2000.6, "Gemini"], [2003.42, "Cancer"], [2005.55, "Leo"],
+    [2007.67, "Virgo"], [2009.83, "Libra"], [2012.79, "Scorpio"],
+    [2014.96, "Sagittarius"], [2017.95, "Capricorn"], [2020.95, "Aquarius"],
+    [2023.2, "Pisces"], [2025.4, "Aries"], [2028.5, "Taurus"],
+    [2030.55, "Gemini"]
+  ];
+  return signFromTable(year, ingresses);
+}
+
+function uranusSign(year: number): string | null {
+  // Uranus ~7 yr per sign. Final-ingress dates back to 1900.
+  const ingresses: Array<[number, string]> = [
+    [1898.0, "Sagittarius"], [1904.92, "Capricorn"], [1912.08, "Aquarius"],
+    [1919.25, "Pisces"], [1927.25, "Aries"], [1934.43, "Taurus"],
+    [1941.65, "Gemini"], [1948.66, "Cancer"], [1955.65, "Leo"],
+    [1962.83, "Virgo"], [1968.82, "Libra"], [1975.7, "Scorpio"],
+    [1981.13, "Sagittarius"], [1988.12, "Capricorn"], [1995.25, "Aquarius"],
+    [2003.19, "Pisces"], [2010.4, "Aries"], [2018.37, "Taurus"],
+    [2025.51, "Gemini"], [2032.55, "Cancer"]
+  ];
+  return signFromTable(year, ingresses);
+}
+
+function neptuneSign(year: number): string | null {
+  // Neptune ~14 yr per sign. Final-ingress dates back to 1900.
+  const ingresses: Array<[number, string]> = [
+    [1888.06, "Gemini"], [1902.5, "Cancer"], [1916.6, "Leo"],
+    [1929.74, "Virgo"], [1942.75, "Libra"], [1956.99, "Scorpio"],
+    [1970.83, "Sagittarius"], [1984.05, "Capricorn"], [1998.08, "Aquarius"],
+    [2011.26, "Pisces"], [2025.24, "Aries"], [2038.97, "Taurus"]
+  ];
+  return signFromTable(year, ingresses);
+}
+
+function plutoSign(year: number): string | null {
+  // Pluto's eccentric orbit — final-ingress dates back to 1900.
+  const ingresses: Array<[number, string]> = [
+    [1882.98, "Gemini"], [1914.43, "Cancer"], [1939.78, "Leo"],
+    [1957.65, "Virgo"], [1971.79, "Libra"], [1983.85, "Scorpio"],
+    [1995.86, "Sagittarius"], [2008.07, "Capricorn"], [2024.89, "Aquarius"],
+    [2043.18, "Pisces"]
+  ];
+  return signFromTable(year, ingresses);
+}
+
+function signFromTable(
+  year: number,
+  table: Array<[number, string]>
+): string | null {
+  if (year < table[0][0]) return null;
+  let current = table[0][1];
+  for (const [start, sign] of table) {
+    if (year >= start) current = sign;
+    else break;
+  }
+  return current;
+}
+
+/**
+ * GemstonesCard — pulls the user's three layers of stone correspondence
+ * (life-path / Western sun / Chinese animal) and shows the primary,
+ * supporting stones, wear instructions, and energetic theme.
+ */
+function GemstonesCard({
+  lifePath,
+  western,
+  chinese
+}: {
+  lifePath: number;
+  western: string;
+  chinese: string;
+}) {
+  const lp = LIFE_PATH_STONES[lifePath] ?? LIFE_PATH_STONES[1];
+  const ws = WESTERN_SIGN_STONES[western] ?? Object.values(WESTERN_SIGN_STONES)[0];
+  const cs = CHINESE_SIGN_STONES[chinese] ?? Object.values(CHINESE_SIGN_STONES)[0];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Stones & gemstones</CardTitle>
+      </CardHeader>
+      <CardBody className="grid gap-3 md:grid-cols-3">
+        <GemstoneTile heading={`Life Path ${lifePath}`} rec={lp} />
+        <GemstoneTile heading={`${western} (Sun)`} rec={ws} />
+        <GemstoneTile heading={`${chinese} (year)`} rec={cs} />
+      </CardBody>
+    </Card>
+  );
+}
+
+function GemstoneTile({
+  heading,
+  rec
+}: {
+  heading: string;
+  rec: GemstoneRecommendation;
+}) {
+  return (
+    <div className="rounded-xl border border-line bg-bg-soft/40 p-3">
+      <div className="text-[10px] uppercase tracking-wider text-fg-subtle">{heading}</div>
+      <div className="mt-1 text-base font-semibold text-fg">{rec.primary}</div>
+      <div className="mt-2 text-xs text-fg-muted">
+        <span className="text-fg">Supporting: </span>
+        {rec.supporting.join(", ")}
+      </div>
+      <div className="mt-1.5 text-xs text-fg-muted">
+        <span className="text-fg">Wear: </span>
+        {rec.wear}
+      </div>
+      <div className="mt-1.5 text-xs italic text-fg-subtle">{rec.theme}</div>
+    </div>
+  );
+}
+
+/**
+ * Card listing every Chinese zodiac animal with GG33-flavoured personality
+ * traits — loyalty, career fit, money instincts, the distinctive "tells"
+ * each animal gives off, and a few public-figure examples per sign.
+ */
+function ChineseZodiacTraitsCard() {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Chinese zodiac sign traits</CardTitle>
+      </CardHeader>
+      <CardBody className="space-y-3">
+        <p className="text-xs text-fg-muted">
+          Personality patterns for all 12 animals — loyalty, career, money,
+          and the tells each one gives off. Useful as a relationship and
+          team-building lens, not a horoscope.
+        </p>
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+          {CHINESE_SIGN_TRAITS.map((t) => (
+            <div key={t.sign} className="rounded-xl border border-line bg-bg-soft/40 p-3">
+              <div className="flex items-center gap-2">
+                <div className="text-2xl">{t.emoji}</div>
+                <div className="text-sm font-semibold">{t.sign}</div>
+              </div>
+              <p className="mt-2 text-xs text-fg-muted">{t.essence}</p>
+              <dl className="mt-2 space-y-1.5 text-[11px] text-fg-muted">
+                <Trait label="Loyalty" body={t.loyalty} />
+                <Trait label="Career" body={t.career} />
+                <Trait label="Money" body={t.money} />
+                <Trait label="Tells" body={t.tells} />
+                <Trait label="Notable" body={t.notable} />
+              </dl>
+            </div>
+          ))}
+        </div>
+      </CardBody>
+    </Card>
+  );
+}
+
+/**
+ * Card listing personality traits for every life-path number 1-9 plus the
+ * master numbers 11 / 22 / 33 — distinct from the existing "Number
+ * frequencies & vibrations" card which catalogues raw vibration; this
+ * card is GG33-style narrative traits, lanes, money pattern, caveats
+ * (including the master-11 travel caveat).
+ */
+function LifePathTraitsCard({ mineLifePath }: { mineLifePath: number | null }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Life path number traits</CardTitle>
+      </CardHeader>
+      <CardBody className="space-y-3">
+        <p className="text-xs text-fg-muted">
+          Narrative traits for each life-path number (1-9) and the three
+          master numbers (11, 22, 33). The master-number caveats (e.g. the
+          11-day travel advice) are journaling lenses — observe the pattern
+          for a few months on yourself before weighting them as rules.
+        </p>
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+          {LIFE_PATH_TRAITS.map((t) => {
+            const isYours = mineLifePath !== null && mineLifePath === t.number;
+            return (
+              <div
+                key={t.number}
+                className={`rounded-xl border p-3 ${
+                  isYours
+                    ? "border-brand-400 bg-brand-500/10"
+                    : "border-line bg-bg-soft/40"
+                }`}
+              >
+                <div className="flex items-baseline justify-between gap-2">
+                  <div className="text-2xl font-semibold">{t.number}</div>
+                  <div className="text-right text-xs text-fg-subtle">{t.title}</div>
+                </div>
+                <p className="mt-2 text-xs text-fg-muted">{t.essence}</p>
+                <dl className="mt-2 space-y-1.5 text-[11px] text-fg-muted">
+                  <Trait label="Strengths" body={t.strengths} />
+                  <Trait label="Shadow" body={t.shadow} />
+                  <Trait label="Lanes" body={t.lanes} />
+                  <Trait label="Money" body={t.money} />
+                  <Trait label="Notable" body={t.notable} />
+                  {t.caveat ? <Trait label="Caveat" body={t.caveat} /> : null}
+                </dl>
+              </div>
+            );
+          })}
+        </div>
+      </CardBody>
+    </Card>
+  );
+}
+
+/**
+ * Card listing all 12 Western zodiac signs with deeper personality, body
+ * archetype, and love / career notes — sits beneath the existing "All 12
+ * signs at a glance" trade-archetype grid on the Lunar Cycle tab.
+ */
+function WesternZodiacTraitsCard() {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>All 12 Western signs — full traits</CardTitle>
+      </CardHeader>
+      <CardBody className="space-y-3">
+        <p className="text-xs text-fg-muted">
+          Personality, body archetype, love and career patterns for every
+          Western sign — deeper than the trade-archetype one-liners above.
+        </p>
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+          {WESTERN_SIGN_TRAITS.map((t) => (
+            <div key={t.sign} className="rounded-xl border border-line bg-bg-soft/40 p-3">
+              <div className="flex items-center gap-2">
+                <div className="text-2xl">{t.symbol}</div>
+                <div>
+                  <div className="text-sm font-semibold">{t.sign}</div>
+                  <div className="text-[10px] text-fg-subtle">
+                    {t.dates} · {t.element} · {t.modality} · {t.ruler}
+                  </div>
+                </div>
+              </div>
+              <dl className="mt-2 space-y-1.5 text-[11px] text-fg-muted">
+                <Trait label="Body" body={t.body} />
+                <Trait label="Personality" body={t.personality} />
+                <Trait label="Shadow" body={t.shadow} />
+                <Trait label="Love" body={t.love} />
+                <Trait label="Career" body={t.career} />
+                <Trait label="Notable" body={t.notable} />
+              </dl>
+            </div>
+          ))}
+        </div>
+      </CardBody>
+    </Card>
+  );
+}
+
+function Trait({ label, body }: { label: string; body: string }) {
+  return (
+    <div>
+      <span className="text-fg">{label}: </span>
+      {body}
+    </div>
+  );
 }
