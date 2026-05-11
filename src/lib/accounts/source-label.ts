@@ -50,13 +50,15 @@ export type AccountSourceLabel = {
 
 // Letter-boundary patterns. We can't use `\b` because JS word-
 // boundaries treat digits as word chars, so `\b(real)\b` would fail
-// to match the very common MetaTrader server name suffix `Real3`.
+// to match the very common MetaTrader server-name suffix `Real3`.
 // Instead we anchor with "not preceded / followed by an ASCII letter"
-// — that means "JustMarkets-Real3" matches (hyphen + digit are
-// non-letters), but "delivery" (⊃ "live"), "unrealized" (⊃ "real"),
-// and "Contest" (⊃ "test") do not.
-const DEMO_PATTERNS = /(?:^|[^a-z])(demo|practice|paper|sandbox|simulat)(?![a-z])/i;
-const LIVE_PATTERNS = /(?:^|[^a-z])(live|real|prod)(?![a-z])/i;
+// — that matches "JustMarkets-Real3" (hyphen + digit are non-letters)
+// while still rejecting embedded-letter substrings like "delivery"
+// (⊃ "live"), "unrealized" (⊃ "real"), "Contest" / "Tester" /
+// "Latest" / "Protest" (⊃ "test"), "Paperwork" (⊃ "paper") and
+// "Reproduction" (⊃ "prod").
+const DEMO_PATTERNS = /(?:^|[^a-z])(demo|practice|paper|test|sandbox|simulat)(?![a-z])/i;
+const LIVE_PATTERNS = /(?:^|[^a-z])(live|real)(?![a-z])/i;
 
 /**
  * Try to detect Live / Demo from whatever signal the file source gave
