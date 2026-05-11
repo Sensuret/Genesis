@@ -228,23 +228,26 @@ export function ImportedFilesCard() {
                   return (
                     <tr key={f.id} className="border-t border-line/60 align-middle">
                       <td className="px-3 py-2.5">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-medium text-fg">{f.name}</span>
-                          {(() => {
-                            const source = accountSourceLabel(f);
-                            return (
+                        {(() => {
+                          const source = accountSourceLabel(f);
+                          return (
+                            <>
                               <span
                                 className={cn(
-                                  "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide",
-                                  accountSourceChipClass(source.tone)
+                                  "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10.5px] font-medium",
+                                  accountSourceChipClass(source.chip.tone)
                                 )}
                                 title={source.description}
                               >
-                                {source.text}
+                                {source.chip.text}
                               </span>
-                            );
-                          })()}
-                        </div>
+                              <div className="mt-1 text-sm font-medium text-fg">
+                                {source.brokerLine}
+                              </div>
+                              <div className="text-[11px] text-fg-subtle">{f.name}</div>
+                            </>
+                          );
+                        })()}
                         <div className="text-xs text-fg-muted">
                           {f.source ?? "Generic"} · current: {tzLabel(f.broker_tz_offset_minutes, auto)}
                         </div>

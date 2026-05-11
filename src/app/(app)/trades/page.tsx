@@ -30,6 +30,10 @@ import {
   tpBeSl,
   winRate
 } from "@/lib/analytics";
+import {
+  accountSourceLabel,
+  accountSourceChipClass
+} from "@/lib/accounts/source-label";
 import { cn, shortDate } from "@/lib/utils";
 
 export default function TradesPage() {
@@ -182,7 +186,27 @@ export default function TradesPage() {
                     onClick={() => setFileFilter(f.id === fileFilter ? "all" : f.id)}
                     className={`min-w-0 flex-1 text-left ${fileFilter === f.id ? "text-brand-300" : ""}`}
                   >
-                    <div className="truncate text-sm font-medium">{f.name}</div>
+                    {(() => {
+                      const source = accountSourceLabel(f);
+                      return (
+                        <>
+                          {/* Chip + broker line, mirroring Settings → Import history. */}
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10.5px] font-medium",
+                              accountSourceChipClass(source.chip.tone)
+                            )}
+                            title={source.description}
+                          >
+                            {source.chip.text}
+                          </span>
+                          <div className="mt-1 truncate text-sm font-medium">
+                            {source.brokerLine}
+                          </div>
+                          <div className="truncate text-[11px] text-fg-subtle">{f.name}</div>
+                        </>
+                      );
+                    })()}
                     <div className="text-xs text-fg-subtle">
                       {f.trade_count} trade{f.trade_count === 1 ? "" : "s"} · imported{" "}
                       {formatTimestamp(f.created_at)}

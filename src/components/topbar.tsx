@@ -499,31 +499,39 @@ function AccountsPicker({
             key={a.id}
             type="button"
             onClick={() => toggle(a.id)}
-            className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-xs hover:bg-brand-500/10"
+            className="flex w-full items-start gap-2 rounded-lg px-3 py-1.5 text-left text-xs hover:bg-brand-500/10"
           >
             <span
               className={cn(
-                "flex h-4 w-4 shrink-0 items-center justify-center rounded border",
+                "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border",
                 selected ? "border-brand-400 bg-brand-500/30" : "border-line bg-bg"
               )}
             >
               {selected && <span className="h-2 w-2 rounded-sm bg-brand-300" />}
             </span>
-            <span className="min-w-0 flex-1 truncate text-fg-muted">
-              {a.name}{" "}
-              <span className="text-fg-subtle">
-                {t("topbar.accounts_trades_suffix", { count: a.trade_count })}
+            <span className="min-w-0 flex-1">
+              {/* Tiny sync-kind chip above the broker line — mirrors the
+                  Settings → Import history layout, just shrunk a notch
+                  so it doesn't dominate the dropdown row. */}
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-md border px-1 py-px text-[9px] font-medium",
+                  accountSourceChipClass(source.chip.tone)
+                )}
+                title={source.description}
+                aria-label={source.description}
+              >
+                {source.chip.text}
               </span>
-            </span>
-            <span
-              className={cn(
-                "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide",
-                accountSourceChipClass(source.tone)
-              )}
-              title={source.description}
-              aria-label={source.description}
-            >
-              {source.text}
+              <span className="block truncate text-[11px] text-fg-muted">
+                {source.brokerLine}
+              </span>
+              <span className="block truncate text-[10px] text-fg-subtle">
+                {a.name}{" "}
+                <span>
+                  {t("topbar.accounts_trades_suffix", { count: a.trade_count })}
+                </span>
+              </span>
             </span>
           </button>
         );
