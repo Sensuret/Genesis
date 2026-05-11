@@ -48,20 +48,48 @@ export type AccountSourceLabel = {
   description: string;
 };
 
-const DEMO_PATTERNS = /(demo|practice|paper|test|sandbox|simulat)/i;
-const LIVE_PATTERNS = /(live|real|prod)/i;
+// Letter-boundary patterns. We can't use `\b` because JS word-
+// boundaries treat digits as word chars, so `\b(real)\b` would fail
+// to match the very common MetaTrader server name suffix `Real3`.
+// Instead we anchor with "not preceded / followed by an ASCII letter"
+// — that means "JustMarkets-Real3" matches (hyphen + digit are
+// non-letters), but "delivery" (⊃ "live"), "unrealized" (⊃ "real"),
+// and "Contest" (⊃ "test") do not.
+const DEMO_PATTERNS = /(?:^|[^a-z])(demo|practice|paper|sandbox|simulat)(?![a-z])/i;
+const LIVE_PATTERNS = /(?:^|[^a-z])(live|real|prod)(?![a-z])/i;
 
 /**
  * Try to detect Live / Demo from whatever signal the file source gave
  * us. Returns "Live" / "Demo" / null when nothing is detectable.
+ *
+ * Fields are checked in priority order, NOT concatenated, so a noisy
+ * signal in a low-priority field (e.g. the literal user-typed name
+ * "Contest Winner") never overrides a strong signal from a high-
+ * priority field (the server name "JustMarkets-Real3").
+ *
+ * Priority:
+ *  1. `server` — MetaTrader server names use a strict `<Broker>-Real /
+ *     -Demo / -Live` convention and are the single most reliable signal.
+ *  2. `broker` — usually carries an explicit "Demo" qualifier when set.
+ *  3. `account_name` — user-typed; less reliable.
+ *  4. `name` — file display name; least reliable (often contains the
+ *     filename, which can be anything).
+ *
+ * The first field that yields a verdict wins.
  */
 function detectAccountMode(row: TradeFileRow): "Live" | "Demo" | null {
-  const haystack = [row.server, row.name, row.broker, row.account_name]
-    .filter((s): s is string => Boolean(s && s.trim()))
-    .join(" ");
-  if (!haystack) return null;
-  if (DEMO_PATTERNS.test(haystack)) return "Demo";
-  if (LIVE_PATTERNS.test(haystack)) return "Live";
+  const fields: Array<string | null | undefined> = [
+    row.server,
+    row.broker,
+    row.account_name,
+    row.name
+  ];
+  for (const raw of fields) {
+    const field = raw?.trim();
+    if (!field) continue;
+    if (DEMO_PATTERNS.test(field)) return "Demo";
+    if (LIVE_PATTERNS.test(field)) return "Live";
+  }
   return null;
 }
 
