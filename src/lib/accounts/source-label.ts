@@ -57,7 +57,11 @@ export type AccountSourceLabel = {
 // (⊃ "live"), "unrealized" (⊃ "real"), "Contest" / "Tester" /
 // "Latest" / "Protest" (⊃ "test"), "Paperwork" (⊃ "paper") and
 // "Reproduction" (⊃ "prod").
-const DEMO_PATTERNS = /(?:^|[^a-z])(demo|practice|paper|test|sandbox|simulat)(?![a-z])/i;
+// `simulat` is deliberately a PREFIX token (matches "Simulation",
+// "Simulated", "Simulator"); the rest are whole tokens. Split into
+// two branches so the trailing `(?![a-z])` boundary only applies to
+// the whole-token group.
+const DEMO_PATTERNS = /(?:^|[^a-z])(?:(?:demo|practice|paper|test|sandbox)(?![a-z])|simulat)/i;
 const LIVE_PATTERNS = /(?:^|[^a-z])(live|real)(?![a-z])/i;
 
 /**
