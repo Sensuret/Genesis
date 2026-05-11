@@ -271,7 +271,13 @@ function jsxToHtmlIsh(snippet: string): string {
     .replace(/\bclassName=/g, "class=")
     .replace(/\bhtmlFor=/g, "for=")
     .replace(/=\{["']([^"']+)["']\}/g, '="$1"')
-    .replace(/=\{(\d+(?:\.\d+)?)\}/g, '="$1"');
+    .replace(/=\{(\d+(?:\.\d+)?)\}/g, '="$1"')
+    // Boolean JSX attribute expressions. `{true}` collapses to a bare
+    // HTML boolean attribute (`allowFullScreen={true}` → `allowFullScreen`).
+    // `{false}` becomes `=""` so it stays present but harmless — the
+    // browser ignores the value on boolean attributes either way.
+    .replace(/=\{true\}/gi, "")
+    .replace(/=\{false\}/gi, '=""');
 }
 
 /**
