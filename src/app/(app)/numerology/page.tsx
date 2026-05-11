@@ -2525,10 +2525,16 @@ function BirthChartSnapshot({
   // Pluto) return null and the row is rendered as "—" so we never
   // silently surface a wrong sign.
   const dobDate = new Date(`${dob}T12:00:00Z`);
-  const yearDecimal =
-    dobDate.getUTCFullYear()
-    + dobDate.getUTCMonth() / 12
-    + dobDate.getUTCDate() / 365.25;
+  // Decimal year as the fraction of the calendar year already elapsed,
+  // computed against the actual year length so Dec 31 always lands on
+  // ~year+0.997 (never overflows into the next year and never
+  // double-counts month+day like a naïve `m/12 + d/365.25` formula).
+  const yearDecimal = (() => {
+    const y = dobDate.getUTCFullYear();
+    const startOfYear = Date.UTC(y, 0, 1);
+    const startOfNext = Date.UTC(y + 1, 0, 1);
+    return y + (dobDate.getTime() - startOfYear) / (startOfNext - startOfYear);
+  })();
   const jupiter = jupiterSign(yearDecimal);
   const saturn = saturnSign(yearDecimal);
   const uranus = uranusSign(yearDecimal);
@@ -2833,7 +2839,7 @@ function LifePathTraitsCard({ mineLifePath }: { mineLifePath: number | null }) {
         <p className="text-xs text-fg-muted">
           Narrative traits for each life-path number (1-9) and the three
           master numbers (11, 22, 33). The master-number caveats (e.g. the
-          11-day travel taboo) are journaling lenses — observe the pattern
+          11-day travel advice) are journaling lenses — observe the pattern
           for a few months on yourself before weighting them as rules.
         </p>
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">

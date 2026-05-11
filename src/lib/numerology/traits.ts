@@ -376,7 +376,7 @@ export const LIFE_PATH_TRAITS: LifePathTrait[] = [
     money:
       "Earn through trust / relational businesses. Burn through energy first, money second. Need strict nervous-system protocols (sleep, silence, retreats) to function.",
     caveat:
-      "Per GG33 lore: be cautious travelling on an 11-day (the 11th of any month, plus dates that reduce to 11 — 29th, etc.). Statistically anecdotal; treat as a journaling caution, not a hard rule. Major events on 11-days carry heavier emotional charge — schedule accordingly.",
+      "GG33 lore: avoid travelling on an 11-day energy date (the 11th of any month, plus dates that reduce to 11 — the 29th, the 2nd of November, dates summing to 29, etc.). Treat it as advice and journal it for yourself before weighting it as a rule. Major events on 11-days carry a heavier emotional charge — schedule accordingly.",
     notable: "Michelle Obama, Mahatma Gandhi (life-path 9 / many master days), Wolfgang Amadeus Mozart."
   },
   {
