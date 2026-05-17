@@ -44,7 +44,17 @@ import {
   CHINESE_SIGN_STONES,
   type GemstoneRecommendation
 } from "@/lib/numerology/gemstones";
-import type { NumerologyOtherRow, NumerologyProfileRow } from "@/lib/supabase/types";
+import type {
+  NumerologyOtherRow,
+  NumerologyProfileRow,
+  ResolutionItem
+} from "@/lib/supabase/types";
+import { BlockEditor } from "@/components/notebook/block-editor";
+import {
+  hydrateBlocks,
+  isResolutionItemArray,
+  plainTextFromBlocks
+} from "@/lib/notebook/blocks";
 import { Pencil, Plus, Sparkles, Trash2, X } from "lucide-react";
 import {
   applyFilters,
@@ -1836,10 +1846,17 @@ function ReflectionPromptsCard({
   profileId: string;
   fullName: string;
 }) {
+  // Legacy plain-text key (kept for forward-compat with anyone who has
+  // an existing entry from before slash-commands were introduced) and
+  // the new JSON-encoded block list key. We always write both on save
+  // so a read on either side of an upgrade picks up the latest state.
   const storageKey = `numerology.reflections.${profileId}`;
+  const blocksStorageKey = `numerology.reflections.blocks.${profileId}`;
   const cardRef = useRef<HTMLDivElement>(null);
-  const [text, setText] = useState("");
-  const [savedText, setSavedText] = useState("");
+  const [blocks, setBlocks] = useState<ResolutionItem[]>(() => hydrateBlocks(undefined, ""));
+  const [savedBlocks, setSavedBlocks] = useState<ResolutionItem[]>(
+    () => hydrateBlocks(undefined, "")
+  );
   const [editing, setEditing] = useState(true);
   const [saveState, setSaveState] = useState<"idle" | "saved">("idle");
 
@@ -1847,32 +1864,40 @@ function ReflectionPromptsCard({
   // profile changes (Calculate For Others swaps profiles in place).
   useEffect(() => {
     try {
-      const raw = window.localStorage.getItem(storageKey);
-      if (raw !== null) {
-        setText(raw);
-        setSavedText(raw);
-        // If the user already has saved content, default to read mode
-        // so the card renders the saved entry instead of an empty
-        // edit field — they can click Edit to amend.
-        setEditing(raw.length === 0);
-      } else {
-        setText("");
-        setSavedText("");
-        setEditing(true);
+      const rawBlocks = window.localStorage.getItem(blocksStorageKey);
+      const rawText = window.localStorage.getItem(storageKey);
+      let initial: ResolutionItem[] | null = null;
+      if (rawBlocks) {
+        try {
+          const parsed = JSON.parse(rawBlocks) as unknown;
+          if (isResolutionItemArray(parsed)) initial = parsed;
+        } catch {
+          // fall through to plain-text hydration
+        }
       }
+      const next = initial ?? hydrateBlocks(undefined, rawText ?? "");
+      setBlocks(next);
+      setSavedBlocks(next);
+      // If the user already has saved content, default to read mode so
+      // the card renders the saved entry instead of an empty edit
+      // field — they can click Edit to amend.
+      const hasContent = plainTextFromBlocks(next).trim().length > 0;
+      setEditing(!hasContent);
     } catch {
       // localStorage may be unavailable in some embedded contexts —
       // fall back to in-memory only.
     }
-  }, [storageKey]);
+  }, [storageKey, blocksStorageKey]);
 
   function save() {
+    const flat = plainTextFromBlocks(blocks);
     try {
-      window.localStorage.setItem(storageKey, text);
+      window.localStorage.setItem(blocksStorageKey, JSON.stringify(blocks));
+      window.localStorage.setItem(storageKey, flat);
     } catch {
-      // ignore storage failures — text remains in component state
+      // ignore storage failures — blocks remain in component state
     }
-    setSavedText(text);
+    setSavedBlocks(blocks);
     setEditing(false);
     setSaveState("saved");
     window.setTimeout(() => setSaveState("idle"), 1400);
@@ -1881,13 +1906,20 @@ function ReflectionPromptsCard({
   function downloadTxt() {
     const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
     const safeName = fullName.replace(/[^A-Za-z0-9_-]+/g, "_");
-    const blob = new Blob([editing ? text : savedText], { type: "text/plain;charset=utf-8" });
+    const flat = plainTextFromBlocks(editing ? blocks : savedBlocks);
+    const blob = new Blob([flat], { type: "text/plain;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = `numerology-reflections-${safeName}-${stamp}.txt`;
     a.click();
     URL.revokeObjectURL(a.href);
   }
+
+  const blocksDirty = useMemo(
+    () => JSON.stringify(blocks) !== JSON.stringify(savedBlocks),
+    [blocks, savedBlocks]
+  );
+  const savedText = useMemo(() => plainTextFromBlocks(savedBlocks), [savedBlocks]);
 
   return (
     <Card>
@@ -1897,15 +1929,19 @@ function ReflectionPromptsCard({
         </CardHeader>
         <CardBody className="space-y-3">
           {editing ? (
-            <Textarea
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder="Write what came up reading the above…"
-              rows={8}
-            />
+            <div className="min-h-[200px] rounded-xl border border-line bg-bg/40 px-9 py-2">
+              <BlockEditor
+                blocks={blocks}
+                onChange={setBlocks}
+                defaultKind="text"
+                placeholder="Write what came up reading the above…  Type '/' for commands."
+              />
+            </div>
           ) : (
             <div className="min-h-[160px] whitespace-pre-wrap rounded-xl border border-line bg-bg/40 p-3 text-sm text-fg">
-              {savedText || (
+              {savedText.trim() ? (
+                savedText
+              ) : (
                 <span className="text-fg-subtle">
                   Nothing saved yet — click Edit to start a reflection.
                 </span>
@@ -1916,14 +1952,14 @@ function ReflectionPromptsCard({
           <div className="flex flex-wrap items-center gap-2">
             {editing ? (
               <>
-                <Button onClick={save} disabled={text === savedText}>
+                <Button onClick={save} disabled={!blocksDirty}>
                   {saveState === "saved" ? "Saved" : "Save"}
                 </Button>
-                {savedText.length > 0 && (
+                {savedText.trim().length > 0 && (
                   <Button
                     variant="ghost"
                     onClick={() => {
-                      setText(savedText);
+                      setBlocks(savedBlocks);
                       setEditing(false);
                     }}
                   >
@@ -1947,8 +1983,10 @@ function ReflectionPromptsCard({
           </div>
 
           <div className="text-[11px] text-fg-subtle">
-            Saved locally to this device per profile. Use Download .txt to keep
-            a copy or paste it into the Notebook → Scratchpad.
+            Saved locally to this device per profile. Type <code>/</code> on any
+            line for slash commands (headings, callouts, toggles, lists, …). Use
+            Download .txt to keep a flat copy or paste it into the Notebook →
+            Scratchpad.
           </div>
         </CardBody>
       </div>

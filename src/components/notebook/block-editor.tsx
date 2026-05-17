@@ -1,7 +1,10 @@
 "use client";
 
 // =====================================================================
-// Notion-style slash-command block editor for Resolutions sub-sections.
+// Notion-style slash-command block editor — used originally by
+// Resolutions sub-sections, now reused everywhere the user writes
+// free-form prose: Notebook Scratchpad, Notes edit modal, Playbooks
+// general rules / notes, Numerology Reflection prompts.
 //
 // Each block is a `ResolutionItem` extended with an optional `kind`
 // field (Heading 1/2/3, To-do, Bigbox, Bullet, Numbered, Toggle,
@@ -13,6 +16,13 @@
 //
 // All state is held in the parent (controlled component) — the editor
 // only emits a new `ResolutionItem[]` on every change.
+//
+// The default block kind for newly-inserted / legacy-untyped rows is
+// configurable via the `defaultKind` prop. Resolutions keeps the
+// historical "todo" default (every fresh sub-section bullet is a
+// checkbox). Free-form writing surfaces pass "text" so a brand-new
+// scratchpad / note / reflection starts as a paragraph instead of a
+// surprise checkbox.
 // =====================================================================
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -63,8 +73,8 @@ function newId(): string {
   return `nb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function blockKindOf(b: ResolutionItem): ResolutionBlockKind {
-  return b.kind ?? "todo";
+function blockKindOf(b: ResolutionItem, fallback: ResolutionBlockKind = "todo"): ResolutionBlockKind {
+  return b.kind ?? fallback;
 }
 
 function isCheckable(kind: ResolutionBlockKind): boolean {
@@ -84,9 +94,15 @@ export type BlockEditorProps = {
   placeholder?: string;
   /** Optional fixed-width container. */
   className?: string;
+  /** Kind used for legacy untyped blocks and for new blocks created
+   *  by the editor itself (Enter on a block of this kind, the always-
+   *  on-screen empty initial block, the last-block-Backspace replace).
+   *  Defaults to "todo" so Resolutions keeps its historical checkbox
+   *  default; free-form writing surfaces should pass "text". */
+  defaultKind?: ResolutionBlockKind;
 };
 
-export function BlockEditor({ blocks, onChange, placeholder, className }: BlockEditorProps) {
+export function BlockEditor({ blocks, onChange, placeholder, className, defaultKind = "todo" }: BlockEditorProps) {
   // Slash menu state — anchored to the block currently triggering it.
   const [menu, setMenu] = useState<{ blockId: string; query: string; activeIdx: number } | null>(null);
   const [pendingFocus, setPendingFocus] = useState<string | null>(null);
@@ -96,9 +112,9 @@ export function BlockEditor({ blocks, onChange, placeholder, className }: BlockE
   // to a zero-block "looks broken" state.
   useEffect(() => {
     if (blocks.length === 0) {
-      onChange([{ id: newId(), text: "", kind: "todo" }]);
+      onChange([{ id: newId(), text: "", kind: defaultKind }]);
     }
-  }, [blocks.length, onChange]);
+  }, [blocks.length, onChange, defaultKind]);
 
   useEffect(() => {
     if (pendingFocus && inputRefs.current[pendingFocus]) {
@@ -126,12 +142,13 @@ export function BlockEditor({ blocks, onChange, placeholder, className }: BlockE
     const idx = blocks.findIndex((b) => b.id === id);
     if (idx < 0) return;
     if (blocks.length <= 1) {
-      // Replace the only block with a fresh empty todo and refocus it,
-      // otherwise the cursor disappears entirely after Backspace on the
-      // last remaining block (the old DOM node is unmounted and the new
-      // one has a brand new id with no focus tracker).
+      // Replace the only block with a fresh empty default-kind block
+      // and refocus it — otherwise the cursor disappears entirely
+      // after Backspace on the last remaining block (the old DOM node
+      // is unmounted and the new one has a brand new id with no focus
+      // tracker).
       const freshId = newId();
-      onChange([{ id: freshId, text: "", kind: "todo" }]);
+      onChange([{ id: freshId, text: "", kind: defaultKind }]);
       setPendingFocus(freshId);
       return;
     }
@@ -173,7 +190,7 @@ export function BlockEditor({ blocks, onChange, placeholder, className }: BlockE
   return (
     <div className={cn("space-y-1", className)}>
       {blocks.map((block, idx) => {
-        const kind = blockKindOf(block);
+        const kind = blockKindOf(block, defaultKind);
         // Container kinds get a nested BlockEditor rendered indented
         // below their row. Toggles only show children when open (so
         // the disclosure actually does something). Callouts always
@@ -191,7 +208,7 @@ export function BlockEditor({ blocks, onChange, placeholder, className }: BlockE
               onBodyChange={(next) => patch(block.id, (b) => ({ ...b, text: next.text, html: next.html }))}
               onToggleChecked={() => patch(block.id, (b) => ({ ...b, checked: !b.checked }))}
               onToggleOpen={() => patch(block.id, (b) => ({ ...b, open: !b.open }))}
-              onEnter={() => insertAfter(block.id, blockKindOf(block))}
+              onEnter={() => insertAfter(block.id, blockKindOf(block, defaultKind))}
               onBackspaceEmpty={() => removeBlock(block.id)}
               onSlashOpen={(query) => openMenuOn(block.id, query)}
               onSlashUpdate={(query) => menu?.blockId === block.id && setMenu({ ...menu!, query, activeIdx: 0 })}

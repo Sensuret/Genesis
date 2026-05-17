@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Plus, Trash2, Save } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, Plus, Trash2, Save } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,8 +13,13 @@ import { useTrades } from "@/lib/hooks/use-trades";
 import { useFilters } from "@/lib/filters/store";
 import { applyAllFilters } from "@/lib/analytics";
 import { createClient } from "@/lib/supabase/client";
-import type { PlaybookRow } from "@/lib/supabase/types";
+import type { PlaybookRow, ResolutionItem } from "@/lib/supabase/types";
 import { readRules, reportAdherence, type PlaybookRules, type Session } from "@/lib/playbooks";
+import { BlockEditor } from "@/components/notebook/block-editor";
+import {
+  hydrateBlocks,
+  plainTextFromBlocks
+} from "@/lib/notebook/blocks";
 import { formatPercent } from "@/lib/utils";
 
 const SESSIONS: Session[] = ["New York", "London", "Asia", "Sydney"];
@@ -136,6 +141,10 @@ function PlaybookCard({
   const [name, setName] = useState(pb.name);
   const [description, setDescription] = useState(pb.description ?? "");
   const [rules, setRules] = useState<PlaybookRules>(readRules(pb.rules));
+  const initialRules = useMemo(() => readRules(pb.rules), [pb.rules]);
+  const [notesBlocks, setNotesBlocks] = useState<ResolutionItem[]>(
+    () => hydrateBlocks(initialRules.notesBlocks, initialRules.notes)
+  );
   const [aliasesText, setAliasesText] = useState(pb.symbol_aliases.join(", "));
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -143,13 +152,24 @@ function PlaybookCard({
   useEffect(() => {
     setName(pb.name);
     setDescription(pb.description ?? "");
-    setRules(readRules(pb.rules));
+    const next = readRules(pb.rules);
+    setRules(next);
+    setNotesBlocks(hydrateBlocks(next.notesBlocks, next.notes));
     setAliasesText(pb.symbol_aliases.join(", "));
     setDirty(false);
   }, [pb]);
 
   function patchRules(p: Partial<PlaybookRules>) {
     setRules((r) => ({ ...r, ...p }));
+    setDirty(true);
+  }
+
+  function patchNotesBlocks(next: ResolutionItem[]) {
+    setNotesBlocks(next);
+    // Keep the legacy `notes` string in sync so it survives reload via
+    // existing `readRules` even when an older client / consumer doesn't
+    // know about `notesBlocks` yet.
+    setRules((r) => ({ ...r, notes: plainTextFromBlocks(next), notesBlocks: next }));
     setDirty(true);
   }
 
@@ -198,6 +218,22 @@ function PlaybookCard({
           )}
         </button>
         <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() =>
+              downloadPlaybook({
+                name,
+                description,
+                rules,
+                aliasesText,
+                exportedAt: new Date().toISOString()
+              })
+            }
+            aria-label="Download this playbook as JSON"
+          >
+            <Download className="h-3.5 w-3.5" /> Download
+          </Button>
           <Button variant="secondary" size="sm" onClick={save} disabled={!dirty || saving}>
             <Save className="h-3.5 w-3.5" /> {saving ? "Saving…" : "Save"}
           </Button>
@@ -364,12 +400,21 @@ function PlaybookCard({
 
             <div>
               <Label>General rules / notes</Label>
-              <Textarea
-                rows={2}
-                value={rules.notes ?? ""}
-                onChange={(e) => patchRules({ notes: e.target.value })}
-                placeholder="Any free-form rule reminders…"
-              />
+              <div className="rounded-xl border border-line bg-bg-soft/40 px-9 py-2">
+                <BlockEditor
+                  blocks={notesBlocks}
+                  onChange={patchNotesBlocks}
+                  defaultKind="text"
+                  placeholder="Any free-form rule reminders… Type '/' for commands."
+                />
+              </div>
+              <p className="mt-1 text-[11px] text-fg-subtle">
+                Type <code>/</code> on any line for commands — <code>/text</code>,{" "}
+                <code>/h1</code>/<code>/h2</code>/<code>/h3</code>, <code>/todo</code>,{" "}
+                <code>/bullet</code>, <code>/numbered</code>, <code>/toggle</code>,{" "}
+                <code>/callout</code>, <code>/quote</code>, <code>/divider</code>. Click
+                Save to commit changes.
+              </p>
             </div>
           </div>
 
@@ -429,4 +474,44 @@ function parseHHMM(s: string): { h: number; m: number } | null {
 
 function countIssues<T extends { kind: string }>(arr: T[], k: string): number {
   return arr.filter((x) => x.kind === k).length;
+}
+
+/**
+ * Download a single playbook as a JSON file. Includes name, description,
+ * symbol aliases and the full rules payload (including both legacy
+ * plain-text `notes` and the Notion-style `notesBlocks`), so the
+ * exported file is a complete, re-importable copy of the playbook.
+ *
+ * Filename is `playbook-<safe-name>-<ISO-stamp>.json` so multiple
+ * downloads on the same day don't collide.
+ */
+function downloadPlaybook(input: {
+  name: string;
+  description: string;
+  rules: PlaybookRules;
+  aliasesText: string;
+  exportedAt: string;
+}) {
+  const aliases = input.aliasesText
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const payload = {
+    name: input.name,
+    description: input.description,
+    symbol_aliases: aliases,
+    rules: input.rules,
+    exported_at: input.exportedAt,
+    schema: "genesis-playbook/v1"
+  };
+  const stamp = input.exportedAt.replace(/[:.]/g, "-").slice(0, 19);
+  const safeName = (input.name || "playbook").replace(/[^A-Za-z0-9_-]+/g, "_") || "playbook";
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: "application/json;charset=utf-8"
+  });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `playbook-${safeName}-${stamp}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
