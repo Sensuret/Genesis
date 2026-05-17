@@ -16,8 +16,16 @@ import type {
   NotebookEmbedFormat,
   NotebookNote,
   Resolution,
+  ResolutionItem,
   UserSettingsData
 } from "@/lib/supabase/types";
+import { BlockEditor } from "@/components/notebook/block-editor";
+import {
+  blocksFromPlainText,
+  hydrateBlocks,
+  isResolutionItemArray,
+  plainTextFromBlocks
+} from "@/lib/notebook/blocks";
 
 function newId(): string {
   if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
@@ -357,15 +365,30 @@ function readSettings(data: unknown): UserSettingsData {
   if (typeof data.notebook_scratchpad === "string") {
     out.notebook_scratchpad = data.notebook_scratchpad;
   }
+  if (isResolutionItemArray(data.notebook_scratchpad_blocks)) {
+    out.notebook_scratchpad_blocks = data.notebook_scratchpad_blocks;
+  }
   if (Array.isArray(data.notebook_notes)) {
-    out.notebook_notes = data.notebook_notes.filter(
-      (x): x is NotebookNote =>
-        isJsonObject(x) &&
-        typeof x.id === "string" &&
-        typeof x.name === "string" &&
-        typeof x.body === "string" &&
-        typeof x.created_at === "string"
-    );
+    out.notebook_notes = data.notebook_notes
+      .filter(
+        (x): x is Record<string, unknown> =>
+          isJsonObject(x) &&
+          typeof x.id === "string" &&
+          typeof x.name === "string" &&
+          typeof x.body === "string" &&
+          typeof x.created_at === "string"
+      )
+      .map((x): NotebookNote => {
+        const note: NotebookNote = {
+          id: x.id as string,
+          name: x.name as string,
+          body: x.body as string,
+          created_at: x.created_at as string
+        };
+        if (typeof x.updated_at === "string") note.updated_at = x.updated_at;
+        if (isResolutionItemArray(x.body_blocks)) note.body_blocks = x.body_blocks;
+        return note;
+      });
   }
   if (Array.isArray(data.notebook_resolutions)) {
     out.notebook_resolutions = data.notebook_resolutions.filter(
@@ -413,7 +436,7 @@ export default function NotebookPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [embeds, setEmbeds] = useState<NotebookEmbed[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [scratch, setScratch] = useState("");
+  const [scratchBlocks, setScratchBlocks] = useState<ResolutionItem[]>(() => blocksFromPlainText(""));
   const [notes, setNotes] = useState<NotebookNote[]>([]);
   const [resolutions, setResolutions] = useState<Resolution[]>([]);
   const [savingScratch, setSavingScratch] = useState(false);
@@ -450,7 +473,9 @@ export default function NotebookPage() {
       const parsed = readSettings(data?.data);
       setEmbeds(parsed.notebook_embeds ?? []);
       setActiveId(parsed.notebook_active_id ?? parsed.notebook_embeds?.[0]?.id ?? null);
-      setScratch(parsed.notebook_scratchpad ?? "");
+      setScratchBlocks(
+        hydrateBlocks(parsed.notebook_scratchpad_blocks, parsed.notebook_scratchpad)
+      );
       setNotes(parsed.notebook_notes ?? []);
       setResolutions(parsed.notebook_resolutions ?? []);
       setProfileName(profile?.full_name?.trim() ?? user.email?.split("@")[0] ?? "");
@@ -546,28 +571,48 @@ export default function NotebookPage() {
     await persist({ notebook_active_id: id });
   }
 
+  // Flattened plain-text version of the scratch blocks — used to gate
+  // "Save as note" / save-to-Supabase and to populate the legacy
+  // string field. Memoised so the BlockEditor doesn't trigger a
+  // string rebuild on every keystroke.
+  const scratchText = useMemo(() => plainTextFromBlocks(scratchBlocks), [scratchBlocks]);
+
+  async function persistScratchBlocks(next: ResolutionItem[]) {
+    setScratchBlocks(next);
+    await persist({
+      notebook_scratchpad: plainTextFromBlocks(next),
+      notebook_scratchpad_blocks: next
+    });
+  }
+
   function openSavePrompt() {
-    if (!scratch.trim()) return;
+    if (!scratchText.trim()) return;
     setPendingName(`Note · ${new Date().toLocaleDateString()}`);
     setNamePromptOpen(true);
   }
 
   async function confirmSaveNote() {
     const name = pendingName.trim();
-    if (!name || !scratch.trim()) return;
+    if (!name || !scratchText.trim()) return;
     setSavingScratch(true);
     const note: NotebookNote = {
       id: newId(),
       name,
-      body: scratch,
+      body: scratchText,
+      body_blocks: scratchBlocks,
       created_at: new Date().toISOString()
     };
     const nextNotes = [note, ...notes];
+    const emptyBlocks = blocksFromPlainText("");
     setNotes(nextNotes);
-    setScratch("");
+    setScratchBlocks(emptyBlocks);
     setNamePromptOpen(false);
     setPendingName("");
-    await persist({ notebook_notes: nextNotes, notebook_scratchpad: "" });
+    await persist({
+      notebook_notes: nextNotes,
+      notebook_scratchpad: "",
+      notebook_scratchpad_blocks: emptyBlocks
+    });
     setSavingScratch(false);
   }
 
@@ -981,18 +1026,27 @@ export default function NotebookPage() {
           <Button
             variant="secondary"
             onClick={openSavePrompt}
-            disabled={!scratch.trim() || savingScratch}
+            disabled={!scratchText.trim() || savingScratch}
           >
             <Save className="h-4 w-4" /> {savingScratch ? "Saving…" : "Save as note"}
           </Button>
         </CardHeader>
         <CardBody>
-          <Textarea
-            rows={10}
-            value={scratch}
-            onChange={(e) => setScratch(e.target.value)}
-            placeholder="Quick notes, plays for the day, post-session thoughts…  Click 'Save as note' and give it a name to file it in your Notes below."
-          />
+          <div className="min-h-[220px] rounded-xl border border-line bg-bg-soft/40 px-9 py-2">
+            <BlockEditor
+              blocks={scratchBlocks}
+              onChange={persistScratchBlocks}
+              defaultKind="text"
+              placeholder="Quick notes, plays for the day, post-session thoughts…  Type '/' for commands."
+            />
+          </div>
+          <p className="mt-1 text-[11px] text-fg-subtle">
+            Type <code>/</code> on any line for commands — <code>/text</code>,{" "}
+            <code>/h1</code>/<code>/h2</code>/<code>/h3</code>, <code>/todo</code>,{" "}
+            <code>/bullet</code>, <code>/numbered</code>, <code>/toggle</code>,{" "}
+            <code>/callout</code>, <code>/quote</code>, <code>/divider</code>. Enter creates
+            the next block of the same kind. Saves automatically.
+          </p>
         </CardBody>
       </Card>
 
@@ -1120,7 +1174,9 @@ function NoteModal({
   const captureRef = useRef<HTMLDivElement>(null);
   const [editing, setEditing] = useState(false);
   const [draftName, setDraftName] = useState(note.name);
-  const [draftBody, setDraftBody] = useState(note.body);
+  const [draftBlocks, setDraftBlocks] = useState<ResolutionItem[]>(
+    () => hydrateBlocks(note.body_blocks, note.body)
+  );
   const [saving, setSaving] = useState(false);
   const safeName = note.name.replace(/[^a-z0-9-_ ]/gi, "").trim() || "note";
 
@@ -1132,13 +1188,13 @@ function NoteModal({
 
   function startEditing() {
     setDraftName(note.name);
-    setDraftBody(note.body);
+    setDraftBlocks(hydrateBlocks(note.body_blocks, note.body));
     setEditing(true);
   }
 
   function cancelEditing() {
     setDraftName(note.name);
-    setDraftBody(note.body);
+    setDraftBlocks(hydrateBlocks(note.body_blocks, note.body));
     setEditing(false);
   }
 
@@ -1150,7 +1206,8 @@ function NoteModal({
       await onSave({
         ...note,
         name,
-        body: draftBody,
+        body: plainTextFromBlocks(draftBlocks),
+        body_blocks: draftBlocks,
         updated_at: new Date().toISOString()
       });
       setEditing(false);
@@ -1240,14 +1297,19 @@ function NoteModal({
         </div>
         {editing ? (
           <div className="flex flex-1 flex-col gap-2 overflow-hidden">
-            <Textarea
-              value={draftBody}
-              onChange={(e) => setDraftBody(e.target.value)}
-              placeholder="Type your note here…"
-              className="min-h-[300px] flex-1 resize-y whitespace-pre-wrap rounded-xl border border-line bg-bg-soft/40 p-4 text-sm text-fg"
-            />
+            <div className="min-h-[300px] flex-1 overflow-y-auto rounded-xl border border-line bg-bg-soft/40 px-9 py-3 text-sm text-fg">
+              <BlockEditor
+                blocks={draftBlocks}
+                onChange={setDraftBlocks}
+                defaultKind="text"
+                placeholder="Type your note here… use '/' for commands."
+              />
+            </div>
             <div className="text-[11px] text-fg-subtle">
-              Tip: line breaks are preserved exactly as typed.
+              Type <code>/</code> on any line for commands — <code>/text</code>,{" "}
+              <code>/h1</code>/<code>/h2</code>/<code>/h3</code>, <code>/todo</code>,{" "}
+              <code>/bullet</code>, <code>/numbered</code>, <code>/toggle</code>,{" "}
+              <code>/callout</code>, <code>/quote</code>, <code>/divider</code>.
             </div>
           </div>
         ) : (
