@@ -159,11 +159,47 @@ export function BlockEditor({ blocks, onChange, placeholder, className, defaultK
   }
 
   function changeKind(id: string, kind: ResolutionBlockKind) {
-    // The slash menu only opens when the entire input is a slash command
-    // (e.g. "/h1", "/callout"), so the block's text at this point is the
-    // command itself. Always clear it (text + html) after selection —
-    // otherwise the newly-typed Heading-1 block would render with the
-    // literal "/h1" as its visible content.
+    // Two trigger shapes the slash menu listens for:
+    //   1. The entire block text is the slash command (e.g. "/h1"). In
+    //      this case we transform the current block in place and clear
+    //      its content (the slash command itself was the only text).
+    //   2. The slash command is at the END of an existing block, after
+    //      some prefix text (e.g. "Hello /h1"). In this case the user
+    //      kept typing prose and then summoned the menu — keeping the
+    //      prefix in the current block and inserting a fresh block of
+    //      the chosen kind below is the Notion-like behaviour they
+    //      expect. Without this, picking a heading would silently
+    //      destroy the "Hello " prefix they were writing.
+    const current = blocks.find((b) => b.id === id);
+    const text = current?.text ?? "";
+    const wholeMatch = /^\/[a-z0-9 ]*$/i.test(text);
+    const prefixMatch = wholeMatch ? null : /^(.*?)\s\/[a-z0-9 ]*$/i.exec(text);
+    if (current && prefixMatch) {
+      const prefix = prefixMatch[1];
+      const idx = blocks.findIndex((b) => b.id === id);
+      if (idx >= 0) {
+        // Note: HTML formatting (bold / italic / underline) on the
+        // prefix text is collapsed to plain text here. Preserving rich
+        // marks while surgically stripping just the trailing slash
+        // command would require parsing the sanitised HTML — not worth
+        // the complexity for v1. The user can re-apply marks on the
+        // prefix if needed.
+        const trimmed: ResolutionItem = { ...current, text: prefix, html: prefix };
+        const fresh: ResolutionItem = { id: newId(), text: "", kind };
+        if (kind === "toggle") fresh.open = true;
+        const next = [
+          ...blocks.slice(0, idx),
+          trimmed,
+          fresh,
+          ...blocks.slice(idx + 1)
+        ];
+        onChange(next);
+        setMenu(null);
+        if (kind !== "divider") setPendingFocus(fresh.id);
+        return;
+      }
+    }
+    // Whole-block-is-slash-command path: clear and transform in place.
     patch(id, (b) => {
       const next: ResolutionItem = { ...b, kind, text: "", html: "" };
       // Toggles default to OPEN on creation so the empty children area
@@ -190,6 +226,7 @@ export function BlockEditor({ blocks, onChange, placeholder, className, defaultK
   return (
     <div className={cn("space-y-1", className)}>
       {blocks.map((block, idx) => {
+        // Resolve the block's effective kind: explicit > editor default.
         const kind = blockKindOf(block, defaultKind);
         // Container kinds get a nested BlockEditor rendered indented
         // below their row. Toggles only show children when open (so
@@ -202,6 +239,7 @@ export function BlockEditor({ blocks, onChange, placeholder, className, defaultK
           <div key={block.id}>
             <BlockRow
               block={block}
+              effectiveKind={kind}
               isFirst={idx === 0}
               placeholder={idx === 0 ? (placeholder ?? "") : ""}
               inputRef={(el) => { inputRefs.current[block.id] = el; }}
@@ -229,7 +267,7 @@ export function BlockEditor({ blocks, onChange, placeholder, className, defaultK
                 const choice = filtered[menu.activeIdx];
                 if (choice) changeKind(block.id, choice.kind);
               }}
-              onAddBelow={() => insertAfter(block.id, "todo")}
+              onAddBelow={() => insertAfter(block.id, defaultKind)}
               onDelete={() => removeBlock(block.id)}
             />
 
@@ -240,6 +278,10 @@ export function BlockEditor({ blocks, onChange, placeholder, className, defaultK
                   onChange={(nextChildren) =>
                     patch(block.id, (b) => ({ ...b, children: nextChildren }))
                   }
+                  // Children inherit the parent surface's default kind so a
+                  // toggle/callout nested inside a free-form surface stays
+                  // free-form instead of silently becoming checkboxes.
+                  defaultKind={defaultKind}
                   placeholder={
                     kind === "toggle"
                       ? "Empty toggle — type '/' for commands"
@@ -261,6 +303,12 @@ export function BlockEditor({ blocks, onChange, placeholder, className, defaultK
 
 type BlockRowProps = {
   block: ResolutionItem;
+  /** The kind to render this row as, already resolved against the editor's
+   *  defaultKind by the parent. Used so legacy untyped blocks hydrated
+   *  from plain text on a free-form surface (scratchpad / notes /
+   *  reflection prompts / playbook notes) don't fall back to "todo"
+   *  and render with a stray checkbox prefix. */
+  effectiveKind: ResolutionBlockKind;
   isFirst: boolean;
   placeholder: string;
   inputRef: (el: RichTextInputHandle | null) => void;
@@ -283,7 +331,7 @@ type BlockRowProps = {
 
 function BlockRow(props: BlockRowProps) {
   const {
-    block, isFirst, placeholder, inputRef,
+    block, effectiveKind, isFirst, placeholder, inputRef,
     onBodyChange, onToggleChecked, onToggleOpen,
     onEnter, onBackspaceEmpty,
     onSlashOpen, onSlashUpdate, onSlashClose,
@@ -291,7 +339,7 @@ function BlockRow(props: BlockRowProps) {
     onAddBelow, onDelete
   } = props;
 
-  const kind = blockKindOf(block);
+  const kind = effectiveKind;
   const isDivider = kind === "divider";
 
   function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
@@ -316,12 +364,22 @@ function BlockRow(props: BlockRowProps) {
 
   function handleBodyChange(next: { html: string; text: string }) {
     onBodyChange(next);
-    // "/foo" at the start of an otherwise-empty block opens the slash
-    // menu. Match against plain text so a stray bold / italic span
-    // doesn't break detection.
+    // Detect a slash command being typed. Match against plain text so a
+    // stray bold / italic span doesn't break detection. Two patterns:
+    //   1. The ENTIRE block is `/foo` — used for fresh empty blocks
+    //      (Resolutions, freshly-Enter'd lines on the scratchpad).
+    //   2. A `/foo` appears AT THE END of the text, preceded by
+    //      whitespace or a hard newline. This is the Notion behaviour:
+    //      typing `Hello /h1` on an existing line still opens the menu.
+    // The query in either case is everything between the leading slash
+    // and the cursor (end of text). Restricting allowed chars to
+    // `[a-z0-9 ]` keeps URLs like `https://example.com` and fractions
+    // like `1/2` from accidentally triggering the menu.
     const value = next.text;
-    if (/^\/[a-z0-9 ]*$/i.test(value)) {
-      const query = value.slice(1);
+    const m =
+      /^\/([a-z0-9 ]*)$/i.exec(value) ?? /\s\/([a-z0-9 ]*)$/i.exec(value);
+    if (m) {
+      const query = m[1] ?? "";
       if (isMenuOpen) onSlashUpdate(query);
       else onSlashOpen(query);
     } else if (isMenuOpen) {
