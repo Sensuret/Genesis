@@ -4,8 +4,9 @@
 // reporting against TradeRow[].
 // =====================================================================
 
-import type { TradeRow, PlaybookRow, Json } from "@/lib/supabase/types";
+import type { TradeRow, PlaybookRow, Json, ResolutionItem } from "@/lib/supabase/types";
 import { detectSession } from "@/lib/parser";
+import { isResolutionItemArray } from "@/lib/notebook/blocks";
 
 export type Session = "New York" | "London" | "Asia" | "Sydney";
 
@@ -22,8 +23,16 @@ export type PlaybookRules = {
   /** Target Risk-to-Reward ratio (reward / risk). Trades below this are
    *  flagged as "below RR target". */
   rrTarget?: number;
-  /** General notes / definition of what makes a valid setup. */
+  /** General notes / definition of what makes a valid setup. Plain text
+   *  fallback — kept in sync with `notesBlocks` so legacy renderers,
+   *  exports and search keep working. */
   notes?: string;
+  /** Notion-style block list version of `notes`. When present and
+   *  non-empty, the in-app editor renders this instead of the plain
+   *  string, so block kinds (headings, callouts, toggles, …) round-trip
+   *  across edits. Legacy playbooks without this field continue to
+   *  render as their plain `notes`. */
+  notesBlocks?: ResolutionItem[];
 };
 
 export const DEFAULT_RULES: PlaybookRules = {};
@@ -59,6 +68,7 @@ export function readRules(raw: Json | null | undefined): PlaybookRules {
   if (typeof r.maxTradesPerSession === "number") out.maxTradesPerSession = r.maxTradesPerSession;
   if (typeof r.rrTarget === "number") out.rrTarget = r.rrTarget;
   if (typeof r.notes === "string") out.notes = r.notes;
+  if (isResolutionItemArray(r.notesBlocks)) out.notesBlocks = r.notesBlocks;
   return out;
 }
 

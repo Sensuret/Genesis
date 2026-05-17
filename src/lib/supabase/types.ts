@@ -188,7 +188,15 @@ export type UserSettingsRow = {
 export type NotebookNote = {
   id: string;
   name: string;
+  /** Plain-text body — source of truth for legacy renderers, search,
+   *  .txt download and screenshot fallbacks. Always kept in sync with
+   *  `body_blocks` when the block editor saves. */
   body: string;
+  /** Notion-style block list. When present and non-empty, the in-app
+   *  editor renders this instead of the plain `body`, so block kinds
+   *  (headings, callouts, toggles, …) round-trip across edits. Legacy
+   *  notes without this field continue to render as their plain `body`. */
+  body_blocks?: ResolutionItem[];
   /** ISO timestamp of when the note was first saved. */
   created_at: string;
   /** ISO timestamp of the most recent edit. Optional for legacy rows. */
@@ -333,7 +341,13 @@ export type Resolution = {
 export type UserSettingsData = {
   notebook_embeds?: NotebookEmbed[];
   notebook_active_id?: string | null;
+  /** Plain-text Scratchpad body — source of truth for legacy renderers
+   *  and "Save as note" exports. Always kept in sync with
+   *  `notebook_scratchpad_blocks` when the block editor saves. */
   notebook_scratchpad?: string;
+  /** Notion-style block list for the Scratchpad. When present and
+   *  non-empty, the editor renders this instead of the plain string. */
+  notebook_scratchpad_blocks?: ResolutionItem[];
   notebook_notes?: NotebookNote[];
   notebook_resolutions?: Resolution[];
 };
