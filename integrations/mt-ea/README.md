@@ -69,6 +69,13 @@ Open MetaTrader (4 or 5):
 If MetaTrader complains, paste the URL with NO trailing slash and click
 OK. The EA needs this entry — without it `WebRequest` returns `-1`.
 
+> **Also check the toolbar:** the **Algo Trading** button at the top of
+> the terminal must be **green** (not red). This is separate from the
+> Options checkbox above — some MT5 updates silently flip this OFF
+> after a restart, and the EA cannot run `WebRequest` while it's off.
+> A red Algo Trading button is the single most common cause of "my EA
+> stopped syncing after I rebooted my PC."
+
 ### 3. Drop the EA on a chart
 
 - For MT4: copy [`mq4/GenesisSync.mq4`](./mq4/GenesisSync.mq4) into your
@@ -178,12 +185,64 @@ captured by the EA, and land in Genesis.
 
 ---
 
+## Reconnection (what happens when MT4 / MT5 is closed and reopened)
+
+The EA is **stateless on the wire and durable on disk** — you can close
+MetaTrader (or shut down your entire PC) for hours or days, then reopen
+it and trades resume syncing automatically. The Genesis app keeps
+everything that was already streamed; nothing is lost.
+
+What happens step-by-step when MT reopens:
+
+1. MetaTrader auto-restores the EA on the chart it was saved to.
+2. `OnInit()` fires inside the EA. It reads the persisted last-contact
+   timestamp from `MQL5/Files/Common/Genesis/last_contact_<login>.txt`
+   (MT5) or the equivalent MQL4 path, and logs into the **Experts** tab:
+
+   ```
+   [Genesis] Reconnecting — last contact 47 minute(s) ago. Endpoint=…
+   ```
+
+3. A heartbeat is sent first so the Genesis app's setup wizard flips to
+   **Connected** within seconds (not the next 30s poll).
+4. The EA then does a **forced full-history backfill**, ignoring the
+   `HistoryDays` cap. Any trade that closed while you were offline gets
+   posted (the seen-cache and the `(user_id, account_number, ticket)`
+   upsert on the Supabase side make duplicates a no-op).
+5. Open positions are re-posted.
+6. The Experts log prints:
+
+   ```
+   [Genesis] Reconnected — backfilled 12 closed trade(s), 3 open position(s).
+   ```
+
+7. Normal poll / OnTrade / OnTick loop resumes.
+
+On the **first tick after reattach** the EA also sends a one-off
+heartbeat so the Genesis status chip flips to Connected the moment a
+price update arrives, instead of waiting up to `PollSeconds` (default
+30s) for the next `OnTimer` tick.
+
+### Transient network failures
+
+If a `WebRequest` returns `-1` (timeout) or an HTTP 5xx (Supabase brief
+outage), the EA retries **immediately once** after 500ms before logging
+an error. If the retry also fails, it backs off exponentially —
+30s → 60s → 120s → 240s → 300s (capped) — until the network recovers,
+at which point the timer resumes posting normally. This prevents a
+flaky Wi-Fi blip from dropping a single trade and prevents a sustained
+outage from busy-looping on every tick.
+
+---
+
 ## Troubleshooting
 
 | Symptom | Cause / Fix |
 |--------|-------------|
 | EA logs `WebRequest failed err=4060` | Supabase URL not whitelisted in `Tools → Options → Expert Advisors`. Add it (no trailing slash). |
+| EA logs `WebRequest failed err=…` but URL is whitelisted | The **Algo Trading** button on the toolbar is red. Click it once so it turns green. Some MT5 builds reset this on PC reboot. |
 | EA logs `HTTP 401 Invalid or revoked API key` | The `gs_…` key was revoked, expired or mistyped. Generate a fresh one in Genesis Settings. |
 | Trades show in MT history but not in Genesis | Open the MT **Experts** tab — the EA prints its activity there. Check for `HTTP` errors. The most common cause is whitelist not applied (re-open MT after whitelisting). |
 | Account doesn't appear in Genesis Accounts picker | The Edge Function only auto-creates the `trade_files` row on the **first** trade the EA sends. Place / close a trade and refresh — the picker updates instantly. |
+| Genesis wizard didn't flip to Connected after I reopened MT | Watch the **Experts** tab for `[Genesis] Reconnecting — last contact …` and `[Genesis] Reconnected — backfilled …`. If neither appears, the EA isn't loaded — check the chart for the EA icon (top-right) and the smiley face (top-right of chart). |
 | Need multiple accounts | Generate **one** API key per Genesis user. Run the EA on multiple charts (each on a different MT account) — the same key works because the EA reports `AccountNumber()` with each event and Genesis groups by it. |
