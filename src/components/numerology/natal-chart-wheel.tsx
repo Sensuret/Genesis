@@ -1,37 +1,18 @@
 "use client";
 
-/**
- * Natal Chart Wheel — SVG component rendering a 12-segment zodiac ring
- * with slow-planet glyphs positioned by ecliptic longitude.
- *
- * Takes a date-of-birth string and computes planet positions from the
- * numerology engine's ingress tables (Jupiter through Pluto) plus a
- * Sun-sign longitude derived from the Western zodiac.
- */
-
 import { useMemo } from "react";
 import { westernZodiac } from "@/lib/numerology";
 
 // ── Zodiac segments ──────────────────────────────────────────────────
 
-const SIGNS = [
-  { name: "Aries",       symbol: "\u2648", colour: "#ef4444" },
-  { name: "Taurus",      symbol: "\u2649", colour: "#a3e635" },
-  { name: "Gemini",      symbol: "\u264a", colour: "#facc15" },
-  { name: "Cancer",      symbol: "\u264b", colour: "#818cf8" },
-  { name: "Leo",         symbol: "\u264c", colour: "#fb923c" },
-  { name: "Virgo",       symbol: "\u264d", colour: "#4ade80" },
-  { name: "Libra",       symbol: "\u264e", colour: "#f472b6" },
-  { name: "Scorpio",     symbol: "\u264f", colour: "#c084fc" },
-  { name: "Sagittarius", symbol: "\u2650", colour: "#f87171" },
-  { name: "Capricorn",   symbol: "\u2651", colour: "#94a3b8" },
-  { name: "Aquarius",    symbol: "\u2652", colour: "#38bdf8" },
-  { name: "Pisces",      symbol: "\u2653", colour: "#a78bfa" }
+const SIGN_NAMES = [
+  "Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo",
+  "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"
 ] as const;
 
 const SIGN_TO_INDEX: Record<string, number> = {};
-for (let i = 0; i < SIGNS.length; i++) {
-  SIGN_TO_INDEX[SIGNS[i].name] = i;
+for (let i = 0; i < SIGN_NAMES.length; i++) {
+  SIGN_TO_INDEX[SIGN_NAMES[i]] = i;
 }
 
 // ── Planet glyphs + rough longitude from sign ────────────────────────
@@ -54,10 +35,6 @@ function signToLongitude(sign: string | null, offset = 15): number {
   return idx * 30 + offset;
 }
 
-// Ingress-table look-ups (duplicated lightly from numerology page to
-// keep this component self-contained — they're pure functions over a
-// decimal-year number).
-
 function lookupSign(
   ingresses: Array<[number, string]>,
   year: number
@@ -71,9 +48,9 @@ function lookupSign(
 }
 
 // Abbreviated ingress tables — same data as src/lib/numerology/index.ts
-// but kept minimal (every ~12 yr for Jupiter, ~29 yr for Saturn, etc.).
-// The full tables live in the numerology engine; here we only need
-// enough granularity to place the glyph in the correct 30-degree segment.
+// but kept minimal. The full tables live in the numerology engine; here
+// we only need enough granularity to place the glyph in the correct
+// 30-degree segment.
 
 const JUPITER_INGRESSES: Array<[number, string]> = [
   [1900.05,"Sagittarius"],[1901,"Capricorn"],[1902.05,"Aquarius"],[1903.15,"Pisces"],
@@ -154,8 +131,6 @@ function computePlacements(dob: string): PlanetPlacement[] {
   const yearDecimal = y + (d.getTime() - startOfYear) / (startOfNext - startOfYear);
 
   const sunSign: string | null = westernZodiac(dob) ?? null;
-
-  // Sun longitude: place it proportionally within its sign based on DOB
   const sunLong = signToLongitude(sunSign, 15);
 
   const placements: PlanetPlacement[] = [];
@@ -189,13 +164,6 @@ function polarToXY(cx: number, cy: number, r: number, angleDeg: number) {
   return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
 }
 
-function arcPath(cx: number, cy: number, r: number, startDeg: number, endDeg: number): string {
-  const s = polarToXY(cx, cy, r, startDeg);
-  const e = polarToXY(cx, cy, r, endDeg);
-  const largeArc = endDeg - startDeg > 180 ? 1 : 0;
-  return `M ${s.x} ${s.y} A ${r} ${r} 0 ${largeArc} 1 ${e.x} ${e.y}`;
-}
-
 // ── Component ────────────────────────────────────────────────────────
 
 export function NatalChartWheel({
@@ -211,139 +179,99 @@ export function NatalChartWheel({
 
   if (!placements.length) return null;
 
-  const size = 400;
+  const size = 500;
   const cx = size / 2;
   const cy = size / 2;
-  const outerR = 185;
-  const innerR = 140;
-  const planetR = 105;
-  const labelR = 163;
+  const outerR = 235;
+  const bandInnerR = 190;
+  const glyphR = 172;
+  const innerR = 152;
+  const labelR = 213;
 
   return (
     <div className={className}>
       <svg
         viewBox={`0 0 ${size} ${size}`}
-        className="mx-auto w-full max-w-[400px]"
+        className="mx-auto w-full max-w-[500px]"
         role="img"
         aria-label={`Natal chart wheel for ${fullName}`}
       >
-        {/* Background */}
-        <circle cx={cx} cy={cy} r={outerR + 8} fill="#0a0a0f" />
+        {/* Outer black band */}
+        <circle cx={cx} cy={cy} r={outerR} fill="#1a1a1a" />
+        <circle cx={cx} cy={cy} r={outerR} fill="none" stroke="#555" strokeWidth={2} />
 
-        {/* Zodiac segments */}
-        {SIGNS.map((sign, i) => {
-          const startAngle = i * 30;
-          const endAngle = startAngle + 30;
-          const mid = startAngle + 15;
-          const labelPos = polarToXY(cx, cy, labelR, mid);
+        {/* White ring between outer band and inner circle */}
+        <circle cx={cx} cy={cy} r={bandInnerR} fill="#d4d4d4" />
 
+        {/* Inner black circle */}
+        <circle cx={cx} cy={cy} r={innerR} fill="#111" />
+
+        {/* Ring borders */}
+        <circle cx={cx} cy={cy} r={bandInnerR} fill="none" stroke="#888" strokeWidth={0.5} />
+        <circle cx={cx} cy={cy} r={innerR} fill="none" stroke="#666" strokeWidth={0.5} />
+
+        {/* Segment divider lines from inner circle to outer edge */}
+        {SIGN_NAMES.map((_, i) => {
+          const angle = (345 - i * 30 + 360) % 360;
+          const iP = polarToXY(cx, cy, innerR, angle);
+          const oP = polarToXY(cx, cy, outerR, angle);
           return (
-            <g key={sign.name}>
-              {/* Segment arc fill */}
-              <path
-                d={`${arcPath(cx, cy, outerR, startAngle, endAngle)} L ${polarToXY(cx, cy, innerR, endAngle).x} ${polarToXY(cx, cy, innerR, endAngle).y} ${arcPath(cx, cy, innerR, endAngle, startAngle).replace("M", "L")} Z`}
-                fill={sign.colour}
-                fillOpacity={0.12}
-                stroke={sign.colour}
-                strokeOpacity={0.3}
-                strokeWidth={0.5}
-              />
-              {/* Segment boundary line */}
-              {(() => {
-                const inner = polarToXY(cx, cy, innerR, startAngle);
-                const outer = polarToXY(cx, cy, outerR, startAngle);
-                return <line x1={inner.x} y1={inner.y} x2={outer.x} y2={outer.y} stroke="rgba(255,255,255,0.15)" strokeWidth={0.5} />;
-              })()}
-              {/* Zodiac symbol */}
-              <text
-                x={labelPos.x}
-                y={labelPos.y}
-                textAnchor="middle"
-                dominantBaseline="central"
-                fill={sign.colour}
-                fontSize={14}
-                fontWeight={600}
-              >
-                {sign.symbol}
-              </text>
-            </g>
+            <line
+              key={`div-${i}`}
+              x1={iP.x} y1={iP.y}
+              x2={oP.x} y2={oP.y}
+              stroke="#777"
+              strokeWidth={0.5}
+            />
           );
         })}
 
-        {/* Inner ring border */}
-        <circle cx={cx} cy={cy} r={innerR} fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth={0.5} />
-        <circle cx={cx} cy={cy} r={outerR} fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth={0.5} />
+        {/* Sign names on the outer black band */}
+        {SIGN_NAMES.map((name, i) => {
+          const midAngle = (360 - i * 30) % 360;
+          const pos = polarToXY(cx, cy, labelR, midAngle);
+          const inBottom = midAngle > 90 && midAngle < 270;
+          const rot = inBottom ? midAngle + 180 : midAngle;
+          return (
+            <text
+              key={name}
+              x={pos.x}
+              y={pos.y}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fill="white"
+              fontSize={11}
+              fontWeight={700}
+              fontFamily="sans-serif"
+              letterSpacing={1.5}
+              transform={`rotate(${rot}, ${pos.x}, ${pos.y})`}
+            >
+              {name.toUpperCase()}
+            </text>
+          );
+        })}
 
-        {/* Centre circle */}
-        <circle cx={cx} cy={cy} r={60} fill="#0a0a0f" stroke="rgba(255,255,255,0.08)" strokeWidth={0.5} />
-
-        {/* Planet glyphs */}
+        {/* Planet glyphs on the white ring */}
         {placements.map((p) => {
-          const pos = polarToXY(cx, cy, planetR, p.longitude);
-          const signDef = SIGNS[SIGN_TO_INDEX[p.sign ?? ""] ?? 0];
+          const wheelAngle = ((15 - p.longitude) % 360 + 360) % 360;
+          const pos = polarToXY(cx, cy, glyphR, wheelAngle);
           return (
-            <g key={p.name}>
-              {/* Radial line from centre to glyph */}
-              <line
-                x1={cx}
-                y1={cy}
-                x2={pos.x}
-                y2={pos.y}
-                stroke={signDef?.colour ?? "#fff"}
-                strokeOpacity={0.15}
-                strokeWidth={0.5}
-              />
-              {/* Glyph background circle */}
-              <circle
-                cx={pos.x}
-                cy={pos.y}
-                r={12}
-                fill="#0a0a0f"
-                stroke={signDef?.colour ?? "#fff"}
-                strokeOpacity={0.4}
-                strokeWidth={1}
-              />
-              {/* Glyph */}
-              <text
-                x={pos.x}
-                y={pos.y}
-                textAnchor="middle"
-                dominantBaseline="central"
-                fill={signDef?.colour ?? "#fff"}
-                fontSize={13}
-                fontWeight={700}
-              >
-                {p.glyph}
-              </text>
-            </g>
+            <text
+              key={p.name}
+              x={pos.x}
+              y={pos.y}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fill="#111"
+              fontSize={18}
+              fontWeight={700}
+            >
+              {p.glyph}
+            </text>
           );
         })}
-
-        {/* Centre label */}
-        <text
-          x={cx}
-          y={cy - 8}
-          textAnchor="middle"
-          dominantBaseline="central"
-          fill="rgba(255,255,255,0.6)"
-          fontSize={9}
-          fontWeight={500}
-        >
-          NATAL CHART
-        </text>
-        <text
-          x={cx}
-          y={cy + 8}
-          textAnchor="middle"
-          dominantBaseline="central"
-          fill="rgba(255,255,255,0.35)"
-          fontSize={7}
-        >
-          DOB-derived
-        </text>
       </svg>
 
-      {/* Legend */}
       <div className="mt-2 flex flex-wrap justify-center gap-x-3 gap-y-1 text-[10px] text-fg-subtle">
         {placements.map((p) => (
           <span key={p.name}>
