@@ -41,9 +41,18 @@ input int    PollSeconds       = 30;                                      // Bac
 input int    HistoryDays       = 365;                                     // Backfill window in days (0 = all history)
 input bool   VerboseLog        = true;                                    // Print every posted/skipped trade
 
-string g_endpoint = "";
-string g_seenFile = "";
-datetime g_lastPoll = 0;
+string g_endpoint    = "";
+string g_seenFile    = "";
+string g_contactFile = "";
+datetime g_lastPoll  = 0;
+// Reconnection state — set during OnInit, used to flip the EA setup
+// wizard to Connected within seconds of a reattach (instead of waiting
+// up to PollSeconds for the first OnTimer fire) and to back off on a
+// flaky network so we don't hammer the Edge Function with retries.
+bool     g_firstTickPingSent  = false;
+datetime g_lastSuccessfulPost = 0;
+datetime g_backoffUntil       = 0;
+int      g_backoffStreak      = 0;
 
 //+------------------------------------------------------------------+
 //| URL-safe trim                                                    |
@@ -56,27 +65,79 @@ string TrimTrailingSlash(string s)
 }
 
 //+------------------------------------------------------------------+
+//| Persisted last-contact marker (read on OnInit, written on every  |
+//| successful POST). Surfaces a human-readable "offline for X min"  |
+//| message in the Experts log when MT4 restarts.                    |
+//+------------------------------------------------------------------+
+datetime ReadLastContactMarker()
+{
+  if(StringLen(g_contactFile) == 0) return 0;
+  int h = FileOpen(g_contactFile, FILE_READ | FILE_TXT | FILE_COMMON);
+  if(h == INVALID_HANDLE) return 0;
+  datetime t = 0;
+  if(!FileIsEnding(h))
+  {
+    string s = FileReadString(h);
+    t = (datetime)StringToInteger(s);
+  }
+  FileClose(h);
+  return t;
+}
+
+void WriteLastContactMarker()
+{
+  if(StringLen(g_contactFile) == 0) return;
+  int h = FileOpen(g_contactFile, FILE_WRITE | FILE_TXT | FILE_COMMON);
+  if(h == INVALID_HANDLE) return;
+  FileWrite(h, IntegerToString((int)TimeCurrent()));
+  FileClose(h);
+}
+
+//+------------------------------------------------------------------+
 //| OnInit                                                           |
 //+------------------------------------------------------------------+
 int OnInit()
 {
-  g_endpoint = TrimTrailingSlash(SupabaseUrl) + "/functions/v1/receive-trade";
-  g_seenFile = "Genesis\\seen_" + IntegerToString(AccountNumber()) + ".csv";
+  g_endpoint    = TrimTrailingSlash(SupabaseUrl) + "/functions/v1/receive-trade";
+  g_seenFile    = "Genesis\\seen_"         + IntegerToString(AccountNumber()) + ".csv";
+  g_contactFile = "Genesis\\last_contact_" + IntegerToString(AccountNumber()) + ".txt";
   EventSetTimer(PollSeconds);
-  Print("[Genesis] EA initialised. Endpoint=", g_endpoint, " Account=", AccountNumber());
-  // Seed the seen-set so we don't blast the server with old history every restart.
   EnsureSeenFolder();
+
+  // If we have a prior contact marker, surface the offline window in the
+  // Experts log so the trader can see the reconnection happen rather
+  // than wondering whether the EA picked back up after MT4 restarted.
+  datetime prevContact = ReadLastContactMarker();
+  if(prevContact > 0)
+  {
+    int offlineMin = (int)((TimeCurrent() - prevContact) / 60);
+    Print("[Genesis] Reconnecting — last contact ", offlineMin, " minute(s) ago. ",
+          "Endpoint=", g_endpoint, " Account=", AccountNumber());
+  }
+  else
+  {
+    Print("[Genesis] EA initialised. Endpoint=", g_endpoint, " Account=", AccountNumber());
+  }
+
   // Heartbeat first so the Genesis wizard flips to Connected even when
-  // there are zero closed trades in the lookback window.
+  // there are zero closed trades in the lookback window. Then a forced
+  // full-history scan so an extended offline window can't silently miss
+  // closes that fell outside the HistoryDays cap — the seen-set still
+  // suppresses duplicates so this is free server-side.
   SendHeartbeat();
-  // Initial backfill of recent history
-  BackfillHistory();
+  int closedPosted = ScanHistory(true);
+  int openPosted   = ScanOpen();
+  g_lastPoll = TimeCurrent();
+  WriteLastContactMarker();
+  Print("[Genesis] Reconnected — backfilled ", closedPosted,
+        " closed trade(s), ", openPosted, " open position(s).");
   return INIT_SUCCEEDED;
 }
 
 void OnDeinit(const int reason)
 {
   EventKillTimer();
+  WriteLastContactMarker();
 }
 
 //+------------------------------------------------------------------+
@@ -122,7 +183,10 @@ string FormatTime(datetime t)
 }
 
 //+------------------------------------------------------------------+
-//| WebRequest POST                                                  |
+//| WebRequest POST — with one immediate retry on transient failure  |
+//| (network timeout, HTTP 5xx) and exponential backoff on sustained |
+//| failures so a flaky Wi-Fi blip doesn't drop a single update and  |
+//| a Supabase outage doesn't busy-loop on every tick.               |
 //+------------------------------------------------------------------+
 bool PostJson(string body)
 {
@@ -131,31 +195,80 @@ bool PostJson(string body)
     Print("[Genesis] Invalid GenesisApiKey input.");
     return false;
   }
+  if(g_backoffUntil > 0 && TimeCurrent() < g_backoffUntil)
+  {
+    if(VerboseLog)
+      Print("[Genesis] Backoff active — skipping POST until ",
+            TimeToString(g_backoffUntil, TIME_DATE | TIME_SECONDS));
+    return false;
+  }
+
   char data[];
   StringToCharArray(body, data, 0, StringLen(body));
   // Drop the trailing null byte so Content-Length matches actual JSON length.
   if(ArraySize(data) > 0 && data[ArraySize(data) - 1] == 0)
     ArrayResize(data, ArraySize(data) - 1);
 
-  char result[];
   string headers = "Content-Type: application/json\r\nX-Api-Key: " + GenesisApiKey + "\r\n";
-  string responseHeaders = "";
   int timeout = 10000;
-  ResetLastError();
-  int status = WebRequest("POST", g_endpoint, headers, timeout, data, result, responseHeaders);
-  if(status == -1)
+
+  for(int attempt = 1; attempt <= 2; attempt++)
   {
-    int err = GetLastError();
-    Print("[Genesis] WebRequest failed err=", err, " — make sure the Supabase URL is in Tools → Options → Expert Advisors → Allow WebRequest.");
-    return false;
+    char result[];
+    string responseHeaders = "";
+    ResetLastError();
+    int status = WebRequest("POST", g_endpoint, headers, timeout, data, result, responseHeaders);
+
+    if(status == -1)
+    {
+      int err = GetLastError();
+      if(attempt == 1)
+      {
+        if(VerboseLog) Print("[Genesis] WebRequest err=", err, " — retrying in 500ms");
+        Sleep(500);
+        continue;
+      }
+      Print("[Genesis] WebRequest failed err=", err,
+            " — make sure the Supabase URL is in Tools → Options → Expert Advisors → Allow WebRequest, ",
+            "and that the toolbar \"Algo Trading\" button is green.");
+      g_backoffStreak++;
+      int wait = (int)MathMin(300, 30 * MathPow(2, g_backoffStreak - 1));
+      g_backoffUntil = TimeCurrent() + wait;
+      Print("[Genesis] Backing off ", wait, "s before next attempt.");
+      return false;
+    }
+
+    if(status >= 500 && status < 600)
+    {
+      string txt = CharArrayToString(result);
+      if(attempt == 1)
+      {
+        if(VerboseLog) Print("[Genesis] HTTP ", status, " transient — retrying in 500ms");
+        Sleep(500);
+        continue;
+      }
+      Print("[Genesis] HTTP ", status, " body=", txt);
+      g_backoffStreak++;
+      int wait = (int)MathMin(300, 30 * MathPow(2, g_backoffStreak - 1));
+      g_backoffUntil = TimeCurrent() + wait;
+      Print("[Genesis] Backing off ", wait, "s before next attempt.");
+      return false;
+    }
+
+    if(status >= 400)
+    {
+      string txt = CharArrayToString(result);
+      Print("[Genesis] HTTP ", status, " body=", txt);
+      return false;
+    }
+
+    g_lastSuccessfulPost = TimeCurrent();
+    g_backoffStreak = 0;
+    g_backoffUntil = 0;
+    WriteLastContactMarker();
+    return true;
   }
-  if(status >= 400)
-  {
-    string txt = CharArrayToString(result);
-    Print("[Genesis] HTTP ", status, " body=", txt);
-    return false;
-  }
-  return true;
+  return false;
 }
 
 // Heartbeat: lets the Genesis app know this account is online even when
@@ -258,8 +371,9 @@ string Fingerprint(int ticket, bool closed, double sl, double tp, double profit)
 //+------------------------------------------------------------------+
 //| Walk open positions                                              |
 //+------------------------------------------------------------------+
-void ScanOpen()
+int ScanOpen()
 {
+  int posted = 0;
   for(int i = 0; i < OrdersTotal(); i++)
   {
     if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
@@ -268,21 +382,30 @@ void ScanOpen()
     string fp = Fingerprint(OrderTicket(), false, OrderStopLoss(), OrderTakeProfit(), OrderProfit());
     if(IsSeen(fp)) continue;
     string body = BuildPayload(OrderTicket(), false);
-    if(PostJson(body)) MarkSeen(fp);
+    if(PostJson(body))
+    {
+      MarkSeen(fp);
+      posted++;
+    }
   }
+  return posted;
 }
 
 //+------------------------------------------------------------------+
 //| Walk recent history                                              |
 //+------------------------------------------------------------------+
-void ScanHistory()
+int ScanHistory(bool ignoreHistoryCap = false)
 {
   // HistoryDays = 0 means "everything". Treat any non-positive value as
-  // "no cutoff" so the cutoff comparison below always passes.
-  datetime cutoff = (HistoryDays <= 0) ? (datetime)0
-                                       : TimeCurrent() - (datetime)(HistoryDays * 86400);
+  // "no cutoff" so the cutoff comparison below always passes. We also
+  // force the unbounded scan on EA reattach so a long offline window
+  // (laptop off for days) can never silently miss a close.
+  datetime cutoff = (ignoreHistoryCap || HistoryDays <= 0)
+                      ? (datetime)0
+                      : TimeCurrent() - (datetime)(HistoryDays * 86400);
   int total = OrdersHistoryTotal();
-  if(VerboseLog) Print("[Genesis] ScanHistory cutoff=", TimeToString(cutoff, TIME_DATE), " total=", total);
+  if(VerboseLog) Print("[Genesis] ScanHistory cutoff=", TimeToString(cutoff, TIME_DATE),
+                       " total=", total, ignoreHistoryCap ? " (full)" : "");
   int posted = 0, skipped = 0;
   for(int i = total - 1; i >= 0; i--)
   {
@@ -305,13 +428,7 @@ void ScanHistory()
     }
   }
   if(VerboseLog) Print("[Genesis] ScanHistory done — posted=", posted, " skipped_seen=", skipped);
-}
-
-void BackfillHistory()
-{
-  ScanHistory();
-  ScanOpen();
-  g_lastPoll = TimeCurrent();
+  return posted;
 }
 
 //+------------------------------------------------------------------+
@@ -321,15 +438,24 @@ void OnTimer()
 {
   SendHeartbeat();
   ScanOpen();
-  ScanHistory();
+  ScanHistory(false);
   g_lastPoll = TimeCurrent();
 }
 
 void OnTick()
 {
+  // First tick after a fresh attach: send the heartbeat immediately
+  // rather than waiting up to PollSeconds for OnTimer to fire. The
+  // setup wizard listens for last_synced_at and this is what makes the
+  // status chip flip to Connected within seconds of MT4 reopening.
+  if(!g_firstTickPingSent)
+  {
+    SendHeartbeat();
+    g_firstTickPingSent = true;
+  }
   if(TimeCurrent() - g_lastPoll < 5) return;
   ScanOpen();
-  ScanHistory();
+  ScanHistory(false);
   g_lastPoll = TimeCurrent();
 }
 
@@ -337,7 +463,7 @@ void OnTrade()
 {
   // Fired by MT4 when an order is opened/closed/modified.
   ScanOpen();
-  ScanHistory();
+  ScanHistory(false);
   g_lastPoll = TimeCurrent();
 }
 //+------------------------------------------------------------------+
