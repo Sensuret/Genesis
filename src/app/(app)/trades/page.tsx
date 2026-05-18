@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronDown, FolderOpen, Plus, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
-import { Card } from "@/components/ui/card";
+import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,12 +34,14 @@ import {
   accountSourceLabel,
   accountSourceChipClass
 } from "@/lib/accounts/source-label";
-import { cn, shortDate } from "@/lib/utils";
+import { cn, formatNumber, pnlColor, shortDate } from "@/lib/utils";
+import { useLiveState } from "@/lib/hooks/use-live-state";
 
 export default function TradesPage() {
   const { trades, files, loading, refresh } = useTrades();
   const { filters } = useFilters();
   const { fmt } = useMoney();
+  const { positions } = useLiveState();
   const [q, setQ] = useState("");
   const [fileFilter, setFileFilter] = useState<string>("all");
   const [filesOpen, setFilesOpen] = useState(false);
@@ -234,6 +236,43 @@ export default function TradesPage() {
           {filtered.length} of {trades.length} trade{trades.length === 1 ? "" : "s"}
         </span>
       </div>
+
+      {/* Open positions from EA — sorted on top */}
+      {positions.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle>Open positions (live)</CardTitle></CardHeader>
+          <CardBody className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="border-b border-line text-fg-subtle">
+                  <tr>
+                    <th className="px-3 py-2">Symbol</th>
+                    <th className="px-3 py-2">Side</th>
+                    <th className="px-3 py-2 text-right">Lots</th>
+                    <th className="px-3 py-2 text-right">Entry</th>
+                    <th className="px-3 py-2 text-right">Current</th>
+                    <th className="px-3 py-2 text-right">Floating P&L</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {positions.map((p) => (
+                    <tr key={p.id} className="border-b border-line/50">
+                      <td className="px-3 py-2 font-medium">{p.symbol ?? "\u2014"}</td>
+                      <td className="px-3 py-2">{p.side ?? "\u2014"}</td>
+                      <td className="px-3 py-2 text-right">{p.lot_size ?? "\u2014"}</td>
+                      <td className="px-3 py-2 text-right">{p.entry ?? "\u2014"}</td>
+                      <td className="px-3 py-2 text-right">{p.current_price ?? "\u2014"}</td>
+                      <td className={`px-3 py-2 text-right font-medium ${pnlColor(p.floating_pnl)}`}>
+                        {p.floating_pnl != null ? formatNumber(p.floating_pnl, 2) : "\u2014"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardBody>
+        </Card>
+      )}
 
       {/* Trade log table — TradeZella columns: Open / Symbol / Status /
           Close / Entry / Exit / Net P&L / Net ROI / Setup / Duration. */}

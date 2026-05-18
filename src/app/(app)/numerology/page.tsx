@@ -64,6 +64,7 @@ import {
 import { FilterBar } from "@/components/numerology/filter-bar";
 import { NumDatabase } from "@/components/numerology/num-database";
 import { NumOverview } from "@/components/numerology/num-overview";
+import { NatalChartWheel } from "@/components/numerology/natal-chart-wheel";
 
 type Gender = "male" | "female" | "prefer_not_to_say";
 
@@ -564,6 +565,13 @@ function MyProfile({
             sign={sign}
             snapshot={snapshot}
           />
+
+          <Card>
+            <CardHeader><CardTitle>Natal chart wheel</CardTitle></CardHeader>
+            <CardBody>
+              <NatalChartWheel dob={dob} fullName={name} />
+            </CardBody>
+          </Card>
 
           <GemstonesCard
             lifePath={snapshot.lifePath}
@@ -1235,6 +1243,12 @@ function OtherDetailModalContent({
             sign={sign}
             snapshot={snap}
           />
+          <Card>
+            <CardHeader><CardTitle>Natal chart wheel</CardTitle></CardHeader>
+            <CardBody>
+              <NatalChartWheel dob={row.dob} fullName={row.full_name} />
+            </CardBody>
+          </Card>
           <GemstonesCard
             lifePath={snap.lifePath}
             western={sign.sign}

@@ -338,6 +338,39 @@ export type Resolution = {
   show_genesis_logo?: boolean;
 };
 
+export type OpenPositionRow = {
+  id: string;
+  user_id: string;
+  account_number: string;
+  ticket: string;
+  symbol: string | null;
+  side: "long" | "short" | null;
+  lot_size: number | null;
+  entry: number | null;
+  stop_loss: number | null;
+  take_profit: number | null;
+  current_price: number | null;
+  floating_pnl: number | null;
+  swap: number | null;
+  commission: number | null;
+  open_time: string | null;
+  last_tick_at: string;
+};
+
+export type AccountSnapshotRow = {
+  id: string;
+  user_id: string;
+  account_number: string;
+  balance: number | null;
+  equity: number | null;
+  margin: number | null;
+  free_margin: number | null;
+  margin_level_pct: number | null;
+  open_positions_count: number;
+  floating_pnl: number | null;
+  captured_at: string;
+};
+
 export type UserSettingsData = {
   notebook_embeds?: NotebookEmbed[];
   notebook_active_id?: string | null;
