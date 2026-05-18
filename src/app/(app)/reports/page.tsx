@@ -40,18 +40,22 @@ import { formatNumber, formatPercent } from "@/lib/utils";
 import type { TradeRow } from "@/lib/supabase/types";
 import { useFilters, useMoney } from "@/lib/filters/store";
 import { ReportsDetailed } from "@/components/reports/detailed";
+import { DeepStats } from "@/components/reports/deep-stats";
+import { LunarPerformance } from "@/components/reports/lunar-performance";
+import { useLiveState } from "@/lib/hooks/use-live-state";
 import { createClient } from "@/lib/supabase/client";
 import { useEffect } from "react";
 
 type Fmt = (n: number | null | undefined) => string;
 
-const TABS = ["Overview", "Detailed", "Risk", "Wins vs Losses", "Compare", "Calendar"] as const;
+const TABS = ["Overview", "Detailed", "Risk", "Wins vs Losses", "Compare", "Deep Stats", "Performance by Lunar", "Calendar"] as const;
 type Tab = (typeof TABS)[number];
 
 export default function ReportsPage() {
   const { trades, files, loading } = useTrades();
   const { filters } = useFilters();
   const { fmt } = useMoney();
+  const { positions, snapshot: liveSnapshot } = useLiveState();
   const [tab, setTab] = useState<Tab>("Overview");
   const [startBalance, setStartBalance] = useState<number | null>(null);
 
@@ -154,7 +158,61 @@ export default function ReportsPage() {
       {tab === "Risk" && <Risk trades={filtered} currency={filters.currency} />}
       {tab === "Wins vs Losses" && <WinsLosses trades={filtered} fmt={fmt} />}
       {tab === "Compare" && <Compare trades={filtered} fmt={fmt} />}
+      {tab === "Deep Stats" && <DeepStats trades={filtered} />}
+      {tab === "Performance by Lunar" && <LunarPerformance trades={filtered} />}
       {tab === "Calendar" && <CalendarView trades={filtered} fmt={fmt} />}
+
+      {/* Live-state cards — shown on Overview when EA is streaming */}
+      {tab === "Overview" && (liveSnapshot || positions.length > 0) && (
+        <Card>
+          <CardHeader><CardTitle>Live account state</CardTitle></CardHeader>
+          <CardBody>
+            <div className="grid gap-4 md:grid-cols-3">
+              <Stat label="Equity" value={liveSnapshot?.equity ?? null} format="currency" />
+              <Stat label="Margin" value={liveSnapshot?.margin ?? null} format="currency" />
+              <Stat
+                label="Floating P&L"
+                value={liveSnapshot?.floating_pnl ?? null}
+                format="currency"
+                positive={liveSnapshot?.floating_pnl != null ? liveSnapshot.floating_pnl >= 0 : undefined}
+              />
+            </div>
+            {positions.length > 0 && (
+              <div className="mt-4">
+                <div className="mb-2 text-xs font-medium text-fg-muted">Open positions ({positions.length})</div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="border-b border-line text-fg-subtle">
+                      <tr>
+                        <th className="px-2 py-1">Symbol</th>
+                        <th className="px-2 py-1">Side</th>
+                        <th className="px-2 py-1 text-right">Lots</th>
+                        <th className="px-2 py-1 text-right">Entry</th>
+                        <th className="px-2 py-1 text-right">Current</th>
+                        <th className="px-2 py-1 text-right">Floating P&L</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {positions.map((p) => (
+                        <tr key={p.id} className="border-b border-line/50">
+                          <td className="px-2 py-1 font-medium">{p.symbol ?? "\u2014"}</td>
+                          <td className="px-2 py-1">{p.side ?? "\u2014"}</td>
+                          <td className="px-2 py-1 text-right">{p.lot_size ?? "\u2014"}</td>
+                          <td className="px-2 py-1 text-right">{p.entry ?? "\u2014"}</td>
+                          <td className="px-2 py-1 text-right">{p.current_price ?? "\u2014"}</td>
+                          <td className={`px-2 py-1 text-right font-medium ${(p.floating_pnl ?? 0) >= 0 ? "text-success" : "text-danger"}`}>
+                            {p.floating_pnl != null ? formatNumber(p.floating_pnl, 2) : "\u2014"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </CardBody>
+        </Card>
+      )}
     </div>
   );
 }

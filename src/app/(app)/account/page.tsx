@@ -10,6 +10,7 @@ import { Input, Label } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
 import type { ProfileRow } from "@/lib/supabase/types";
 import { AlertTriangle, Settings as SettingsIcon, User } from "lucide-react";
+import { NatalChartWheel } from "@/components/numerology/natal-chart-wheel";
 
 /**
  * /account — personal-info hub. Distinct from /settings (which holds app-wide
@@ -220,6 +221,18 @@ export default function AccountPage() {
           </Button>
         </CardBody>
       </Card>
+
+      {/* Natal chart wheel — rendered when DOB is available */}
+      {profile.dob && profile.full_name && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Natal chart wheel</CardTitle>
+          </CardHeader>
+          <CardBody>
+            <NatalChartWheel dob={profile.dob} fullName={profile.full_name} />
+          </CardBody>
+        </Card>
+      )}
 
       <Card className="border-danger/40">
         <CardHeader>

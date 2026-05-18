@@ -12,12 +12,14 @@ import { useFilters } from "@/lib/filters/store";
 import { MoonWidget } from "@/components/moon-widget";
 import { IntradayEquityChart } from "@/components/charts/intraday-equity";
 import { TradeLogTable } from "@/components/trades/trade-log-table";
-import { formatNumber, shortDate } from "@/lib/utils";
+import { formatNumber, pnlColor, shortDate } from "@/lib/utils";
 import { Empty } from "@/components/ui/empty";
+import { useLiveState } from "@/lib/hooks/use-live-state";
 
 export default function DayViewPage() {
   const { trades, loading } = useTrades();
   const { filters } = useFilters();
+  const { positions } = useLiveState();
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const pageRef = useRef<HTMLDivElement>(null);
 
@@ -118,6 +120,52 @@ export default function DayViewPage() {
               </div>
             </div>
           </Card>
+
+          {/* Open trades overlay — live from EA */}
+          {positions.length > 0 && (
+            <Card>
+              <CardHeader><CardTitle>Open trades (live)</CardTitle></CardHeader>
+              <CardBody className="p-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="border-b border-line text-fg-subtle">
+                      <tr>
+                        <th className="px-3 py-2">Symbol</th>
+                        <th className="px-3 py-2">Side</th>
+                        <th className="px-3 py-2 text-right">Lots</th>
+                        <th className="px-3 py-2 text-right">Entry</th>
+                        <th className="px-3 py-2 text-right">Current</th>
+                        <th className="px-3 py-2 text-right">Floating P&L</th>
+                        <th className="px-3 py-2 text-right">Duration</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {positions.map((p) => {
+                        const openMs = p.open_time ? new Date(p.open_time).getTime() : 0;
+                        const durationSec = openMs ? Math.max(0, (Date.now() - openMs) / 1000) : 0;
+                        const dH = Math.floor(durationSec / 3600);
+                        const dM = Math.floor((durationSec % 3600) / 60);
+                        const durationStr = openMs ? `${dH}h ${dM}m` : "\u2014";
+                        return (
+                          <tr key={p.id} className="border-b border-line/50">
+                            <td className="px-3 py-2 font-medium">{p.symbol ?? "\u2014"}</td>
+                            <td className="px-3 py-2">{p.side ?? "\u2014"}</td>
+                            <td className="px-3 py-2 text-right">{p.lot_size ?? "\u2014"}</td>
+                            <td className="px-3 py-2 text-right">{p.entry ?? "\u2014"}</td>
+                            <td className="px-3 py-2 text-right">{p.current_price ?? "\u2014"}</td>
+                            <td className={`px-3 py-2 text-right font-medium ${pnlColor(p.floating_pnl)}`}>
+                              {p.floating_pnl != null ? formatNumber(p.floating_pnl, 2) : "\u2014"}
+                            </td>
+                            <td className="px-3 py-2 text-right text-fg-muted">{durationStr}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </CardBody>
+            </Card>
+          )}
         </>
       )}
     </div>

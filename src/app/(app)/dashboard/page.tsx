@@ -46,12 +46,14 @@ import { MoonInline } from "@/components/moon-inline";
 import { TradeCalendar } from "@/components/trade-calendar";
 import { Empty } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
-import { formatNumber } from "@/lib/utils";
+import { formatNumber, pnlColor } from "@/lib/utils";
 import { useFilters } from "@/lib/filters/store";
+import { useLiveState } from "@/lib/hooks/use-live-state";
 
 export default function DashboardPage() {
   const { trades, files, loading } = useTrades();
   const { filters } = useFilters();
+  const { snapshot: liveSnapshot } = useLiveState();
 
   const filtered = useMemo(() => applyAllFilters(trades, filters), [trades, filters]);
 
@@ -180,6 +182,18 @@ export default function DashboardPage() {
       </div>
 
       {/* Net daily P&L bar chart on its own row, full width. */}
+      {/* Live floating P&L tick — visible when EA is streaming */}
+      {liveSnapshot && liveSnapshot.floating_pnl != null && (
+        <Card>
+          <CardBody className="flex items-center justify-between gap-4 py-3">
+            <div className="text-xs font-medium text-fg-muted">Live floating P&L</div>
+            <div className={`text-xl font-semibold tracking-tight ${pnlColor(liveSnapshot.floating_pnl)}`}>
+              {formatNumber(liveSnapshot.floating_pnl, 2)}
+            </div>
+          </CardBody>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Net daily P&L (last 30)</CardTitle>
