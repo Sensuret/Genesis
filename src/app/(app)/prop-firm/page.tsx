@@ -208,20 +208,27 @@ export default function PropFirmPage() {
             </CardBody>
           </Card>
 
-          {result.phases[0]?.days?.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Equity over the simulation (all phases)</CardTitle>
-              </CardHeader>
-              <CardBody>
-                <EquityCurveChart
-                  variant="purple"
-                  data={result.phases.flatMap((p) =>
-                    p.days.map((d) => ({ date: d.date, equity: d.equity, pnl: d.pnl }))
-                  )}
-                />
-              </CardBody>
-            </Card>
+          {/* One equity curve per phase. Prop-firm phases are
+              independent — each phase is staked on a fresh account of
+              the same nominal size, so the curves restart at the same
+              starting balance instead of continuing from where the
+              previous phase ended. Rendering one card per phase makes
+              that contract visually obvious and matches what the trader
+              actually experiences on the broker side. */}
+          {result.phases.map((p, i) =>
+            p.days?.length > 0 ? (
+              <Card key={`equity-${i}`}>
+                <CardHeader>
+                  <CardTitle>{p.phaseName} · equity curve</CardTitle>
+                </CardHeader>
+                <CardBody>
+                  <EquityCurveChart
+                    variant="purple"
+                    data={p.days.map((d) => ({ date: d.date, equity: d.equity, pnl: d.pnl }))}
+                  />
+                </CardBody>
+              </Card>
+            ) : null
           )}
 
           <Card>
