@@ -111,14 +111,24 @@ export function simulateMultiPhaseChallenge(
       };
     }
 
-    // Advance cursor to the day AFTER the pass day; carry equity forward.
+    // Advance cursor to the day AFTER the pass day so the next phase
+    // consumes a fresh slice of trade history.
     if (sub.finishedAt) {
       const idx = slice.findIndex((d) => d.date === sub.finishedAt);
       cursor += Math.max(0, idx + 1);
     } else {
       cursor += sub.tradingDays;
     }
-    baseEquity = sub.finalEquity;
+    // Each prop-firm phase is staked on a separate, freshly-funded
+    // account at the same nominal size. Profits earned in Phase 1 do
+    // NOT carry into Phase 2 — the trader is issued a new $100k (or
+    // whatever the configured size is) account at the start of every
+    // phase, and Phase 2's drawdown / profit-target limits are measured
+    // against that fresh balance. Resetting to `config.accountSize`
+    // here makes every PhaseResult's `days` array (and the per-phase
+    // equity curve rendered on the Prop Firm page) start at the same
+    // nominal balance.
+    baseEquity = config.accountSize;
   }
 
   return {
