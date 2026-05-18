@@ -68,16 +68,34 @@ async function sha256Hex(input: string): Promise<string> {
     .join("");
 }
 
+type OpenPositionPayload = {
+  ticket: string | number;
+  symbol?: string | null;
+  type?: string | null;
+  lots?: number | null;
+  open_price?: number | null;
+  current_price?: number | null;
+  sl?: number | null;
+  tp?: number | null;
+  profit?: number | null;
+  swap?: number | null;
+  commission?: number | null;
+  open_time?: string | null;
+};
+
 type TradePayload = {
-  // "heartbeat" → register/refresh the trade_files row only, no trade
-  // upsert. Anything else (or missing) is treated as a normal trade.
+  // Kind dispatch:
+  //   "heartbeat"   → refresh trade_files row only (no trades / no positions).
+  //   "live_state"  → replace the set of open positions for this account
+  //                  AND append an ea_account_snapshots row in one call.
+  //   (default)     → single trade open/close, upserted into trades.
   kind?: string | null;
   account_number: string;
   account_name?: string | null;
   broker?: string | null;
   server?: string | null;
   platform?: "MT4" | "MT5" | null;
-  ticket: string | number;
+  ticket?: string | number;
   symbol?: string | null;
   type?: string | null;
   lots?: number | null;
@@ -90,6 +108,15 @@ type TradePayload = {
   commission?: number | null;
   open_time?: string | null;
   close_time?: string | null;
+  // live_state-only fields
+  positions?: OpenPositionPayload[] | null;
+  balance?: number | null;
+  equity?: number | null;
+  margin?: number | null;
+  free_margin?: number | null;
+  margin_level_pct?: number | null;
+  open_positions_count?: number | null;
+  floating_pnl?: number | null;
 };
 
 function requireString(v: unknown, name: string): string {
@@ -139,15 +166,20 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: "Invalid JSON body" }, 400);
   }
 
-  const isHeartbeat = body.kind === "heartbeat";
+  const kind = (body.kind ?? "").toString();
+  const isHeartbeat  = kind === "heartbeat";
+  const isLiveState  = kind === "live_state";
 
   let accountNumber: string;
   let ticket: string;
   try {
     accountNumber = requireString(body.account_number, "account_number");
-    // Heartbeat payloads carry a sentinel "heartbeat" ticket so this stays
-    // a string field, but we never write it into the trades table.
-    ticket = isHeartbeat ? "heartbeat" : requireString(body.ticket, "ticket");
+    // Heartbeat / live_state payloads carry a sentinel "tick"/"heartbeat"
+    // ticket so this stays a string field, but we never write it into the
+    // trades table.
+    ticket = (isHeartbeat || isLiveState)
+      ? (typeof body.ticket === "string" ? body.ticket : "tick")
+      : requireString(body.ticket, "ticket");
   } catch (err) {
     return jsonResponse({ error: (err as Error).message }, 400);
   }
@@ -189,6 +221,46 @@ Deno.serve(async (req: Request) => {
       .update({ last_used_at: new Date().toISOString() })
       .eq("id", keyRow.id);
     return jsonResponse({ ok: true, kind: "heartbeat" });
+  }
+
+  if (isLiveState) {
+    // live_state path: replace the open-positions set for this account
+    // AND append a snapshot row in one round-trip. Halves edge-function
+    // invocations vs. two-payload sends.
+    const positions = Array.isArray(body.positions) ? body.positions : [];
+    const { error: opErr, data: opCount } = await supabase.rpc("upsert_open_positions", {
+      p_user_id: keyRow.user_id,
+      p_account_number: accountNumber,
+      p_positions: positions
+    });
+    if (opErr) {
+      return jsonResponse({ error: opErr.message }, 500);
+    }
+
+    // The snapshot row is independently useful (equity/margin even when
+    // no positions are open), so we always append. open_positions_count
+    // falls back to the array length so the EA can omit it if it's lazy.
+    const { error: snapErr } = await supabase.rpc("append_account_snapshot", {
+      p_user_id: keyRow.user_id,
+      p_account_number: accountNumber,
+      p_balance: optionalNumber(body.balance),
+      p_equity: optionalNumber(body.equity),
+      p_margin: optionalNumber(body.margin),
+      p_free_margin: optionalNumber(body.free_margin),
+      p_margin_level_pct: optionalNumber(body.margin_level_pct),
+      p_open_count: optionalNumber(body.open_positions_count) ?? positions.length,
+      p_floating_pnl: optionalNumber(body.floating_pnl)
+    });
+    if (snapErr) {
+      return jsonResponse({ error: snapErr.message }, 500);
+    }
+
+    await supabase
+      .from("genesis_api_keys")
+      .update({ last_used_at: new Date().toISOString() })
+      .eq("id", keyRow.id);
+
+    return jsonResponse({ ok: true, kind: "live_state", positions: opCount ?? positions.length });
   }
 
   const { error: rpcErr, data: ingested } = await supabase.rpc("ingest_ea_trade", {

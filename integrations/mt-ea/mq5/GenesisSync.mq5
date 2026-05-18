@@ -18,12 +18,14 @@
 #include <Trade\PositionInfo.mqh>
 #include <Trade\DealInfo.mqh>
 
-input string SupabaseUrl    = "https://YOUR-PROJECT-REF.supabase.co"; // Supabase project URL
-input string GenesisApiKey  = "gs_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"; // Generate in Genesis → Settings → Accounts
-input string AccountLabel   = "";                                     // Optional friendly label
-input int    PollSeconds    = 30;                                     // Background poll while idle
-input int    HistoryDays    = 365;                                    // Backfill window in days (0 = all history)
-input bool   VerboseLog     = true;                                   // Print every posted/skipped trade
+input string SupabaseUrl       = "https://YOUR-PROJECT-REF.supabase.co"; // Supabase project URL
+input string GenesisApiKey     = "gs_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"; // Generate in Genesis → Settings → Accounts
+input string AccountLabel      = "";                                     // Optional friendly label
+input int    PollSeconds       = 30;                                     // Background poll while idle
+input int    HistoryDays       = 365;                                    // Backfill window in days (0 = all history)
+input int    LiveStateSeconds  = 2;                                      // Minimum seconds between live-state posts (Wave 4)
+input bool   StreamLiveState   = true;                                   // Push floating P&L / equity / margin every tick
+input bool   VerboseLog        = true;                                   // Print every posted/skipped trade
 
 string g_endpoint    = "";
 string g_seenFile    = "";
@@ -37,6 +39,8 @@ bool     g_firstTickPingSent  = false;
 datetime g_lastSuccessfulPost = 0;
 datetime g_backoffUntil       = 0;
 int      g_backoffStreak      = 0;
+datetime g_lastLiveState      = 0;
+int      g_lastOpenCount      = -1;
 
 CPositionInfo  m_pos;
 CDealInfo      m_deal;
@@ -266,6 +270,100 @@ string Fingerprint(string ticket, bool closed, double sl, double tp, double prof
 }
 
 //+------------------------------------------------------------------+
+//| Live-state push — open positions + account snapshot in one call. |
+//| Throttled to LiveStateSeconds. Cheap on the wire: even 5 open    |
+//| positions are well under 1 KB. Drives the Genesis Reports /      |
+//| Day View / Dashboard live floating-P&L tick.                     |
+//+------------------------------------------------------------------+
+void SendLiveState()
+{
+  if(!StreamLiveState) return;
+  if(LiveStateSeconds > 0 && TimeCurrent() - g_lastLiveState < LiveStateSeconds) return;
+
+  // When there are no open positions, send the snapshot every 30s
+  // instead of every 2s — the equity/margin numbers only change with
+  // swap accrual / deposits while flat.
+  if(PositionsTotal() == 0 && g_lastOpenCount == 0
+     && TimeCurrent() - g_lastLiveState < 30)
+    return;
+
+  string label = (StringLen(AccountLabel) > 0) ? AccountLabel : AccountInfoString(ACCOUNT_NAME);
+  string body = "{";
+  body += Q("kind",           "live_state");
+  body += Q("account_number", (string)AccountInfoInteger(ACCOUNT_LOGIN));
+  body += Q("account_name",   label);
+  body += Q("broker",         AccountInfoString(ACCOUNT_COMPANY));
+  body += Q("server",         AccountInfoString(ACCOUNT_SERVER));
+  body += Q("platform",       "MT5");
+  body += Q("ticket",         "tick");
+
+  // Account-level numbers.
+  double balance     = AccountInfoDouble(ACCOUNT_BALANCE);
+  double equity      = AccountInfoDouble(ACCOUNT_EQUITY);
+  double margin      = AccountInfoDouble(ACCOUNT_MARGIN);
+  double freeMargin  = AccountInfoDouble(ACCOUNT_MARGIN_FREE);
+  double marginLevel = AccountInfoDouble(ACCOUNT_MARGIN_LEVEL);
+  body += N("balance",          balance);
+  body += N("equity",           equity);
+  body += N("margin",           margin);
+  body += N("free_margin",      freeMargin);
+  body += N("margin_level_pct", marginLevel);
+
+  // Build the positions[] array.
+  string posJson = "[";
+  double sumFloating = 0.0;
+  int posted = 0;
+  for(int i = 0; i < PositionsTotal(); i++)
+  {
+    if(!m_pos.SelectByIndex(i)) continue;
+    string sym       = m_pos.Symbol();
+    long   ticket    = m_pos.Ticket();
+    long   posType   = m_pos.PositionType();
+    double lots      = m_pos.Volume();
+    double openPrice = m_pos.PriceOpen();
+    double curPrice  = m_pos.PriceCurrent();
+    double sl        = m_pos.StopLoss();
+    double tp        = m_pos.TakeProfit();
+    double profit    = m_pos.Profit();
+    double swap      = m_pos.Swap();
+    datetime openTm  = (datetime)m_pos.Time();
+    string side      = (posType == POSITION_TYPE_BUY) ? "buy" : "sell";
+
+    sumFloating += profit + swap;
+
+    if(posted > 0) posJson += ",";
+    posJson += "{";
+    posJson += Q("ticket",        (string)ticket);
+    posJson += Q("symbol",        sym);
+    posJson += Q("type",          side);
+    posJson += N("lots",          lots);
+    posJson += N("open_price",    openPrice);
+    posJson += N("current_price", curPrice);
+    posJson += N("sl",            sl);
+    posJson += N("tp",            tp);
+    posJson += N("profit",        profit);
+    posJson += N("swap",          swap);
+    posJson += N("commission",    0);
+    posJson += Q("open_time",     FormatTime(openTm), true);
+    posJson += "}";
+    posted++;
+  }
+  posJson += "]";
+
+  body += "\"positions\":" + posJson + ",";
+  body += "\"open_positions_count\":" + (string)posted + ",";
+  body += N("floating_pnl", sumFloating, true);
+  body += "}";
+
+  bool ok = PostJson(body);
+  g_lastLiveState = TimeCurrent();
+  g_lastOpenCount = posted;
+  if(VerboseLog)
+    Print("[Genesis] live_state posted=", posted, " floating=",
+          DoubleToString(sumFloating, 2), ok ? " ok" : " failed");
+}
+
+//+------------------------------------------------------------------+
 //| Open positions                                                   |
 //+------------------------------------------------------------------+
 int ScanOpenPositions()
@@ -462,6 +560,7 @@ void OnDeinit(const int reason)
 void OnTimer()
 {
   SendHeartbeat();
+  SendLiveState();
   ScanOpenPositions();
   ScanHistory(false);
   g_lastPoll = TimeCurrent();
@@ -478,6 +577,11 @@ void OnTick()
     SendHeartbeat();
     g_firstTickPingSent = true;
   }
+
+  // Live-state has its own throttle (LiveStateSeconds, default 2s) so
+  // it runs more frequently than the 5s scan-debounce below.
+  SendLiveState();
+
   if(TimeCurrent() - g_lastPoll < 5) return;
   ScanOpenPositions();
   ScanHistory(false);

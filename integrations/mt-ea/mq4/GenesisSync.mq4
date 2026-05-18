@@ -39,6 +39,8 @@ input string GenesisApiKey     = "gs_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"; // Gener
 input string AccountLabel      = "";                                      // Optional friendly label (defaults to AccountName())
 input int    PollSeconds       = 30;                                      // Background poll while idle
 input int    HistoryDays       = 365;                                     // Backfill window in days (0 = all history)
+input int    LiveStateSeconds  = 2;                                       // Minimum seconds between live-state posts (Wave 4)
+input bool   StreamLiveState   = true;                                    // Push floating P&L / equity / margin every tick
 input bool   VerboseLog        = true;                                    // Print every posted/skipped trade
 
 string g_endpoint    = "";
@@ -53,6 +55,8 @@ bool     g_firstTickPingSent  = false;
 datetime g_lastSuccessfulPost = 0;
 datetime g_backoffUntil       = 0;
 int      g_backoffStreak      = 0;
+datetime g_lastLiveState      = 0;
+int      g_lastOpenCount      = -1;
 
 //+------------------------------------------------------------------+
 //| URL-safe trim                                                    |
@@ -369,6 +373,97 @@ string Fingerprint(int ticket, bool closed, double sl, double tp, double profit)
 }
 
 //+------------------------------------------------------------------+
+//| Live-state push — open positions + account snapshot in one call. |
+//| Throttled to LiveStateSeconds. Cheap on the wire: even 5 open    |
+//| positions are well under 1 KB. Drives the Genesis Reports /      |
+//| Day View / Dashboard live floating-P&L tick.                     |
+//+------------------------------------------------------------------+
+void SendLiveState()
+{
+  if(!StreamLiveState) return;
+  if(LiveStateSeconds > 0 && TimeCurrent() - g_lastLiveState < LiveStateSeconds) return;
+
+  // When there are no open positions, send the snapshot every 30s
+  // instead of every 2s — equity/margin only change with swap accrual
+  // or deposits while flat.
+  int openCount = 0;
+  for(int j = 0; j < OrdersTotal(); j++)
+  {
+    if(!OrderSelect(j, SELECT_BY_POS, MODE_TRADES)) continue;
+    if(OrderType() > OP_SELL) continue;
+    openCount++;
+  }
+  if(openCount == 0 && g_lastOpenCount == 0
+     && TimeCurrent() - g_lastLiveState < 30)
+    return;
+
+  string label = (StringLen(AccountLabel) > 0) ? AccountLabel : AccountName();
+  string body = "{";
+  body += Q("kind",           "live_state");
+  body += Q("account_number", IntegerToString(AccountNumber()));
+  body += Q("account_name",   label);
+  body += Q("broker",         AccountCompany());
+  body += Q("server",         AccountServer());
+  body += Q("platform",       "MT4");
+  body += Q("ticket",         "tick");
+
+  double balance     = AccountBalance();
+  double equity      = AccountEquity();
+  double margin      = AccountMargin();
+  double freeMargin  = AccountFreeMargin();
+  double marginLevel = (margin > 0.0) ? (equity / margin) * 100.0 : 0.0;
+  body += N("balance",          balance);
+  body += N("equity",           equity);
+  body += N("margin",           margin);
+  body += N("free_margin",      freeMargin);
+  body += N("margin_level_pct", marginLevel);
+
+  string posJson = "[";
+  double sumFloating = 0.0;
+  int posted = 0;
+  for(int i = 0; i < OrdersTotal(); i++)
+  {
+    if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+    if(OrderType() > OP_SELL) continue; // skip pending orders
+    string side      = (OrderType() == OP_BUY) ? "buy" : "sell";
+    double profit    = OrderProfit();
+    double swap      = OrderSwap();
+    double commission= OrderCommission();
+    sumFloating += profit + swap + commission;
+
+    if(posted > 0) posJson += ",";
+    posJson += "{";
+    posJson += Q("ticket",        IntegerToString(OrderTicket()));
+    posJson += Q("symbol",        OrderSymbol());
+    posJson += Q("type",          side);
+    posJson += N("lots",          OrderLots());
+    posJson += N("open_price",    OrderOpenPrice());
+    posJson += N("current_price", OrderClosePrice());
+    posJson += N("sl",            OrderStopLoss());
+    posJson += N("tp",            OrderTakeProfit());
+    posJson += N("profit",        profit);
+    posJson += N("swap",          swap);
+    posJson += N("commission",    commission);
+    posJson += Q("open_time",     FormatTime(OrderOpenTime()), true);
+    posJson += "}";
+    posted++;
+  }
+  posJson += "]";
+
+  body += "\"positions\":" + posJson + ",";
+  body += "\"open_positions_count\":" + IntegerToString(posted) + ",";
+  body += N("floating_pnl", sumFloating, true);
+  body += "}";
+
+  bool ok = PostJson(body);
+  g_lastLiveState = TimeCurrent();
+  g_lastOpenCount = posted;
+  if(VerboseLog)
+    Print("[Genesis] live_state posted=", posted, " floating=",
+          DoubleToString(sumFloating, 2), ok ? " ok" : " failed");
+}
+
+//+------------------------------------------------------------------+
 //| Walk open positions                                              |
 //+------------------------------------------------------------------+
 int ScanOpen()
@@ -437,6 +532,7 @@ int ScanHistory(bool ignoreHistoryCap = false)
 void OnTimer()
 {
   SendHeartbeat();
+  SendLiveState();
   ScanOpen();
   ScanHistory(false);
   g_lastPoll = TimeCurrent();
@@ -453,6 +549,11 @@ void OnTick()
     SendHeartbeat();
     g_firstTickPingSent = true;
   }
+
+  // Live-state has its own throttle (LiveStateSeconds, default 2s) so
+  // it runs more frequently than the 5s scan-debounce below.
+  SendLiveState();
+
   if(TimeCurrent() - g_lastPoll < 5) return;
   ScanOpen();
   ScanHistory(false);
