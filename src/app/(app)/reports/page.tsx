@@ -158,8 +158,8 @@ export default function ReportsPage() {
       {tab === "Risk" && <Risk trades={filtered} currency={filters.currency} />}
       {tab === "Wins vs Losses" && <WinsLosses trades={filtered} fmt={fmt} />}
       {tab === "Compare" && <Compare trades={filtered} fmt={fmt} />}
-      {tab === "Deep Stats" && <DeepStats trades={filtered} />}
-      {tab === "Performance by Lunar" && <LunarPerformance trades={filtered} />}
+      {tab === "Deep Stats" && <DeepStats trades={filtered} fmt={fmt} />}
+      {tab === "Performance by Lunar" && <LunarPerformance trades={filtered} fmt={fmt} />}
       {tab === "Calendar" && <CalendarView trades={filtered} fmt={fmt} />}
 
       {/* Live-state cards — shown on Overview when EA is streaming */}

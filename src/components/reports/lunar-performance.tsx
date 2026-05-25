@@ -1,6 +1,16 @@
 "use client";
 
 import { useMemo } from "react";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+  Legend
+} from "recharts";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import type { TradeRow } from "@/lib/supabase/types";
 import {
@@ -9,21 +19,109 @@ import {
 } from "@/lib/analytics/deep-stats";
 import { formatNumber } from "@/lib/utils";
 
-export function LunarPerformance({ trades }: { trades: TradeRow[] }) {
+type CcyFmt = (n: number | null | undefined) => string;
+
+export function LunarPerformance({ trades, fmt: ccyFmt }: { trades: TradeRow[]; fmt: CcyFmt }) {
   const phases = useMemo(() => performanceByLunarPhase(trades), [trades]);
   const best = useMemo(
     () => phases.reduce<LunarPhasePerformance | null>((b, p) => (!b || p.netPnl > b.netPnl ? p : b), null),
     [phases]
   );
+  const worst = useMemo(
+    () => phases.reduce<LunarPhasePerformance | null>((w, p) => (!w || p.netPnl < w.netPnl ? p : w), null),
+    [phases]
+  );
+
+  const chartData = useMemo(
+    () => phases.map((p) => ({
+      phase: p.phase,
+      glyph: p.glyph,
+      netPnl: p.netPnl,
+      wins: p.wins,
+      losses: p.losses,
+      winRate: p.winRate,
+      avgPnl: p.avgPnl
+    })),
+    [phases]
+  );
 
   return (
     <div className="space-y-4">
-      {/* 4-card grid — one per pair of phases (waxing/waning pairs) */}
+      {/* Best / Worst cycle highlight cards */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {best && best.trades > 0 && (
+          <CycleHighlight label="Best Lunar Cycle" phase={best} tone="success" ccyFmt={ccyFmt} />
+        )}
+        {worst && worst.trades > 0 && (
+          <CycleHighlight label="Worst Lunar Cycle" phase={worst} tone="danger" ccyFmt={ccyFmt} />
+        )}
+      </div>
+
+      {/* 4-card grid */}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {phases.map((p) => (
-          <PhaseCard key={p.phase} phase={p} isBest={best?.phase === p.phase && p.trades > 0} />
+          <PhaseCard
+            key={p.phase}
+            phase={p}
+            isBest={best?.phase === p.phase && p.trades > 0}
+            isWorst={worst?.phase === p.phase && p.trades > 0}
+            ccyFmt={ccyFmt}
+          />
         ))}
       </div>
+
+      {/* PnL by lunar phase bar chart */}
+      <Card>
+        <CardHeader><CardTitle>P&L by lunar phase</CardTitle></CardHeader>
+        <CardBody>
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={chartData} margin={{ top: 4, right: 4, bottom: 4, left: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)" />
+              <XAxis dataKey="glyph" tick={{ fontSize: 16 }} />
+              <YAxis tick={{ fontSize: 10 }} width={60} />
+              <Tooltip
+                cursor={{ fill: "transparent" }}
+                contentStyle={{ fontSize: 11 }}
+                formatter={(value: number) => ccyFmt(value)}
+                labelFormatter={(_, payload) => {
+                  const entry = payload?.[0]?.payload as { phase?: string } | undefined;
+                  return entry?.phase ?? "";
+                }}
+              />
+              <Bar dataKey="netPnl" name="Net P&L" fill="#0d9488" radius={[3, 3, 0, 0]}>
+                {chartData.map((entry, i) => (
+                  <rect key={i} fill={entry.netPnl >= 0 ? "#22c55e" : "#ef4444"} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </CardBody>
+      </Card>
+
+      {/* Win/Loss count by phase */}
+      <Card>
+        <CardHeader><CardTitle>Wins vs losses by phase</CardTitle></CardHeader>
+        <CardBody>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={chartData} margin={{ top: 4, right: 4, bottom: 4, left: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)" />
+              <XAxis dataKey="glyph" tick={{ fontSize: 16 }} />
+              <YAxis tick={{ fontSize: 10 }} width={40} />
+              <Tooltip
+                cursor={{ fill: "transparent" }}
+                contentStyle={{ fontSize: 11 }}
+                labelFormatter={(_, payload) => {
+                  const entry = payload?.[0]?.payload as { phase?: string } | undefined;
+                  return entry?.phase ?? "";
+                }}
+              />
+              <Legend wrapperStyle={{ fontSize: 10 }} />
+              <Bar dataKey="wins" name="Wins" fill="#22c55e" radius={[2, 2, 0, 0]} />
+              <Bar dataKey="losses" name="Losses" fill="#ef4444" radius={[2, 2, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </CardBody>
+      </Card>
 
       {/* Summary table */}
       <Card>
@@ -49,7 +147,7 @@ export function LunarPerformance({ trades }: { trades: TradeRow[] }) {
                 {phases.map((p) => (
                   <tr
                     key={p.phase}
-                    className="border-b border-line/50 last:border-0"
+                    className="border-b border-line/50 last:border-0 hover:bg-bg-soft/50"
                   >
                     <td className="px-3 py-2 font-medium">
                       <span className="mr-1.5 text-base">{p.glyph}</span>
@@ -62,10 +160,10 @@ export function LunarPerformance({ trades }: { trades: TradeRow[] }) {
                       {p.trades > 0 ? formatNumber(p.winRate, 1) + "%" : "\u2014"}
                     </td>
                     <td className={`px-3 py-2 text-right font-medium ${p.netPnl >= 0 ? "text-success" : "text-danger"}`}>
-                      {p.trades > 0 ? formatNumber(p.netPnl, 2) : "\u2014"}
+                      {p.trades > 0 ? ccyFmt(p.netPnl) : "\u2014"}
                     </td>
                     <td className="px-3 py-2 text-right">
-                      {p.trades > 0 ? formatNumber(p.avgPnl, 2) : "\u2014"}
+                      {p.trades > 0 ? ccyFmt(p.avgPnl) : "\u2014"}
                     </td>
                     <td className="px-3 py-2 text-right">
                       {p.trades > 0 ? formatNumber(p.profitFactor, 2) : "\u2014"}
@@ -107,15 +205,51 @@ export function LunarPerformance({ trades }: { trades: TradeRow[] }) {
   );
 }
 
-function PhaseCard({ phase, isBest }: { phase: LunarPhasePerformance; isBest: boolean }) {
+function CycleHighlight({ label, phase, tone, ccyFmt }: {
+  label: string;
+  phase: LunarPhasePerformance;
+  tone: "success" | "danger";
+  ccyFmt: CcyFmt;
+}) {
+  const ringCls = tone === "success" ? "ring-1 ring-success/40" : "ring-1 ring-danger/40";
+  const labelCls = tone === "success" ? "text-success" : "text-danger";
   return (
-    <Card className={isBest ? "ring-1 ring-brand-400/50" : ""}>
+    <Card className={ringCls}>
+      <CardBody className="flex items-center gap-4 p-4">
+        <span className="text-4xl">{phase.glyph}</span>
+        <div className="flex-1 space-y-1">
+          <div className={`text-xs font-semibold uppercase tracking-wide ${labelCls}`}>{label}</div>
+          <div className="text-base font-bold text-fg">{phase.phase}</div>
+          <div className="flex flex-wrap gap-3 text-xs text-fg-muted">
+            <span>{phase.trades} trades</span>
+            <span>{formatNumber(phase.winRate, 1)}% win rate</span>
+            <span className={phase.netPnl >= 0 ? "text-success" : "text-danger"}>
+              {ccyFmt(phase.netPnl)}
+            </span>
+            <span>PF {formatNumber(phase.profitFactor, 2)}</span>
+          </div>
+        </div>
+      </CardBody>
+    </Card>
+  );
+}
+
+function PhaseCard({ phase, isBest, isWorst, ccyFmt }: {
+  phase: LunarPhasePerformance;
+  isBest: boolean;
+  isWorst: boolean;
+  ccyFmt: CcyFmt;
+}) {
+  const ring = isBest ? "ring-1 ring-success/50" : isWorst ? "ring-1 ring-danger/50" : "";
+  return (
+    <Card className={ring}>
       <CardBody className="space-y-2 p-4">
         <div className="flex items-center gap-2">
           <span className="text-3xl">{phase.glyph}</span>
           <div>
             <div className="text-xs font-medium text-fg">{phase.phase}</div>
-            {isBest && <div className="text-[10px] text-brand-300">Best phase</div>}
+            {isBest && <div className="text-[10px] text-success">Best phase</div>}
+            {isWorst && <div className="text-[10px] text-danger">Worst phase</div>}
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2 text-center">
@@ -132,7 +266,7 @@ function PhaseCard({ phase, isBest }: { phase: LunarPhasePerformance; isBest: bo
           <div>
             <div className="text-[10px] text-fg-subtle">Net P&L</div>
             <div className={`text-sm font-semibold ${phase.netPnl >= 0 ? "text-success" : "text-danger"}`}>
-              {phase.trades > 0 ? formatNumber(phase.netPnl, 2) : "\u2014"}
+              {phase.trades > 0 ? ccyFmt(phase.netPnl) : "\u2014"}
             </div>
           </div>
           <div>

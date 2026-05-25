@@ -157,6 +157,37 @@ function computePlacements(dob: string): PlanetPlacement[] {
   return placements;
 }
 
+// ── Aspect detection ─────────────────────────────────────────────────
+
+type Aspect = { planet1: string; planet2: string; kind: string; glyph: string };
+
+const ASPECT_DEFS = [
+  { name: "Conjunction", angle: 0, orb: 10, glyph: "\u260C" },
+  { name: "Sextile", angle: 60, orb: 8, glyph: "\u26B9" },
+  { name: "Square", angle: 90, orb: 8, glyph: "\u25A1" },
+  { name: "Trine", angle: 120, orb: 8, glyph: "\u25B3" },
+  { name: "Opposition", angle: 180, orb: 10, glyph: "\u260D" },
+];
+
+function computeAspects(placements: PlanetPlacement[]): Aspect[] {
+  const aspects: Aspect[] = [];
+  for (let i = 0; i < placements.length; i++) {
+    for (let j = i + 1; j < placements.length; j++) {
+      const a = placements[i];
+      const b = placements[j];
+      let diff = Math.abs(a.longitude - b.longitude);
+      if (diff > 180) diff = 360 - diff;
+      for (const def of ASPECT_DEFS) {
+        if (Math.abs(diff - def.angle) <= def.orb) {
+          aspects.push({ planet1: a.name, planet2: b.name, kind: def.name, glyph: def.glyph });
+          break;
+        }
+      }
+    }
+  }
+  return aspects;
+}
+
 // ── SVG helpers ──────────────────────────────────────────────────────
 
 function polarToXY(cx: number, cy: number, r: number, angleDeg: number) {
@@ -176,6 +207,7 @@ export function NatalChartWheel({
   className?: string;
 }) {
   const placements = useMemo(() => computePlacements(dob), [dob]);
+  const aspects = useMemo(() => computeAspects(placements), [placements]);
 
   if (!placements.length) return null;
 
@@ -270,6 +302,36 @@ export function NatalChartWheel({
             </text>
           );
         })}
+
+        {/* Planetary alignments in centre */}
+        {aspects.length > 0 && (
+          <g>
+            <text
+              x={cx}
+              y={cy - (aspects.length * 7)}
+              textAnchor="middle"
+              fill="#aaa"
+              fontSize={9}
+              fontWeight={600}
+              letterSpacing={1}
+            >
+              ALIGNMENTS
+            </text>
+            {aspects.slice(0, 8).map((a, i) => (
+              <text
+                key={`${a.planet1}-${a.planet2}`}
+                x={cx}
+                y={cy - (aspects.length * 7) + 14 + i * 13}
+                textAnchor="middle"
+                fill="#ccc"
+                fontSize={8}
+                fontFamily="sans-serif"
+              >
+                {a.planet1} {a.glyph} {a.planet2}
+              </text>
+            ))}
+          </g>
+        )}
       </svg>
 
       <div className="mt-2 flex flex-wrap justify-center gap-x-3 gap-y-1 text-[10px] text-fg-subtle">
