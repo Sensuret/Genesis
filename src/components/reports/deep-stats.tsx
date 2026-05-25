@@ -518,8 +518,8 @@ function PnlChart({ title, data }: { title: string; data: BucketEntry[] }) {
               }}
             />
             <Legend wrapperStyle={{ fontSize: 10 }} />
-            <Bar dataKey="winPnl" name="Profit" fill="#4a86c8" radius={[2, 2, 0, 0]} />
-            <Bar dataKey="lossPnl" name="Loss" fill="#dc6868" radius={[2, 2, 0, 0]} />
+            <Bar dataKey="winPnl" name="Profit" fill="#22c55e" radius={[2, 2, 0, 0]} />
+            <Bar dataKey="lossPnl" name="Loss" fill="#ef4444" radius={[2, 2, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </CardBody>
