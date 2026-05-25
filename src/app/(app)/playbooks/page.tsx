@@ -11,6 +11,7 @@ import { Empty } from "@/components/ui/empty";
 import { Stat } from "@/components/ui/stat";
 import { useTrades } from "@/lib/hooks/use-trades";
 import { useFilters } from "@/lib/filters/store";
+import type { TradeFileRow } from "@/lib/supabase/types";
 import { applyAllFilters } from "@/lib/analytics";
 import { createClient } from "@/lib/supabase/client";
 import type { PlaybookRow, ResolutionItem } from "@/lib/supabase/types";
@@ -29,7 +30,7 @@ export default function PlaybooksPage() {
   const [loading, setLoading] = useState(true);
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
-  const { trades } = useTrades();
+  const { trades, files } = useTrades();
   const { filters } = useFilters();
 
   const filtered = useMemo(() => applyAllFilters(trades, filters), [trades, filters]);
@@ -115,6 +116,7 @@ export default function PlaybooksPage() {
               onDelete={() => deletePlaybook(pb.id)}
               onSaved={load}
               tradesForReport={filtered.filter((t) => t.playbook_id === pb.id)}
+              accounts={files}
             />
           ))}
         </div>
@@ -129,7 +131,8 @@ function PlaybookCard({
   onToggle,
   onDelete,
   onSaved,
-  tradesForReport
+  tradesForReport,
+  accounts
 }: {
   pb: PlaybookRow;
   open: boolean;
@@ -137,6 +140,7 @@ function PlaybookCard({
   onDelete: () => void;
   onSaved: () => void;
   tradesForReport: ReturnType<typeof applyAllFilters>;
+  accounts: TradeFileRow[];
 }) {
   const [name, setName] = useState(pb.name);
   const [description, setDescription] = useState(pb.description ?? "");
@@ -146,6 +150,9 @@ function PlaybookCard({
     () => hydrateBlocks(initialRules.notesBlocks, initialRules.notes)
   );
   const [aliasesText, setAliasesText] = useState(pb.symbol_aliases.join(", "));
+  const linkedAccountIds: string[] = Array.isArray((rules as Record<string, unknown>).linkedAccounts)
+    ? (rules as Record<string, unknown>).linkedAccounts as string[]
+    : [];
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
 
@@ -280,6 +287,41 @@ function PlaybookCard({
               }}
               placeholder="What makes a valid setup for this model?"
             />
+          </div>
+
+          <div className="space-y-3 rounded-xl border border-line bg-bg-elevated p-4">
+            <div className="text-sm font-medium">Linked accounts</div>
+            <p className="text-[11px] text-fg-subtle">
+              Tag accounts to sync with this playbook. Trades from linked accounts will be scored against these rules.
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {accounts.map((acct) => {
+                const label = acct.account_name || acct.name || acct.id.slice(0, 8);
+                const selected = linkedAccountIds.includes(acct.id);
+                return (
+                  <button
+                    key={acct.id}
+                    type="button"
+                    onClick={() => {
+                      const next = selected
+                        ? linkedAccountIds.filter((x) => x !== acct.id)
+                        : [...linkedAccountIds, acct.id];
+                      patchRules({ linkedAccounts: next } as Partial<PlaybookRules>);
+                    }}
+                    className={`rounded-full border px-3 py-1 text-xs ${
+                      selected
+                        ? "border-brand-400 bg-brand-500/15 text-fg"
+                        : "border-line bg-bg-elevated text-fg-subtle"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+              {accounts.length === 0 && (
+                <span className="text-[11px] text-fg-muted">No accounts imported yet.</span>
+              )}
+            </div>
           </div>
 
           <div className="space-y-3 rounded-xl border border-line bg-bg-elevated p-4">

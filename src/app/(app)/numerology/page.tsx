@@ -2681,59 +2681,24 @@ function GalaxyVisual({ className = "" }: { className?: string }) {
       className={`relative h-48 overflow-hidden rounded-2xl border border-line shadow-inner md:h-full ${className}`}
       aria-hidden
     >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/galaxy.jpg"
+        alt=""
+        className="absolute inset-0 h-full w-full object-cover animate-galaxy-drift"
+      />
       <div
         className="absolute inset-0"
         style={{
           background:
-            "radial-gradient(ellipse 120% 90% at 30% 30%, rgba(120,89,219,0.55) 0%, rgba(60,30,120,0.35) 30%, rgba(8,6,24,0.95) 65%, #050313 100%)"
+            "radial-gradient(ellipse 80% 60% at 50% 50%, transparent 30%, rgba(0,0,0,0.6) 100%)"
         }}
       />
-      <div
-        className="absolute inset-0 mix-blend-screen"
-        style={{
-          background:
-            "radial-gradient(ellipse 70% 50% at 70% 65%, rgba(255,160,200,0.35), transparent 60%), radial-gradient(ellipse 60% 40% at 25% 70%, rgba(80,200,255,0.25), transparent 65%)"
-        }}
-      />
-      <div className="absolute inset-0 opacity-90" style={{ background: galaxyStarsLayer1() }} />
-      <div className="absolute inset-0 opacity-70" style={{ background: galaxyStarsLayer2() }} />
-      <div className="absolute inset-0 animate-galaxy-twinkle opacity-80" style={{ background: galaxyStarsLayer3() }} />
-      <div className="absolute inset-x-0 bottom-0 p-3 text-[10px] uppercase tracking-[0.2em] text-fg-subtle">
+      <div className="absolute inset-x-0 bottom-0 p-3 text-[10px] uppercase tracking-[0.2em] text-white/60">
         cosmos · gēnēsis
       </div>
     </div>
   );
-}
-
-function galaxyStarsLayer1(): string {
-  const stars = [
-    [12, 18], [88, 22], [42, 9], [73, 14], [25, 41], [60, 35], [90, 55],
-    [8, 60], [33, 78], [55, 85], [78, 72], [18, 88], [66, 6], [50, 50],
-    [4, 32], [97, 41]
-  ];
-  return stars
-    .map(([x, y]) => `radial-gradient(circle at ${x}% ${y}%, rgba(255,255,255,0.95) 0px, rgba(255,255,255,0) 1.4px)`) 
-    .join(",");
-}
-
-function galaxyStarsLayer2(): string {
-  const stars = [
-    [22, 30], [70, 20], [82, 40], [38, 55], [12, 70], [58, 62], [85, 80],
-    [30, 88], [46, 28], [68, 48], [6, 18], [94, 64], [16, 50], [74, 90]
-  ];
-  return stars
-    .map(([x, y]) => `radial-gradient(circle at ${x}% ${y}%, rgba(220,200,255,0.7) 0px, rgba(220,200,255,0) 1px)`) 
-    .join(",");
-}
-
-function galaxyStarsLayer3(): string {
-  const stars = [
-    [9, 9], [49, 13], [83, 30], [28, 60], [62, 75], [40, 92], [88, 12],
-    [14, 42], [76, 58]
-  ];
-  return stars
-    .map(([x, y]) => `radial-gradient(circle at ${x}% ${y}%, rgba(255,236,180,0.95) 0px, rgba(255,236,180,0) 1.7px)`) 
-    .join(",");
 }
 
 /**

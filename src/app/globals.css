@@ -33,12 +33,12 @@
 
 .light {
   --bg: 255 255 255;
-  --bg-soft: 246 247 251;
+  --bg-soft: 243 244 248;
   --bg-elevated: 255 255 255;
-  --fg: 17 17 24;
-  --fg-muted: 75 75 95;
-  --fg-subtle: 130 130 150;
-  --line: 226 226 235;
+  --fg: 12 12 20;
+  --fg-muted: 55 55 72;
+  --fg-subtle: 85 85 105;
+  --line: 210 212 224;
   --hover: 138 58 255; /* purple hover preserved per spec */
   --positive: 22 163 74;
   --negative: 220 38 38;
@@ -142,6 +142,17 @@ body {
 }
 .animate-galaxy-twinkle {
   animation: gns-galaxy-twinkle 4.5s ease-in-out infinite;
+}
+
+@keyframes gns-galaxy-drift {
+  0%   { transform: scale(1.15) translate(0%, 0%); }
+  25%  { transform: scale(1.2) translate(-1.5%, -1%); }
+  50%  { transform: scale(1.18) translate(-0.5%, 1%); }
+  75%  { transform: scale(1.22) translate(1%, -0.5%); }
+  100% { transform: scale(1.15) translate(0%, 0%); }
+}
+.animate-galaxy-drift {
+  animation: gns-galaxy-drift 30s ease-in-out infinite;
 }
 
 /* While the View Transition is running, freeze regular element-level
