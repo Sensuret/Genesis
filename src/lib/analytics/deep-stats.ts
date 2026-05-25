@@ -765,7 +765,6 @@ export function generateCosmicInsights(trades: TradeRow[]): CosmicInsight[] {
     }
   }
 
-  const overallWinRate = winRate(trades);
   if (retroPerf.retrograde.trades >= 2) {
     const retroAvg = retroPerf.retrograde.avgPnl;
     const directAvg = retroPerf.direct.avgPnl;
