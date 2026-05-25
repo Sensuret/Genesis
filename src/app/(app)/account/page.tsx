@@ -28,6 +28,7 @@ export default function AccountPage() {
   const [profile, setProfile] = useState<Partial<ProfileRow>>({});
   const [newPassword, setNewPassword] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [joinedAt, setJoinedAt] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -37,6 +38,9 @@ export default function AccountPage() {
       if (!user) return;
       setUserId(user.id);
       setEmail(user.email ?? "");
+      if (user.created_at) {
+        setJoinedAt(new Date(user.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }));
+      }
       const { data } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
       if (data) setProfile(data);
       setLoading(false);
@@ -177,6 +181,12 @@ export default function AccountPage() {
               <Label>Email</Label>
               <Input value={email} disabled />
             </div>
+            {joinedAt && (
+              <div>
+                <Label>Joined</Label>
+                <div className="mt-1 text-sm text-fg-muted">{joinedAt}</div>
+              </div>
+            )}
             <div>
               <Label>Date of birth</Label>
               <Input

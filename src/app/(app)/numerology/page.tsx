@@ -2695,7 +2695,7 @@ function GalaxyVisual({ className = "" }: { className?: string }) {
         }}
       />
       <div className="absolute inset-x-0 bottom-0 p-3 text-[10px] uppercase tracking-[0.2em] text-white/60">
-        cosmos · gēnēsis
+        cosmos · g<span className="mirror-e">e</span>n<span className="mirror-e">e</span>sis
       </div>
     </div>
   );
