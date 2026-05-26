@@ -33,6 +33,8 @@ export type PlaybookRules = {
    *  across edits. Legacy playbooks without this field continue to
    *  render as their plain `notes`. */
   notesBlocks?: ResolutionItem[];
+  /** IDs of accounts linked/tagged to this playbook. */
+  linkedAccounts?: string[];
 };
 
 export const DEFAULT_RULES: PlaybookRules = {};
@@ -69,6 +71,9 @@ export function readRules(raw: Json | null | undefined): PlaybookRules {
   if (typeof r.rrTarget === "number") out.rrTarget = r.rrTarget;
   if (typeof r.notes === "string") out.notes = r.notes;
   if (isResolutionItemArray(r.notesBlocks)) out.notesBlocks = r.notesBlocks;
+  if (Array.isArray(r.linkedAccounts)) {
+    out.linkedAccounts = r.linkedAccounts.filter((x): x is string => typeof x === "string");
+  }
   return out;
 }
 

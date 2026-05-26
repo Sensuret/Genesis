@@ -118,6 +118,11 @@ export function LogHistorySection() {
     let cancelled = false;
     (async () => {
       const supabase = createClient();
+
+      // Auto-delete entries older than 14 days to reduce Supabase bandwidth.
+      const cutoff = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+      await supabase.from("audit_log").delete().lt("created_at", cutoff);
+
       const { data, error } = await supabase
         .from("audit_log")
         .select("*")

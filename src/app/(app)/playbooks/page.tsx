@@ -150,9 +150,7 @@ function PlaybookCard({
     () => hydrateBlocks(initialRules.notesBlocks, initialRules.notes)
   );
   const [aliasesText, setAliasesText] = useState(pb.symbol_aliases.join(", "));
-  const linkedAccountIds: string[] = Array.isArray((rules as Record<string, unknown>).linkedAccounts)
-    ? (rules as Record<string, unknown>).linkedAccounts as string[]
-    : [];
+  const linkedAccountIds: string[] = rules.linkedAccounts ?? [];
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
 
@@ -306,7 +304,7 @@ function PlaybookCard({
                       const next = selected
                         ? linkedAccountIds.filter((x) => x !== acct.id)
                         : [...linkedAccountIds, acct.id];
-                      patchRules({ linkedAccounts: next } as Partial<PlaybookRules>);
+                      patchRules({ linkedAccounts: next });
                     }}
                     className={`rounded-full border px-3 py-1 text-xs ${
                       selected

@@ -124,6 +124,38 @@ export function moonTradeNote(phase: MoonPhase): string {
   }
 }
 
+// ---------------------------------------------------------------------
+// Mercury Retrograde periods (pre-computed for 2024-2027).
+// Each entry is [start, end] as ISO date strings. Mercury appears to
+// move backward roughly 3 times per year for ~3 weeks each time.
+// ---------------------------------------------------------------------
+const MERCURY_RETROGRADES: Array<[string, string]> = [
+  ["2024-04-01", "2024-04-25"],
+  ["2024-08-05", "2024-08-28"],
+  ["2024-11-25", "2024-12-15"],
+  ["2025-03-15", "2025-04-07"],
+  ["2025-07-18", "2025-08-11"],
+  ["2025-11-09", "2025-11-29"],
+  ["2026-03-02", "2026-03-23"],
+  ["2026-07-02", "2026-07-26"],
+  ["2026-10-24", "2026-11-13"],
+  ["2027-02-13", "2027-03-07"],
+  ["2027-06-15", "2027-07-09"],
+  ["2027-10-07", "2027-10-28"],
+];
+
+export type MercuryStatus = "Retrograde" | "Direct";
+
+export function mercuryStatus(date: Date = new Date()): { status: MercuryStatus; label: string } {
+  const iso = date.toISOString().slice(0, 10);
+  for (const [start, end] of MERCURY_RETROGRADES) {
+    if (iso >= start && iso <= end) {
+      return { status: "Retrograde", label: "Mercury Retrograde" };
+    }
+  }
+  return { status: "Direct", label: "Mercury Direct" };
+}
+
 export const ALL_SIGNS: WesternSign[] = [
   "Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo",
   "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"

@@ -336,6 +336,14 @@ function MyProfile({
 }) {
   const [name, setName] = useState(profile?.full_name ?? "");
   const [dob, setDob] = useState(profile?.dob ?? "");
+  const [tob, setTob] = useState<string>(() => {
+    const d = profile?.data as Record<string, unknown> | null;
+    return typeof d?.timeOfBirth === "string" ? d.timeOfBirth : "";
+  });
+  const [tobFormat, setTobFormat] = useState<"12" | "24">(() => {
+    const d = profile?.data as Record<string, unknown> | null;
+    return d?.tobFormat === "12" ? "12" : "24";
+  });
   const [gender, setGender] = useState<Gender | "">(genderFromData(profile?.data) || "");
   const [lastPeriod, setLastPeriod] = useState<string>(lastPeriodFromData(profile?.data));
   const [cycleLength, setCycleLength] = useState<number>(cycleLengthFromData(profile?.data));
@@ -369,7 +377,9 @@ function MyProfile({
       gender: gender || undefined,
       lastPeriod: gender === "female" ? lastPeriod : undefined,
       cycleLength: gender === "female" ? cycleLength : undefined,
-      nicknames: cleanNicknames
+      nicknames: cleanNicknames,
+      timeOfBirth: tob || undefined,
+      tobFormat: tob ? tobFormat : undefined,
     };
     const { data, error } = await supabase
       .from("numerology_profiles")
@@ -410,6 +420,22 @@ function MyProfile({
                     className="w-full"
                     inputClassName="flex-1"
                   />
+                </div>
+                <div className="w-40">
+                  <Label>Time of birth <span className="text-fg-subtle">(optional)</span></Label>
+                  <Input
+                    type={tobFormat === "24" ? "time" : "time"}
+                    value={tob}
+                    onChange={(e) => setTob(e.target.value)}
+                    placeholder="HH:MM"
+                  />
+                </div>
+                <div className="w-24">
+                  <Label>Format</Label>
+                  <Select value={tobFormat} onChange={(e) => setTobFormat(e.target.value as "12" | "24")}>
+                    <option value="24">24hr</option>
+                    <option value="12">12hr</option>
+                  </Select>
                 </div>
                 <div className="w-48">
                   <Label>Gender</Label>
@@ -603,6 +629,8 @@ function Others({
     gender: Gender | "";
     lastPeriod: string;
     cycleLength: number;
+    tob: string;
+    tobFormat: "12" | "24";
   }>({
     full_name: "",
     nicknames: padNicknames([]),
@@ -610,7 +638,9 @@ function Others({
     relationship: "Friend",
     gender: "",
     lastPeriod: "",
-    cycleLength: 28
+    cycleLength: 28,
+    tob: "",
+    tobFormat: "24",
   });
   const [openId, setOpenId] = useState<string | null>(null);
 
@@ -629,7 +659,9 @@ function Others({
       gender: form.gender || undefined,
       lastPeriod: form.gender === "female" ? form.lastPeriod : undefined,
       cycleLength: form.gender === "female" ? form.cycleLength : undefined,
-      nicknames: cleanNicks
+      nicknames: cleanNicks,
+      timeOfBirth: form.tob || undefined,
+      tobFormat: form.tob ? form.tobFormat : undefined,
     };
     const { data, error } = await supabase
       .from("numerology_others")
@@ -652,7 +684,9 @@ function Others({
       relationship: "Friend",
       gender: "",
       lastPeriod: "",
-      cycleLength: 28
+      cycleLength: 28,
+      tob: "",
+      tobFormat: "24",
     });
     setAdding(false);
   }
@@ -744,6 +778,19 @@ function Others({
                 <Input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} />
               </div>
               <div><Label>DOB</Label><DatePicker value={form.dob} onChange={(next) => setForm({ ...form, dob: next })} max={new Date().toISOString().slice(0, 10)} className="w-full" inputClassName="flex-1" /></div>
+            </div>
+            <div className="grid gap-3 md:grid-cols-4">
+              <div>
+                <Label>Time of birth <span className="text-fg-subtle">(optional)</span></Label>
+                <Input type="time" value={form.tob} onChange={(e) => setForm({ ...form, tob: e.target.value })} placeholder="HH:MM" />
+              </div>
+              <div>
+                <Label>Format</Label>
+                <Select value={form.tobFormat} onChange={(e) => setForm({ ...form, tobFormat: e.target.value as "12" | "24" })}>
+                  <option value="24">24hr</option>
+                  <option value="12">12hr</option>
+                </Select>
+              </div>
               <div>
                 <Label>Relationship</Label>
                 <Select value={form.relationship} onChange={(e) => setForm({ ...form, relationship: e.target.value })}>
@@ -1836,6 +1883,8 @@ function Insights({ profile }: { profile: NumerologyProfileRow | null }) {
           <Block title="Cars to avoid" items={ins.avoidCars} variant="danger" />
           <Block title="Private jets to use" items={ins.useJets} variant="success" />
           <Block title="Private jets to avoid" items={ins.avoidJets} variant="danger" />
+          <Block title="Pets: good match" items={ins.usePets} variant="success" />
+          <Block title="Pets: avoid" items={ins.avoidPets} variant="danger" />
         </CardBody>
       </Card>
 
@@ -2695,7 +2744,7 @@ function GalaxyVisual({ className = "" }: { className?: string }) {
         }}
       />
       <div className="absolute inset-x-0 bottom-0 p-3 text-[10px] uppercase tracking-[0.2em] text-white/60">
-        cosmos · g<span className="mirror-e">e</span>n<span className="mirror-e">e</span>sis
+        cosmos · <span className="tracking-[0.08em]">g<span className="mirror-e">e</span>n<span className="mirror-e">e</span>sis</span>
       </div>
     </div>
   );

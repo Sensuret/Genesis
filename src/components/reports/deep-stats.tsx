@@ -452,16 +452,16 @@ export function DeepStats({ trades, fmt: ccyFmt }: { trades: TradeRow[]; fmt: Cc
 
       {/* Entry distribution charts */}
       <div className="grid gap-4 lg:grid-cols-3">
-        <EntryChart title="Entries by hours" data={hourly} />
-        <EntryChart title="Entries by weekdays" data={weekday} />
-        <EntryChart title="Entries by months" data={monthly} />
+        <EntryChart title="Entries by hours" data={hourly} ccyFmt={ccyFmt} />
+        <EntryChart title="Entries by weekdays" data={weekday} ccyFmt={ccyFmt} />
+        <EntryChart title="Entries by months" data={monthly} ccyFmt={ccyFmt} />
       </div>
 
       {/* Profit/loss charts */}
       <div className="grid gap-4 lg:grid-cols-3">
-        <PnlChart title="Profits and losses by hours" data={hourly} />
-        <PnlChart title="Profits and losses by weekdays" data={weekday} />
-        <PnlChart title="Profits and losses by months" data={monthly} />
+        <PnlChart title="Profits and losses by hours" data={hourly} ccyFmt={ccyFmt} />
+        <PnlChart title="Profits and losses by weekdays" data={weekday} ccyFmt={ccyFmt} />
+        <PnlChart title="Profits and losses by months" data={monthly} ccyFmt={ccyFmt} />
       </div>
     </div>
   );
@@ -469,7 +469,7 @@ export function DeepStats({ trades, fmt: ccyFmt }: { trades: TradeRow[]; fmt: Cc
 
 // -- Entry distribution bar chart -----------------------------------------
 
-function EntryChart({ title, data }: { title: string; data: BucketEntry[] }) {
+function EntryChart({ title, data, ccyFmt }: { title: string; data: BucketEntry[]; ccyFmt: CcyFmt }) {
   const mapped = data.map((d) => ({ ...d, short: shortLabel(d.label) }));
   return (
     <Card>
@@ -479,10 +479,14 @@ function EntryChart({ title, data }: { title: string; data: BucketEntry[] }) {
           <BarChart data={mapped} margin={{ top: 4, right: 4, bottom: 4, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)" />
             <XAxis dataKey="short" tick={{ fontSize: 9 }} interval="preserveStartEnd" />
-            <YAxis tick={{ fontSize: 9 }} width={40} />
+            <YAxis tick={{ fontSize: 9 }} width={40} tickFormatter={(v: number) => fmtNum(v, 0)} />
             <Tooltip
               cursor={{ fill: "transparent" }}
               contentStyle={{ fontSize: 11 }}
+              formatter={(value: number, name: string) => {
+                if (name === "Entries") return [fmtNum(value, 0), name];
+                return [ccyFmt(value), name];
+              }}
               labelFormatter={(_, payload) => {
                 const entry = payload?.[0]?.payload as BucketEntry | undefined;
                 return entry?.label ?? "";
@@ -498,7 +502,7 @@ function EntryChart({ title, data }: { title: string; data: BucketEntry[] }) {
 
 // -- Profit/loss grouped bar chart ----------------------------------------
 
-function PnlChart({ title, data }: { title: string; data: BucketEntry[] }) {
+function PnlChart({ title, data, ccyFmt }: { title: string; data: BucketEntry[]; ccyFmt: CcyFmt }) {
   const mapped = data.map((d) => ({ ...d, short: shortLabel(d.label) }));
   return (
     <Card>
@@ -508,10 +512,11 @@ function PnlChart({ title, data }: { title: string; data: BucketEntry[] }) {
           <BarChart data={mapped} margin={{ top: 4, right: 4, bottom: 4, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)" />
             <XAxis dataKey="short" tick={{ fontSize: 9 }} interval="preserveStartEnd" />
-            <YAxis tick={{ fontSize: 9 }} width={40} />
+            <YAxis tick={{ fontSize: 9 }} width={40} tickFormatter={(v: number) => fmtNum(v, 0)} />
             <Tooltip
               cursor={{ fill: "transparent" }}
               contentStyle={{ fontSize: 11 }}
+              formatter={(value: number, name: string) => [ccyFmt(value), name]}
               labelFormatter={(_, payload) => {
                 const entry = payload?.[0]?.payload as BucketEntry | undefined;
                 return entry?.label ?? "";

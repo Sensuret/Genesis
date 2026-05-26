@@ -97,7 +97,20 @@ export function LunarPerformance({ trades, fmt: ccyFmt }: { trades: TradeRow[]; 
         )}
       </div>
 
-      {/* Summary table — above charts */}
+      {/* 8 phase cards — 4 per row */}
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {phases.map((p) => (
+          <PhaseCard
+            key={p.phase}
+            phase={p}
+            isBest={best?.phase === p.phase && p.trades > 0}
+            isWorst={worst?.phase === p.phase && p.trades > 0}
+            ccyFmt={ccyFmt}
+          />
+        ))}
+      </div>
+
+      {/* Summary table */}
       <Card>
         <CardHeader>
           <CardTitle>Performance by lunar phase</CardTitle>
@@ -175,19 +188,6 @@ export function LunarPerformance({ trades, fmt: ccyFmt }: { trades: TradeRow[]; 
           </div>
         </CardBody>
       </Card>
-
-      {/* 4-card grid */}
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {phases.map((p) => (
-          <PhaseCard
-            key={p.phase}
-            phase={p}
-            isBest={best?.phase === p.phase && p.trades > 0}
-            isWorst={worst?.phase === p.phase && p.trades > 0}
-            ccyFmt={ccyFmt}
-          />
-        ))}
-      </div>
 
       {/* PnL by lunar phase bar chart */}
       <Card>

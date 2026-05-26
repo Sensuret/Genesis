@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, Pencil, Plus, Trash2, X } from "lucide-react";
+import { useMemo, useRef, useState, useCallback } from "react";
+import { ChevronDown, ChevronRight, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
@@ -129,6 +129,7 @@ export function ResolutionsTab({
 }: ResolutionsTabProps) {
   const [sub, setSub] = useState<SubTab>("create");
   const [openId, setOpenId] = useState<string | null>(null);
+  const [rotate3d, setRotate3d] = useState(false);
   const { current, passed } = useMemo(() => partition(resolutions), [resolutions]);
   const open = useMemo(
     () => resolutions.find((r) => r.id === openId) ?? null,
@@ -137,26 +138,44 @@ export function ResolutionsTab({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-line bg-bg-soft p-1 inline-flex">
-        <SubTabButton active={sub === "create"} onClick={() => setSub("create")}>
-          Create
-        </SubTabButton>
-        <SubTabButton active={sub === "created"} onClick={() => setSub("created")}>
-          Created
-          {current.length > 0 && (
-            <span className="ml-1.5 rounded-full bg-brand-500/20 px-1.5 py-0.5 text-[10px] text-brand-200">
-              {current.length}
-            </span>
-          )}
-        </SubTabButton>
-        <SubTabButton active={sub === "passed"} onClick={() => setSub("passed")}>
-          Time passed
-          {passed.length > 0 && (
-            <span className="ml-1.5 rounded-full bg-fg-subtle/20 px-1.5 py-0.5 text-[10px] text-fg-subtle">
-              {passed.length}
-            </span>
-          )}
-        </SubTabButton>
+      <div className="flex items-center gap-3">
+        <div className="rounded-xl border border-line bg-bg-soft p-1 inline-flex">
+          <SubTabButton active={sub === "create"} onClick={() => setSub("create")}>
+            Create
+          </SubTabButton>
+          <SubTabButton active={sub === "created"} onClick={() => setSub("created")}>
+            Created
+            {current.length > 0 && (
+              <span className="ml-1.5 rounded-full bg-brand-500/20 px-1.5 py-0.5 text-[10px] text-brand-200">
+                {current.length}
+              </span>
+            )}
+          </SubTabButton>
+          <SubTabButton active={sub === "passed"} onClick={() => setSub("passed")}>
+            Time passed
+            {passed.length > 0 && (
+              <span className="ml-1.5 rounded-full bg-fg-subtle/20 px-1.5 py-0.5 text-[10px] text-fg-subtle">
+                {passed.length}
+              </span>
+            )}
+          </SubTabButton>
+        </div>
+        {sub !== "create" && (
+          <button
+            type="button"
+            onClick={() => setRotate3d((p) => !p)}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition",
+              rotate3d
+                ? "border-brand-400 bg-brand-500/15 text-brand-200"
+                : "border-line bg-bg-soft text-fg-muted hover:text-fg"
+            )}
+            title="Toggle 3D card rotation"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            3D
+          </button>
+        )}
       </div>
 
       {sub === "create" && (
@@ -180,6 +199,7 @@ export function ResolutionsTab({
             onChange(resolutions.map((r) => (r.id === next.id ? next : r)))
           }
           readOnly={false}
+          rotate3d={rotate3d}
         />
       )}
 
@@ -194,6 +214,7 @@ export function ResolutionsTab({
             onChange(resolutions.map((r) => (r.id === next.id ? next : r)))
           }
           readOnly
+          rotate3d={rotate3d}
         />
       )}
 
@@ -246,7 +267,8 @@ function ResolutionGrid({
   onOpen,
   onDelete,
   onUpdate,
-  readOnly = false
+  readOnly = false,
+  rotate3d = false
 }: {
   resolutions: Resolution[];
   emptyTitle: string;
@@ -256,6 +278,8 @@ function ResolutionGrid({
   onUpdate: (next: Resolution) => void;
   /** Time-passed grid → tick-boxes are frozen and the card is view-only. */
   readOnly?: boolean;
+  /** When true, cards slowly rotate in 3D via CSS animation. */
+  rotate3d?: boolean;
 }) {
   if (!resolutions.length) {
     return <Empty title={emptyTitle} description={emptyDescription} />;
@@ -302,15 +326,20 @@ function ResolutionGrid({
   }
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-      {resolutions.map((r) => (
-        <div key={r.id} className="group relative">
-          {/*
-           * Outer card is no longer a single <button> — that breaks
-           * nested-button semantics for the now-clickable bullet
-           * checkboxes. Click anywhere on the card surface that isn't
-           * a checkbox to open the modal.
-           */}
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3" style={rotate3d ? { perspective: "1200px" } : undefined}>
+      {resolutions.map((r, idx) => (
+        <div
+          key={r.id}
+          className="group relative"
+          style={
+            rotate3d
+              ? {
+                  animation: `gs-card-rotate3d 8s ease-in-out ${idx * 0.4}s infinite`,
+                  transformStyle: "preserve-3d" as const,
+                }
+              : undefined
+          }
+        >
           <div
             role="button"
             tabIndex={0}

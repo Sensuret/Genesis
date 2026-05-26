@@ -315,6 +315,8 @@ const INSIGHTS: Record<
     avoidCars: string[];
     useJets: string[];
     avoidJets: string[];
+    usePets: string[];
+    avoidPets: string[];
   }
 > = {
   1: {
@@ -355,7 +357,12 @@ const INSIGHTS: Record<
       "Cessna Citation Mustang (too small for the energy)",
       "Eclipse 500 / 550", "Honda HA-420 HondaJet (commuter range)",
       "Embraer Phenom 100"
-    ]
+    ],
+    usePets: ["German Shepherd", "Doberman", "Rottweiler", "Belgian Malinois",
+      "Akita", "Rhodesian Ridgeback", "Arabian Horse", "Thoroughbred Horse",
+      "Falcon (falconry)", "Bengal Cat", "Savannah Cat"],
+    avoidPets: ["Goldfish", "Hamster", "Guinea Pig", "Hermit Crab",
+      "Tortoise", "Budgerigar"]
   },
   2: {
     useCities: [
@@ -393,7 +400,12 @@ const INSIGHTS: Record<
     avoidJets: [
       "Eclipse 500", "Cirrus Vision Jet (too solo for the relational 2)",
       "Cessna Citation M2"
-    ]
+    ],
+    usePets: ["Golden Retriever", "Cavalier King Charles Spaniel", "Ragdoll Cat",
+      "Persian Cat", "Bichon Frise", "Shih Tzu", "Rabbit",
+      "Cockatiel", "Lovebird", "Miniature Horse", "Koi Fish"],
+    avoidPets: ["Pit Bull Terrier", "Cane Corso", "Dogo Argentino",
+      "Wolf Hybrid", "Venomous Snakes", "Monitor Lizard"]
   },
   3: {
     useCities: [
@@ -430,7 +442,12 @@ const INSIGHTS: Record<
     avoidJets: [
       "Boeing BBJ (overkill for creative use)", "Airbus ACJ319 (overkill)",
       "old turboprop King Air on long legs"
-    ]
+    ],
+    usePets: ["Parrot (African Grey)", "Macaw", "Cockatoo", "Poodle (Standard)",
+      "French Bulldog", "Corgi", "Dalmatian", "Siamese Cat",
+      "Sphynx Cat", "Ferret", "Miniature Pig"],
+    avoidPets: ["Tarantula", "Scorpion", "Stick Insect",
+      "Tortoise", "Iguana", "Bearded Dragon"]
   },
   4: {
     useCities: [
@@ -470,7 +487,13 @@ const INSIGHTS: Record<
       "Eclipse 500 (out-of-production support gap)",
       "Cirrus Vision Jet (single-engine for a 4 is too risk-on)",
       "old Hawker 700 on long legs"
-    ]
+    ],
+    usePets: ["Labrador Retriever", "Border Collie", "Australian Shepherd",
+      "Bernese Mountain Dog", "Clydesdale Horse", "Shire Horse",
+      "British Shorthair Cat", "Maine Coon Cat", "Chicken (laying hens)",
+      "Goat (Alpine, Nubian)", "Donkey"],
+    avoidPets: ["Monkey (Capuchin)", "Sugar Glider", "Fennec Fox",
+      "Exotic short-lived insects", "Piranha", "Axolotl"]
   },
   5: {
     useCities: [
@@ -508,7 +531,13 @@ const INSIGHTS: Record<
     avoidJets: [
       "Boeing BBJ (over-committed for nomad lifestyle)",
       "Airbus ACJ319 (over-committed)", "fractional Eclipse shares"
-    ]
+    ],
+    usePets: ["Jack Russell Terrier", "Whippet", "Vizsla", "Weimaraner",
+      "Australian Cattle Dog", "Abyssinian Cat", "Bengal Cat",
+      "Parrot (any talking breed)", "Mustang Horse", "Gecko (Leopard)",
+      "Ferret", "Sugar Glider"],
+    avoidPets: ["Bloodhound", "Basset Hound", "English Bulldog",
+      "Tortoise", "Giant Land Snail", "Hermit Crab"]
   },
   6: {
     useCities: [
@@ -545,7 +574,13 @@ const INSIGHTS: Record<
     avoidJets: [
       "Eclipse 500", "Cirrus Vision Jet (too solo for family 6)",
       "old Citation II"
-    ]
+    ],
+    usePets: ["Golden Retriever", "Labrador Retriever", "Beagle", "Cocker Spaniel",
+      "Newfoundland", "Saint Bernard", "Ragdoll Cat", "Scottish Fold Cat",
+      "Rabbit (Holland Lop)", "Chicken (Silkie)", "Goat (Pygmy, Nigerian Dwarf)",
+      "Miniature Horse", "Duck (Pekin)"],
+    avoidPets: ["Wolf Hybrid", "Cane Corso", "Pit Bull (untrained)",
+      "Venomous Snakes", "Scorpion", "Tarantula"]
   },
   7: {
     useCities: [
@@ -584,7 +619,13 @@ const INSIGHTS: Record<
     avoidJets: [
       "Boeing BBJ", "Airbus ACJ", "Gulfstream G700 (too loud for 7's energy)",
       "any flag-painted private jet"
-    ]
+    ],
+    usePets: ["Cat (any independent breed)", "Russian Blue Cat", "Norwegian Forest Cat",
+      "Shiba Inu", "Basenji", "Greyhound", "Borzoi",
+      "Owl (educational permit)", "Hawk (falconry)", "Koi Fish",
+      "Betta Fish", "Horse (Arabian)"],
+    avoidPets: ["Parrot (loud species)", "Macaw", "Cockatoo",
+      "Beagle (vocal)", "Husky (vocal)", "Chihuahua (vocal)"]
   },
   8: {
     useCities: [
@@ -625,7 +666,13 @@ const INSIGHTS: Record<
     avoidJets: [
       "Cessna Citation Mustang (too small)", "Honda HA-420 (commuter)",
       "Eclipse 500", "Phenom 100 EV"
-    ]
+    ],
+    usePets: ["Cane Corso", "Great Dane", "Doberman", "Rottweiler",
+      "English Mastiff", "Friesian Horse", "Andalusian Horse",
+      "Savannah Cat", "Maine Coon Cat", "Falcon (falconry)",
+      "Koi Fish (large pond)", "German Shepherd"],
+    avoidPets: ["Hamster", "Gerbil", "Goldfish (bowl)",
+      "Guinea Pig", "Hermit Crab", "Budgerigar"]
   },
   9: {
     useCities: [
@@ -665,7 +712,14 @@ const INSIGHTS: Record<
     avoidJets: [
       "Boeing BBJ (carbon profile)", "Airbus ACJ (carbon profile)",
       "Gulfstream G700 (carbon profile vs 9's mission)"
-    ]
+    ],
+    usePets: ["Rescue Dog (any breed)", "Rescue Cat (any breed)", "Greyhound (retired racer)",
+      "Horse (rescue/rehab)", "Donkey (sanctuary)", "Goat (sanctuary)",
+      "Chicken (rescue battery hens)", "Rabbit (rescue)",
+      "Cow (sanctuary)", "Pig (sanctuary)"],
+    avoidPets: ["Exotic wild-caught animals", "Puppy-mill breeds",
+      "Wild-caught Parrots", "Ivory-trade-adjacent exotics",
+      "Poached reptiles", "Wild-caught Primates"]
   },
   11: {
     useCities: [
@@ -704,6 +758,12 @@ const INSIGHTS: Record<
       "Boeing BBJ", "Airbus ACJ319",
       "any tail-painted high-attention private jet — 11s do better invisible"
     ],
+    usePets: ["Cat (Siamese, Burmese)", "Russian Blue Cat", "Ragdoll Cat",
+      "Whippet", "Borzoi", "Saluki", "Greyhound",
+      "Dove", "Koi Fish", "Horse (Arabian)", "Rabbit (Flemish Giant)"],
+    avoidPets: ["Pit Bull (aggressive-trained)", "Rottweiler (guard-trained)",
+      "Doberman (attack-trained)", "Fighting breeds (any)",
+      "Venomous Snakes", "Aggressive Macaw"]
   },
   22: {
     useCities: [
@@ -745,7 +805,13 @@ const INSIGHTS: Record<
     avoidJets: [
       "Cessna Citation Mustang", "Honda HA-420 HondaJet (commuter range)",
       "Eclipse 500"
-    ]
+    ],
+    usePets: ["German Shepherd", "Belgian Malinois", "Labrador Retriever",
+      "Great Dane", "Bernese Mountain Dog", "Clydesdale Horse",
+      "Shire Horse", "Friesian Horse", "Maine Coon Cat",
+      "Chicken (heritage breeds)", "Goat (dairy breeds)", "Cattle (Angus, Hereford)"],
+    avoidPets: ["Teacup breeds (fragile)", "Chihuahua", "Pomeranian",
+      "Toy Poodle", "Goldfish (bowl)", "Hamster"]
   },
   33: {
     useCities: [
@@ -786,7 +852,14 @@ const INSIGHTS: Record<
     avoidJets: [
       "vinyl-wrap loud-livery jets",
       "Boeing BBJ with maximalist interior fit-out"
-    ]
+    ],
+    usePets: ["Golden Retriever", "Cavalier King Charles Spaniel", "Bernese Mountain Dog",
+      "Newfoundland", "Great Pyrenees", "Ragdoll Cat", "Birman Cat",
+      "Dove", "Horse (gentle breeds)", "Goat (Pygmy)",
+      "Rabbit (any docile breed)", "Chicken (Silkie, Orpington)"],
+    avoidPets: ["Wolf Hybrid", "Aggressive guard breeds (attack-trained)",
+      "Venomous Snakes", "Scorpion",
+      "Wild-caught exotics", "Fighting breeds"]
   }
 };
 

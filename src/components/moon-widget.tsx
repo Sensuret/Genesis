@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { Card } from "@/components/ui/card";
-import { lunarForecast, moonPhase, moonTradeNote } from "@/lib/astrology";
+import { lunarForecast, moonPhase, moonTradeNote, mercuryStatus } from "@/lib/astrology";
 
 type Props = {
   /** Date the moon phase should be computed for. Defaults to today. */
@@ -15,6 +15,7 @@ export function MoonWidget({ date, hideTradeNote }: Props = {}) {
   const target = useMemo(() => date ?? new Date(), [date]);
   const { phase, illumination, emoji } = moonPhase(target);
   const forecast = useMemo(() => lunarForecast(7, target), [target]);
+  const mercury = useMemo(() => mercuryStatus(target), [target]);
   const isToday = !date || sameDay(date, new Date());
 
   return (
@@ -42,8 +43,15 @@ export function MoonWidget({ date, hideTradeNote }: Props = {}) {
         <div className="text-5xl">{emoji}</div>
       </div>
       {!hideTradeNote && (
-        <div className="mb-3 rounded-xl border border-line bg-bg-soft/60 p-3 text-xs text-fg-muted">
-          {moonTradeNote(phase)}
+        <div className="mb-3 flex items-start justify-between gap-3 rounded-xl border border-line bg-bg-soft/60 p-3 text-xs text-fg-muted">
+          <span>{moonTradeNote(phase)}</span>
+          <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+            mercury.status === "Retrograde"
+              ? "border-amber-500/40 bg-amber-500/10 text-amber-400"
+              : "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
+          }`}>
+            ☿ {mercury.status}
+          </span>
         </div>
       )}
       <div className="flex justify-between">
