@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useCallback } from "react";
+import { useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
