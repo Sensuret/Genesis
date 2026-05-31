@@ -1,2 +1,5 @@
-import { Recap } from "@/components/recap";
-export default function Page() { return <Recap period="month" />; }
+import { redirect } from "next/navigation";
+
+export default function MonthlyRedirect() {
+  redirect("/recaps?period=Month");
+}

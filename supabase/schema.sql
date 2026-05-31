@@ -30,9 +30,15 @@ create table if not exists public.profiles (
   dob date,
   default_currency text default 'USD',
   starting_balance numeric default 0,
+  notebook_url text,
+  theme text default 'dark',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- v2 additions (idempotent)
+alter table public.profiles add column if not exists notebook_url text;
+alter table public.profiles add column if not exists theme text default 'dark';
 
 alter table public.profiles enable row level security;
 
