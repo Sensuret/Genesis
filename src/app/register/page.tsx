@@ -30,7 +30,7 @@ export default function RegisterPage() {
   // belonged to.
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(({ data }: { data: { session: unknown } }) => {
       if (data.session) {
         supabase.auth.signOut({ scope: "local" });
       }

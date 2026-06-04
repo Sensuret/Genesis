@@ -378,7 +378,12 @@ export function dailyEquityCurve(trades: TradeRow[], start = 0): EquityPoint[] {
 /** Account balance over time — last balance per day when imports include it; otherwise cumulative from a starting balance. */
 export function dailyAccountBalanceCurve(
   trades: TradeRow[],
-  options?: { fileBalance?: number | null; startingBalance?: number | null }
+  options?: {
+    fileBalance?: number | null;
+    startingBalance?: number | null;
+    /** When imports have no balance column, build from zero (or file footer balance minus P&L). */
+    zeroBase?: boolean;
+  }
 ): EquityPoint[] {
   const sorted = sortByDate(trades);
   const byDay = new Map<string, number>();
@@ -405,7 +410,12 @@ export function dailyAccountBalanceCurve(
       .map((t) => t.account_balance)
       .filter((b): b is number => b != null && Number.isFinite(b));
     if (withBal.length) start = withBal[withBal.length - 1]! - total;
-    else start = 10_000;
+    else if (options?.zeroBase) {
+      start =
+        options.fileBalance != null && Number.isFinite(options.fileBalance)
+          ? options.fileBalance - total
+          : 0;
+    } else start = 10_000;
   }
 
   const curve = dailyEquityCurve(sorted, start);

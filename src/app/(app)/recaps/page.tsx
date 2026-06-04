@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import Link from "next/link";
+import { useMemo, useRef, useState } from "react";import Link from "next/link";
 import { CalendarRange, ArrowRight } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
@@ -186,7 +185,7 @@ export default function RecapsPage() {
       </div>
 
       <div ref={captureRef} className="space-y-6">
-      <Card>
+      <Card className="overflow-hidden">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Score Board</CardTitle>
           <div className="flex items-center gap-1 rounded-xl border border-line bg-bg-elevated p-1">
@@ -223,7 +222,7 @@ export default function RecapsPage() {
                 />
               </div>
 
-              <div className="overflow-x-auto rounded-xl border border-line">
+              <div className="-mx-1 overflow-x-auto px-1 sm:overflow-visible">
                 <table className="w-full text-left text-sm">
                   <thead className="border-b border-line bg-bg-soft/50 text-xs text-fg-subtle">
                     <tr>
@@ -247,8 +246,9 @@ export default function RecapsPage() {
           )}
         </CardBody>
       </Card>
+      </div>
 
-      <Card>
+      <Card data-screenshot-ignore="true">
         <CardHeader>
           <CardTitle>Period Recaps</CardTitle>
         </CardHeader>
@@ -276,7 +276,6 @@ export default function RecapsPage() {
           ))}
         </CardBody>
       </Card>
-      </div>
     </div>
   );
 }

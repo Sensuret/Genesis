@@ -10,11 +10,6 @@ export type LiveState = {
   loading: boolean;
 };
 
-/**
- * Subscribe to open_positions + ea_account_snapshots via Supabase Realtime.
- * Gracefully returns empty state if the tables don't exist yet (migration
- * not run) — no crash, no error banner.
- */
 export function useLiveState(): LiveState {
   const [positions, setPositions] = useState<OpenPositionRow[]>([]);
   const [snapshot, setSnapshot] = useState<AccountSnapshotRow | null>(null);
@@ -32,8 +27,6 @@ export function useLiveState(): LiveState {
       }
       const userId = userData.user.id;
 
-      // Initial fetch — wrapped in try/catch so a missing table (migration
-      // not yet run) doesn't crash the page.
       try {
         const [posRes, snapRes] = await Promise.all([
           supabase
@@ -49,6 +42,7 @@ export function useLiveState(): LiveState {
             .limit(1)
             .maybeSingle()
         ]);
+
         if (!cancelled) {
           setPositions((posRes.data as OpenPositionRow[]) ?? []);
           setSnapshot((snapRes.data as AccountSnapshotRow) ?? null);
@@ -56,9 +50,9 @@ export function useLiveState(): LiveState {
       } catch {
         // Tables don't exist yet — graceful empty state.
       }
+
       if (!cancelled) setLoading(false);
 
-      // Realtime subscriptions
       const channel = supabase
         .channel("live-state")
         .on(
@@ -70,14 +64,13 @@ export function useLiveState(): LiveState {
             filter: `user_id=eq.${userId}`
           },
           () => {
-            // Re-fetch full set on any change to avoid partial state
             supabase
               .from("open_positions")
               .select("*")
               .eq("user_id", userId)
               .order("last_tick_at", { ascending: false })
-              .then(({ data }) => {
-                if (!cancelled) setPositions((data as OpenPositionRow[]) ?? []);
+              .then(({ data }: { data: OpenPositionRow[] | null }) => {
+                if (!cancelled) setPositions(data ?? []);
               });
           }
         )
@@ -89,7 +82,7 @@ export function useLiveState(): LiveState {
             table: "ea_account_snapshots",
             filter: `user_id=eq.${userId}`
           },
-          (payload) => {
+          (payload: { new: AccountSnapshotRow }) => {
             if (!cancelled) setSnapshot(payload.new as AccountSnapshotRow);
           }
         )

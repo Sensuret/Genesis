@@ -142,7 +142,7 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
             table: "profiles",
             filter: `id=eq.${user.id}`
           },
-          (payload) => {
+          (payload: { new: Record<string, unknown> }) => {
             const next = (payload.new as Record<string, unknown>)?.locale as
               | string
               | null

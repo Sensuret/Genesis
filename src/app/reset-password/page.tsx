@@ -17,10 +17,6 @@ export default function ResetPasswordPage() {
   const [done, setDone] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // When Supabase redirects to this page, it includes a recovery `code` (PKCE)
-  // or a hashed access_token (legacy). Either way we need an authenticated
-  // session before we can call updateUser. We listen for the recovery event;
-  // if a valid recovery session is present we mark the form as `ready`.
   useEffect(() => {
     const supabase = createClient();
     const url = new URL(window.location.href);
@@ -40,7 +36,7 @@ export default function ResetPasswordPage() {
     }
     init();
 
-    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event: string) => {
       if (event === "PASSWORD_RECOVERY" || event === "SIGNED_IN") {
         setReady(true);
       }

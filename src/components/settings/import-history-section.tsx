@@ -23,17 +23,6 @@ const SYNC_KIND_TONE: Record<NonNullable<TradeFileRow["sync_kind"]>, string> = {
   broker_api: "border-violet-400/40 bg-violet-500/15 text-violet-200"
 };
 
-/**
- * Settings → Import history.
- *
- * Read-only audit view that combines two data sources:
- *  - `trade_files` (current rows) → one entry per imported / EA-synced
- *    account with rows imported, broker, broker timezone, source format.
- *  - `audit_log` filtered to `trade_file.deleted` → so deleted files are
- *    not silently lost from the trail.
- *
- * Stays in sync with realtime updates via the existing TradesProvider.
- */
 export function ImportHistorySection() {
   const { files } = useTrades();
   const [deletedEntries, setDeletedEntries] = useState<AuditLogRow[]>([]);
@@ -52,12 +41,11 @@ export function ImportHistorySection() {
         .limit(200);
       if (cancelled) return;
       if (err) {
-        // Schema may not be applied yet — degrade gracefully.
         setError(null);
         setDeletedEntries([]);
         return;
       }
-      const deleted = (data ?? []).filter((d) => d.event_type === "trade_file.deleted");
+      const deleted = (data ?? []).filter((d: { event_type: string }) => d.event_type === "trade_file.deleted");
       setDeletedEntries(deleted as AuditLogRow[]);
     })();
     return () => {

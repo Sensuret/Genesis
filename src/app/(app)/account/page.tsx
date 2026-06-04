@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { createClient } from "@/lib/supabase/client";
+import { getBrowserUser } from "@/lib/supabase/session-user";
 import type { ProfileRow } from "@/lib/supabase/types";
 import { AlertTriangle, Settings as SettingsIcon, User } from "lucide-react";
 import { NatalChartWheel } from "@/components/numerology/natal-chart-wheel";
@@ -33,10 +34,9 @@ export default function AccountPage() {
 
   useEffect(() => {
     (async () => {
-      const supabase = createClient();
-      const { data: userData } = await supabase.auth.getUser();
-      const user = userData.user;
+      const user = await getBrowserUser();
       if (!user) return;
+      const supabase = createClient();
       setUserId(user.id);
       setEmail(user.email ?? "");
       if (user.created_at) {

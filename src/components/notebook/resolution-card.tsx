@@ -3,7 +3,10 @@
 import { useState, type CSSProperties, type ReactNode } from "react";
 import { ChevronRight, Flag, Megaphone, Quote as QuoteIcon } from "lucide-react";
 import { chineseZodiacEmoji, chineseZodiacOf } from "@/lib/zodiac";
-import { resolveBackgroundCss } from "@/lib/notebook/resolution-backgrounds";
+import {
+  defaultResolutionExportBg,
+  resolveBackgroundCss
+} from "@/lib/notebook/resolution-backgrounds";
 import { sanitizeInlineHtml } from "@/lib/notebook/rich-text";
 import type {
   Resolution,
@@ -149,8 +152,12 @@ export function ResolutionCard({
       ? "border-amber-700/50 bg-amber-400/95 text-amber-950 shadow-sm"
       : "border-amber-500/30 bg-gradient-to-r from-amber-500/30 via-amber-400/20 to-amber-300/10 text-amber-100";
 
+  const exportBg = bg?.exportSolid ?? defaultResolutionExportBg();
+
   return (
     <div
+      data-resolution-card
+      data-export-bg={exportBg}
       className={cn(
         "relative rounded-2xl border border-line shadow-card",
         !bg && "bg-bg-elevated text-fg",

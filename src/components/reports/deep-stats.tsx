@@ -139,10 +139,16 @@ function VisualSummary({
   const commissions = trades.reduce((s, t) => s + (t.commissions ?? 0), 0);
   const dividends = 0;
 
-  const balanceCurve = useMemo(
-    () => dailyAccountBalanceCurve(trades, { fileBalance, startingBalance }),
-    [trades, fileBalance, startingBalance]
-  );
+  const balanceCurve = useMemo(() => {
+    const hasPerTradeBalance = trades.some(
+      (t) => t.account_balance != null && Number.isFinite(t.account_balance)
+    );
+    return dailyAccountBalanceCurve(trades, {
+      fileBalance,
+      startingBalance,
+      zeroBase: !hasPerTradeBalance
+    });
+  }, [trades, fileBalance, startingBalance]);
 
   const tradesPerWeek = useMemo(() => {
     if (trades.length < 2) return 0;

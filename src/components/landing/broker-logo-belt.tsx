@@ -4,7 +4,7 @@ import { LANDING_BROKER_LOGOS } from "@/components/landing/broker-logos";
 function LogoItem({ name, logo, wide }: (typeof LANDING_BROKER_LOGOS)[number]) {
   return (
     <div
-      className="flex h-11 shrink-0 items-center justify-center px-5 sm:h-12"
+      className="broker-ticker-item flex h-11 shrink-0 items-center justify-center px-6 sm:h-12"
       title={name}
     >
       <Image
@@ -23,21 +23,24 @@ function LogoItem({ name, logo, wide }: (typeof LANDING_BROKER_LOGOS)[number]) {
 }
 
 type BrokerLogoBeltProps = {
-  /** Tighter animation for feature cards. */
   compact?: boolean;
   className?: string;
 };
 
-/** Seamless scrolling broker/platform logos — no frames, duplicated track for infinite loop. */
+/** Seamless infinite broker belt — tripled track, no frames. */
 export function BrokerLogoBelt({ compact, className }: BrokerLogoBeltProps) {
-  const track = [...LANDING_BROKER_LOGOS, ...LANDING_BROKER_LOGOS];
+  const track = [
+    ...LANDING_BROKER_LOGOS,
+    ...LANDING_BROKER_LOGOS,
+    ...LANDING_BROKER_LOGOS
+  ];
 
   return (
     <div className={className}>
       <div className="broker-ticker-mask relative overflow-hidden">
         <div
-          className="broker-ticker-track flex w-max items-center"
-          style={compact ? { animationDuration: "36s" } : undefined}
+          className="broker-ticker-track flex w-max items-center will-change-transform"
+          style={compact ? { animationDuration: "40s" } : { animationDuration: "55s" }}
         >
           {track.map((b, i) => (
             <LogoItem key={`${b.name}-${i}`} {...b} />

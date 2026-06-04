@@ -2,6 +2,7 @@
 
 import { useState, type RefObject } from "react";
 import { Camera, Check, Loader2 } from "lucide-react";
+import { defaultResolutionExportBg } from "@/lib/notebook/resolution-backgrounds";
 import { cn } from "@/lib/utils";
 
 type ScreenshotButtonProps = {
@@ -15,16 +16,43 @@ type ScreenshotButtonProps = {
   /**
    * When true the captured image uses the node's full scrollWidth /
    * scrollHeight instead of its visible offsetWidth / offsetHeight.
-   * This is what the Resolutions card needs — a tall portrait should
-   * export end-to-end without being cropped to the modal viewport.
    */
   captureFullSize?: boolean;
 };
 
+function resolveCaptureBackground(node: HTMLElement): string {
+  const card =
+    node.querySelector<HTMLElement>("[data-resolution-card]") ??
+    (node.dataset.resolutionCard !== undefined ? node : null);
+  const target = card ?? node;
+
+  const explicit = target.dataset.exportBg?.trim();
+  if (explicit) return explicit;
+
+  const inlineBg = target.style.background || target.style.backgroundColor;
+  if (inlineBg && !inlineBg.includes("gradient") && inlineBg !== "transparent") {
+    return inlineBg;
+  }
+
+  const computed = getComputedStyle(target).backgroundColor;
+  if (
+    computed &&
+    computed !== "rgba(0, 0, 0, 0)" &&
+    computed !== "transparent"
+  ) {
+    return computed;
+  }
+
+  const root = getComputedStyle(document.documentElement);
+  const elevated = root.getPropertyValue("--bg-elevated").trim();
+  if (elevated) return elevated;
+
+  return defaultResolutionExportBg();
+}
+
 /**
  * Small camera icon that snapshots an arbitrary element to PNG and
- * triggers a download. Uses `html-to-image` (already a dependency)
- * so we don't pull in another lib.
+ * triggers a download. Uses `html-to-image` (already a dependency).
  */
 export function ScreenshotButton({
   targetRef,
@@ -38,9 +66,7 @@ export function ScreenshotButton({
   async function capture() {
     if (!targetRef.current || state === "loading") return;
     setState("loading");
-    // When capturing full-size we temporarily strip the node's overflow
-    // styles so html-to-image renders against the full scroll size
-    // instead of the visible viewport.
+
     const node = targetRef.current;
     const previousOverflow = node.style.overflow;
     const previousMaxHeight = node.style.maxHeight;
@@ -48,25 +74,21 @@ export function ScreenshotButton({
       node.style.overflow = "visible";
       node.style.maxHeight = "none";
     }
+
+    const bgColor = resolveCaptureBackground(node);
+
     try {
       const { toPng } = await import("html-to-image");
-      const computedBg = getComputedStyle(node).backgroundColor;
-      const fallbackBg =
-        getComputedStyle(document.documentElement).getPropertyValue("--bg-elevated").trim() ||
-        "#0c101c";
-      const bgColor =
-        computedBg && computedBg !== "rgba(0, 0, 0, 0)" && computedBg !== "transparent"
-          ? computedBg
-          : fallbackBg;
       const opts: Parameters<typeof toPng>[1] = {
         cacheBust: true,
         pixelRatio: 2,
         backgroundColor: bgColor,
+        style: {
+          backgroundColor: bgColor
+        },
         filter: (el) => {
           if (!(el instanceof HTMLElement)) return true;
           if (el.dataset.screenshotIgnore === "true") return false;
-          // Walk ancestors — skip anything inside ignored chrome (sidebar,
-          // top bar, modal toolbars) even when the capture root is nested.
           let p: HTMLElement | null = el.parentElement;
           while (p) {
             if (p.dataset.screenshotIgnore === "true") return false;
@@ -76,8 +98,6 @@ export function ScreenshotButton({
         }
       };
       if (captureFullSize) {
-        // Use scrollWidth/scrollHeight so a tall portrait card exports
-        // top-to-bottom even when the modal viewport scrolled it.
         opts.width = node.scrollWidth;
         opts.height = node.scrollHeight;
         opts.canvasWidth = node.scrollWidth;

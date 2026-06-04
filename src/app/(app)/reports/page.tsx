@@ -154,7 +154,6 @@ export default function ReportsPage() {
       {tab === "Overview" && (
         <Overview
           trades={filtered}
-          currency={filters.currency}
           fileAggregates={fileAggregates}
           fmt={fmt}
         />
@@ -240,16 +239,15 @@ const OVERVIEW_SUB_TABS: OverviewSubTab[] = ["Summary", "Days", "Trades"];
 
 function Overview({
   trades,
-  currency,
   fileAggregates,
   fmt
 }: {
   trades: TradeRow[];
-  currency: string;
   fileAggregates: { balance: number | null; deposits: number | null; withdrawals: number | null; fileCount: number };
   fmt: Fmt;
 }) {
   const [subTab, setSubTab] = useState<OverviewSubTab>("Summary");
+  const { currency } = useMoney();
 
   // Pre-compute the two top charts once per render. The equity curve uses
   // the same starting balance the rest of the app does (0 by default —
@@ -295,7 +293,7 @@ function Overview({
       </div>
 
       {subTab === "Summary" && (
-        <SummaryCards trades={trades} fileAggregates={fileAggregates} fmt={fmt} currency={currency} />
+        <SummaryCards trades={trades} fileAggregates={fileAggregates} fmt={fmt} />
       )}
       {subTab === "Days" && <DaysCards trades={trades} fmt={fmt} />}
       {subTab === "Trades" && <TradesCards trades={trades} fmt={fmt} />}
@@ -340,14 +338,13 @@ function avgRealisedR(trades: TradeRow[]): number | null {
 function SummaryCards({
   trades,
   fileAggregates,
-  fmt,
-  currency
+  fmt
 }: {
   trades: TradeRow[];
   fileAggregates: { balance: number | null; deposits: number | null; withdrawals: number | null; fileCount: number };
   fmt: Fmt;
-  currency: string;
 }) {
+  const { convert, currency } = useMoney();
   const days = dailyPnl(trades);
   const loggedDays = days.length;
   const dailyNet = days.length ? days.reduce((s, d) => s + d.pnl, 0) / days.length : 0;
@@ -369,7 +366,7 @@ function SummaryCards({
           <div className="mb-1 flex items-center justify-between gap-2">
             <span className="text-xs font-medium text-fg-muted">Account balance</span>
             {fileAggregates.balance != null && (
-              <BalanceSpeakButton amount={fileAggregates.balance} currency={currency} />
+              <BalanceSpeakButton amount={convert(fileAggregates.balance)} currency={currency} />
             )}
           </div>
           <div className="text-2xl font-semibold tracking-tight text-fg">

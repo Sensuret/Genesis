@@ -43,13 +43,6 @@ export function PropFirmSimulationPanel({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-fg">Rule simulation vs your trades</h3>
-        <Badge variant={result.passedAllPhases ? "success" : "danger"}>
-          {result.passedAllPhases ? "ALL PHASES PASSED" : `FAILED ON ${result.failedAt ?? "—"}`}
-        </Badge>
-      </div>
-
       {result.phases.length > 1 && (
         <div className="flex flex-wrap gap-2">
           {result.phases.map((p, i) => (
@@ -70,8 +63,11 @@ export function PropFirmSimulationPanel({
       )}
 
       <Card>
-        <CardHeader>
-          <CardTitle>Result</CardTitle>
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
+          <CardTitle>Rule simulation vs your trades</CardTitle>
+          <Badge variant={result.passedAllPhases ? "success" : "danger"}>
+            {result.passedAllPhases ? "ALL PHASES PASSED" : `FAILED ON ${result.failedAt ?? "—"}`}
+          </Badge>
         </CardHeader>
         <CardBody className="space-y-4">
           {result.phases.map((p, i) => (

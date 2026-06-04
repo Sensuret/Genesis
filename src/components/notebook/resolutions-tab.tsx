@@ -1223,7 +1223,8 @@ function ResolutionModal({
           </div>
         )}
 
-        <div ref={cardRef} className="overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div ref={cardRef} className="w-full">
           <ResolutionCard
             resolution={resolution}
             orientation={orientation}
@@ -1268,6 +1269,7 @@ function ResolutionModal({
                     })
             }
           />
+          </div>
         </div>
       </div>
     </div>

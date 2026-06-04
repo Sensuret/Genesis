@@ -112,16 +112,24 @@ export function findSwatch(
  */
 export function resolveBackgroundCss(
   bg: import("@/lib/supabase/types").ResolutionBackground | undefined | null
-): { css: string; text: "light" | "dark" } | null {
+): { css: string; text: "light" | "dark"; exportSolid: string } | null {
   if (!bg || bg.kind === "theme") return null;
   if (bg.kind === "solid") {
     const sw = findSwatch(bg.color, SOLID_SWATCHES);
-    if (sw) return { css: sw.css, text: sw.text };
-    return { css: bg.color, text: "light" };
+    if (sw) return { css: sw.css, text: sw.text, exportSolid: sw.css };
+    return { css: bg.color, text: "light", exportSolid: bg.color };
   }
   if (bg.kind === "gradient") {
     const sw = findSwatch(bg.preset, GRADIENT_SWATCHES);
-    if (sw) return { css: sw.css, text: sw.text };
+    if (sw) {
+      const rgb = sw.css.match(/rgb\([^)]+\)/)?.[0];
+      return { css: sw.css, text: sw.text, exportSolid: rgb ?? "rgb(15, 23, 42)" };
+    }
   }
   return null;
+}
+
+/** Solid fill for PNG export when gradients fail in html-to-image. */
+export function defaultResolutionExportBg(): string {
+  return "rgb(22, 22, 31)";
 }

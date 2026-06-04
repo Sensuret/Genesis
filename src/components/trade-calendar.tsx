@@ -102,8 +102,8 @@ export function TradeCalendar({
   return (
     <div className="flex flex-col gap-2">
       {/* Header: month nav + monthly stats pill */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => setCursor(addMonths(cursor, -1))}
@@ -154,7 +154,7 @@ export function TradeCalendar({
       {/* Weekday headers — 7 day columns + week summary column at the end. */}
       <div
         className="grid gap-1 text-center text-[10px] uppercase tracking-wide text-fg-subtle"
-        style={{ gridTemplateColumns: "repeat(7, minmax(0, 1fr)) 5.5rem" }}
+        style={{ gridTemplateColumns: "repeat(7, minmax(0, 1fr)) minmax(4rem, 5.5rem)" }}
       >
         {WEEKDAYS.map((w) => (
           <div key={w} className="py-0.5">{w}</div>
@@ -164,8 +164,8 @@ export function TradeCalendar({
 
       {/* Calendar grid: each week row spans 7 day cells + 1 week summary cell. */}
       <div
-        className="grid gap-1"
-        style={{ gridTemplateColumns: "repeat(7, minmax(0, 1fr)) 5.5rem" }}
+        className="grid gap-1 overflow-x-auto"
+        style={{ gridTemplateColumns: "repeat(7, minmax(2.5rem, 1fr)) minmax(4rem, 5.5rem)" }}
       >
         {weekRows.map((week, rowIdx) => (
           <Fragment key={rowIdx}>

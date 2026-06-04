@@ -57,26 +57,44 @@ function intToWords(n: number): string {
   return parts.join(", ");
 }
 
+const CURRENCY_UNITS: Record<string, string> = {
+  USD: "United States dollars",
+  CAD: "Canadian dollars",
+  AUD: "Australian dollars",
+  EUR: "euros",
+  GBP: "pounds sterling",
+  JPY: "Japanese yen",
+  KES: "Kenyan shillings",
+  ZAR: "South African rand",
+  CHF: "Swiss francs",
+  NZD: "New Zealand dollars",
+  SGD: "Singapore dollars",
+  HKD: "Hong Kong dollars",
+  INR: "Indian rupees",
+  MXN: "Mexican pesos",
+  BRL: "Brazilian reais",
+  CNY: "Chinese yuan"
+};
+
+function currencyUnit(code: string): string {
+  const key = code.toUpperCase();
+  return CURRENCY_UNITS[key] ?? `${key} units`;
+}
+
 /** Matches viral bank-balance announcements (“checking account available balance…”). */
 export function balanceAnnouncementText(amount: number, currency: string): string {
   const abs = Math.abs(amount);
-  const dollars = Math.floor(abs);
-  const cents = Math.round((abs - dollars) * 100);
-
-  const unit =
-    currency === "USD"
-      ? "dollars"
-      : currency === "EUR"
-        ? "euros"
-        : currency === "GBP"
-          ? "pounds"
-          : currency;
+  const whole = Math.floor(abs);
+  const cents = Math.round((abs - whole) * 100);
+  const code = currency.toUpperCase();
+  const unit = currencyUnit(code);
+  const usesCents = code !== "JPY" && code !== "KES";
 
   let text = "Your checking account available balance is ";
   if (amount < 0) text += "negative ";
-  text += intToWords(dollars);
+  text += intToWords(whole);
   text += ` ${unit}`;
-  if (cents > 0) text += ` and ${under100(cents)} cents`;
+  if (usesCents && cents > 0) text += ` and ${under100(cents)} cents`;
   return text;
 }
 
