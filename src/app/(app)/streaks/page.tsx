@@ -49,8 +49,6 @@ function gmtLabel(offsetMinutes: number): string {
   return `GMT${sign}${h}${m ? `:${String(m).padStart(2, "0")}` : ""}`;
 }
 
-/** Convert a UTC session window to the local time range string the user
- *  sees in the bracket — e.g. "10:00–15:00" for London at GMT+3. */
 function sessionRangeLabel(
   session: string,
   offsetMinutes: number,
@@ -91,7 +89,7 @@ export default function StreaksPage() {
       if (cancelled) return;
       const offsets = (files ?? [])
         .map((f: { broker_tz_offset_minutes?: number | null }) => f.broker_tz_offset_minutes)
-        .filter((o): o is number => o != null);
+        .filter((o: number | null | undefined): o is number => o != null);
       const unique = Array.from(new Set(offsets));
       if (unique.length === 1) {
         setTz({ offset: unique[0], source: "broker" });
