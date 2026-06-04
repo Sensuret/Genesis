@@ -70,19 +70,9 @@ export default function StreaksPage() {
   const { fmt } = useMoney();
   const captureRef = useRef<HTMLDivElement>(null);
 
-  // User-selected session-window style — "forex" (default) or "nyse".
-  // Toggled in Settings → Session windows. Updates live via storage event.
   const [sessionStyle] = useSessionWindowStyle();
   const sessionWindows = getSessionWindows(sessionStyle);
 
-  // Effective timezone offset for the bracket labels:
-  //   1. If every imported file has the same `broker_tz_offset_minutes`,
-  //      use that — the user has explicitly told us what server time the
-  //      trades were recorded in (Settings → Imported files).
-  //   2. Otherwise fall back to the user's local timezone (auto-detect),
-  //      matching how the rest of the app converts UTC → display time.
-  // The offset updates live when the user changes a file's broker timezone
-  // in Settings because we read `trade_files` here on mount + focus.
   const [tz, setTz] = useState<{ offset: number; source: string }>({
     offset: -new Date().getTimezoneOffset(),
     source: "local"
@@ -100,7 +90,7 @@ export default function StreaksPage() {
         .eq("user_id", userData.user.id);
       if (cancelled) return;
       const offsets = (files ?? [])
-        .map((f) => f.broker_tz_offset_minutes)
+        .map((f: { broker_tz_offset_minutes?: number | null }) => f.broker_tz_offset_minutes)
         .filter((o): o is number => o != null);
       const unique = Array.from(new Set(offsets));
       if (unique.length === 1) {
@@ -345,12 +335,6 @@ function best(arr: Streak[]) {
   return arr.filter((s) => s.type === "win").sort((a, b) => b.length - a.length)[0];
 }
 
-/**
- * Group raw streaks by (type, length) so the card lists each unique
- * pattern once with an occurrence count + cumulative P&L. This replaces
- * the old behaviour of spamming "1-day win" three times in a row when
- * the user had three separate single-day winning runs in a row.
- */
 type StreakBucket = {
   type: "win" | "loss";
   length: number;
@@ -378,7 +362,6 @@ function bucketStreaks(data: Streak[]): StreakBucket[] {
       });
     }
   }
-  // Sort by type (wins first), then by length descending, then by count.
   return [...map.values()].sort((a, b) => {
     if (a.type !== b.type) return a.type === "win" ? -1 : 1;
     if (a.length !== b.length) return b.length - a.length;
