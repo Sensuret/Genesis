@@ -90,7 +90,7 @@ export default function StreaksPage() {
       const offsets = (files ?? [])
         .map((f: { broker_tz_offset_minutes?: number | null }) => f.broker_tz_offset_minutes)
         .filter((o: number | null | undefined): o is number => o != null);
-      const unique = Array.from(new Set(offsets));
+      const unique = Array.from(new Set<number>(offsets));
       if (unique.length === 1) {
         setTz({ offset: unique[0], source: "broker" });
       } else {
