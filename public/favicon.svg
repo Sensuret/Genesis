@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="gs" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#22d3ee"/>
+      <stop offset="48%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#a78bfa"/>
+    </linearGradient>
+  </defs>
+  <text x="32" y="50" text-anchor="middle" fill="url(#gs)" font-family="ui-sans-serif,system-ui,sans-serif" font-weight="800" font-size="52" letter-spacing="-0.14em">GS</text>
+</svg>

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="gs" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#22d3ee"/>
+      <stop offset="48%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#a78bfa"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="42%" r="55%">
+      <stop offset="0%" stop-color="#7c3aed" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#060810" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="630" fill="#060810"/>
+  <rect width="1200" height="630" fill="url(#glow)"/>
+  <text x="600" y="310" text-anchor="middle" fill="url(#gs)" font-family="ui-sans-serif,system-ui,sans-serif" font-weight="800" font-size="220" letter-spacing="-0.08em">GS</text>
+  <text x="600" y="420" text-anchor="middle" fill="#f4f4fa" font-family="ui-sans-serif,system-ui,sans-serif" font-weight="700" font-size="52" letter-spacing="0.14em">GENESIS</text>
+</svg>

@@ -1,0 +1,708 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { ChevronDown, ChevronRight, Download, Plus, Trash2, Save } from "lucide-react";
+import { PageHeader } from "@/components/page-header";
+import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input, Label, Textarea } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Empty } from "@/components/ui/empty";
+import { Stat } from "@/components/ui/stat";
+import { useTrades } from "@/lib/hooks/use-trades";
+import type { TradeFileRow, TradeRow } from "@/lib/supabase/types";
+import { createClient } from "@/lib/supabase/client";
+import type { PlaybookRow, ResolutionItem } from "@/lib/supabase/types";
+import { readRules, reportAdherence, type PlaybookRules, type Session } from "@/lib/playbooks";
+import {
+  PlaybookGridCard,
+  type PlaybookGridStats
+} from "@/components/playbooks/playbook-grid-card";
+import { BlockEditor } from "@/components/notebook/block-editor";
+import {
+  hydrateBlocks,
+  plainTextFromBlocks
+} from "@/lib/notebook/blocks";
+import { formatPercent } from "@/lib/utils";
+import { accountSourceLabel } from "@/lib/accounts/source-label";
+
+const SESSIONS: Session[] = ["New York", "London", "Asia", "Sydney"];
+
+export default function PlaybooksPage() {
+  const [playbooks, setPlaybooks] = useState<PlaybookRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [openIds, setOpenIds] = useState<Set<string>>(new Set());
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const { trades, files } = useTrades();
+  /** Playbooks ignore the global account filter — only linked playbook accounts apply. */
+  const statsByPlaybook = useMemo(() => {
+    const map = new Map<string, PlaybookGridStats>();
+    for (const pb of playbooks) {
+      const rules = readRules(pb.rules);
+      const linked = rules.linkedAccounts ?? [];
+      const subset = trades.filter(
+        (t) =>
+          t.playbook_id === pb.id ||
+          (t.file_id != null && linked.includes(t.file_id))
+      );
+      const wins = subset.filter((t) => (t.pnl ?? 0) > 0).length;
+      map.set(pb.id, {
+        tradeCount: subset.length,
+        winRate: subset.length ? (wins / subset.length) * 100 : 0,
+        netPnl: subset.reduce((s, t) => s + (t.pnl ?? 0), 0)
+      });
+    }
+    return map;
+  }, [playbooks, trades]);
+
+  async function load() {
+    setLoading(true);
+    const supabase = createClient();
+    const { data, error: err } = await supabase
+      .from("playbooks")
+      .select("*")
+      .order("created_at", { ascending: true });
+    if (err) setError(err.message);
+    setPlaybooks((data ?? []) as PlaybookRow[]);
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function createPlaybook() {
+    const supabase = createClient();
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return;
+    const { error: err } = await supabase.from("playbooks").insert({
+      user_id: userData.user.id,
+      name: "New Playbook",
+      description: "",
+      rules: {},
+      symbol_aliases: []
+    });
+    if (err) setError(err.message);
+    else load();
+  }
+
+  async function deletePlaybook(id: string) {
+    const supabase = createClient();
+    await supabase.from("playbooks").delete().eq("id", id);
+    load();
+  }
+
+  function toggle(id: string) {
+    setOpenIds((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Playbooks"
+        description="Define each trading model — definition, rules, asset focus, target RR. We score every trade against its playbook on Streaks / Reports / Recaps."
+        actions={
+          <Button onClick={createPlaybook}>
+            <Plus className="h-4 w-4" /> New playbook
+          </Button>
+        }
+      />
+
+      {error && (
+        <div className="rounded-xl border border-danger/40 bg-danger/10 p-3 text-sm text-danger">{error}</div>
+      )}
+
+      {loading ? (
+        <div className="text-sm text-fg-muted">Loading playbooks…</div>
+      ) : playbooks.length === 0 ? (
+        <Empty
+          title="No playbooks yet"
+          description="Create one to start scoring rule-adherence on every trade."
+          action={<Button onClick={createPlaybook}>Create your first playbook</Button>}
+        />
+      ) : (
+        <div className="space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex gap-2">
+              <span className="rounded-lg border border-brand-400/50 bg-brand-500/15 px-3 py-1.5 text-xs font-medium text-brand-200">
+                My playbooks
+              </span>
+            </div>
+            <p className="text-xs text-fg-muted">
+              {playbooks.length} playbook{playbooks.length === 1 ? "" : "s"} · click a card to edit
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {playbooks.map((pb) => (
+              <PlaybookGridCard
+                key={pb.id}
+                pb={pb}
+                stats={statsByPlaybook.get(pb.id) ?? { tradeCount: 0, winRate: 0, netPnl: 0 }}
+                selected={activeId === pb.id}
+                onSelect={() => {
+                  const next = activeId === pb.id ? null : pb.id;
+                  setActiveId(next);
+                  setOpenIds((s) => {
+                    const ids = new Set(s);
+                    if (next) ids.add(next);
+                    else if (pb.id) ids.delete(pb.id);
+                    return ids;
+                  });
+                }}
+              />
+            ))}
+          </div>
+
+          {activeId &&
+            playbooks
+              .filter((pb) => pb.id === activeId)
+              .map((pb) => {
+                const rules = readRules(pb.rules);
+                const linked = rules.linkedAccounts ?? [];
+                const tradesForPb = trades.filter(
+                  (t) =>
+                    t.playbook_id === pb.id ||
+                    (t.file_id != null && linked.includes(t.file_id))
+                );
+                return (
+                  <div
+                    key={pb.id}
+                    className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+                    role="dialog"
+                    aria-modal="true"
+                    onClick={(e) => {
+                      if (e.target === e.currentTarget) setActiveId(null);
+                    }}
+                  >
+                    <div
+                      className="relative flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-line bg-bg shadow-2xl"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="max-h-[92vh] overflow-y-auto p-4">
+                        <PlaybookCard
+                          pb={pb}
+                          open
+                          onToggle={() => setActiveId(null)}
+                          onDelete={() => {
+                            deletePlaybook(pb.id);
+                            setActiveId(null);
+                          }}
+                          onSaved={load}
+                          tradesForReport={tradesForPb}
+                          accounts={files}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PlaybookCard({
+  pb,
+  open,
+  onToggle,
+  onDelete,
+  onSaved,
+  tradesForReport,
+  accounts
+}: {
+  pb: PlaybookRow;
+  open: boolean;
+  onToggle: () => void;
+  onDelete: () => void;
+  onSaved: () => void;
+  tradesForReport: TradeRow[];
+  accounts: TradeFileRow[];
+}) {
+  const [name, setName] = useState(pb.name);
+  const [description, setDescription] = useState(pb.description ?? "");
+  const [rules, setRules] = useState<PlaybookRules>(readRules(pb.rules));
+  const initialRules = useMemo(() => readRules(pb.rules), [pb.rules]);
+  const [notesBlocks, setNotesBlocks] = useState<ResolutionItem[]>(
+    () => hydrateBlocks(initialRules.notesBlocks, initialRules.notes)
+  );
+  const [aliasesText, setAliasesText] = useState(pb.symbol_aliases.join(", "));
+  const linkedAccountIds: string[] = rules.linkedAccounts ?? [];
+  const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    setName(pb.name);
+    setDescription(pb.description ?? "");
+    const next = readRules(pb.rules);
+    setRules(next);
+    setNotesBlocks(hydrateBlocks(next.notesBlocks, next.notes));
+    setAliasesText(pb.symbol_aliases.join(", "));
+    setDirty(false);
+  }, [pb]);
+
+  function patchRules(p: Partial<PlaybookRules>) {
+    setRules((r) => ({ ...r, ...p }));
+    setDirty(true);
+  }
+
+  function patchNotesBlocks(next: ResolutionItem[]) {
+    setNotesBlocks(next);
+    // Keep the legacy `notes` string in sync so it survives reload via
+    // existing `readRules` even when an older client / consumer doesn't
+    // know about `notesBlocks` yet.
+    setRules((r) => ({ ...r, notes: plainTextFromBlocks(next), notesBlocks: next }));
+    setDirty(true);
+  }
+
+  function toggleSession(s: Session) {
+    const cur = rules.sessions ?? [];
+    patchRules({ sessions: cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s] });
+  }
+
+  async function save() {
+    setSaving(true);
+    const supabase = createClient();
+    const aliases = aliasesText
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const rulesJson = { ...rules } as Record<string, unknown>;
+    const { error: err } = await supabase
+      .from("playbooks")
+      .update({
+        name,
+        description: description || null,
+        rules: rulesJson,
+        symbol_aliases: aliases
+      })
+      .eq("id", pb.id);
+    setSaving(false);
+    if (!err) {
+      setDirty(false);
+      onSaved();
+    }
+  }
+
+  const adherence = useMemo(
+    () => reportAdherence(tradesForReport, { ...pb, symbol_aliases: aliasesText.split(",").map((s) => s.trim()).filter(Boolean) }),
+    [tradesForReport, pb, aliasesText]
+  );
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <button onClick={onToggle} className="flex items-center gap-2 text-left">
+          {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          <CardTitle>{name || "Untitled playbook"}</CardTitle>
+          {tradesForReport.length > 0 && (
+            <Badge variant="brand">{tradesForReport.length} trades</Badge>
+          )}
+        </button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() =>
+              downloadPlaybook({
+                name,
+                description,
+                rules,
+                aliasesText,
+                exportedAt: new Date().toISOString()
+              })
+            }
+            aria-label="Download this playbook as JSON"
+          >
+            <Download className="h-3.5 w-3.5" /> Download
+          </Button>
+          <Button variant="secondary" size="sm" onClick={save} disabled={!dirty || saving}>
+            <Save className="h-3.5 w-3.5" /> {saving ? "Saving…" : "Save"}
+          </Button>
+          <Button variant="ghost" size="icon" onClick={onDelete}>
+            <Trash2 className="h-4 w-4 text-danger" />
+          </Button>
+        </div>
+      </CardHeader>
+
+      {open && (
+        <CardBody className="space-y-5">
+          <div className="grid gap-3 md:grid-cols-2">
+            <div>
+              <Label>Name</Label>
+              <Input
+                value={name}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  setDirty(true);
+                }}
+              />
+            </div>
+            <div>
+              <Label>Symbol aliases (comma-separated)</Label>
+              <Input
+                value={aliasesText}
+                onChange={(e) => {
+                  setAliasesText(e.target.value);
+                  setDirty(true);
+                }}
+                placeholder="NAS100, USA100, Nas100.f, NQ"
+              />
+            </div>
+          </div>
+
+          <div>
+            <Label>Description / definition</Label>
+            <Textarea
+              rows={3}
+              value={description}
+              onChange={(e) => {
+                setDescription(e.target.value);
+                setDirty(true);
+              }}
+              placeholder="What makes a valid setup for this model?"
+            />
+          </div>
+
+          <div className="space-y-3 rounded-xl border border-line bg-bg-elevated p-4">
+            <div className="text-sm font-medium">Linked accounts</div>
+            <p className="text-[11px] text-fg-subtle">
+              Tag accounts to sync with this playbook. Trades from linked accounts will be scored against these rules.
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {accounts.map((acct) => {
+                const src = accountSourceLabel(acct);
+                const label = src.brokerLine || acct.name;
+                const selected = linkedAccountIds.includes(acct.id);
+                return (
+                  <button
+                    key={acct.id}
+                    type="button"
+                    onClick={() => {
+                      const next = selected
+                        ? linkedAccountIds.filter((x) => x !== acct.id)
+                        : [...linkedAccountIds, acct.id];
+                      patchRules({ linkedAccounts: next });
+                    }}
+                    className={`rounded-xl border px-3 py-1.5 text-left text-xs ${
+                      selected
+                        ? "border-brand-400 bg-brand-500/15 text-fg"
+                        : "border-line bg-bg-elevated text-fg-subtle"
+                    }`}
+                    title={src.description}
+                  >
+                    <span className="block font-medium">{label}</span>
+                    <span className="block text-[10px] text-fg-subtle">{src.chip.text}</span>
+                  </button>
+                );
+              })}
+              {accounts.length === 0 && (
+                <span className="text-[11px] text-fg-muted">No accounts imported yet.</span>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-3 rounded-xl border border-line bg-bg-elevated p-4">
+            <div className="text-sm font-medium">Rules</div>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              <TradeTimeWindowFields rules={rules} onPatch={patchRules} />
+
+              <div>
+                <Label>Allowed sessions</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {SESSIONS.map((s) => {
+                    const selected = rules.sessions?.includes(s);
+                    return (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => toggleSession(s)}
+                        className={`rounded-full border px-3 py-1 text-xs ${
+                          selected
+                            ? "border-brand-400 bg-brand-500/15 text-fg"
+                            : "border-line bg-bg-elevated text-fg-subtle"
+                        }`}
+                      >
+                        {s}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-3">
+              <div>
+                <Label>Asset focus (canonical names)</Label>
+                <Input
+                  value={(rules.assetFocus ?? []).join(", ")}
+                  onChange={(e) =>
+                    patchRules({
+                      assetFocus: e.target.value
+                        .split(",")
+                        .map((s) => s.trim())
+                        .filter(Boolean)
+                    })
+                  }
+                  placeholder="NAS100, US30, EURUSD"
+                />
+              </div>
+              <div>
+                <Label>Max trades per session</Label>
+                <Input
+                  type="number"
+                  value={rules.maxTradesPerSession ?? ""}
+                  onChange={(e) =>
+                    patchRules({
+                      maxTradesPerSession: e.target.value ? Number(e.target.value) : undefined
+                    })
+                  }
+                />
+              </div>
+              <div>
+                <Label>Target RR (reward / risk)</Label>
+                <Input
+                  type="number"
+                  step="0.1"
+                  value={rules.rrTarget ?? ""}
+                  onChange={(e) =>
+                    patchRules({ rrTarget: e.target.value ? Number(e.target.value) : undefined })
+                  }
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label>General rules / notes</Label>
+              <div className="rounded-xl border border-line bg-bg-soft/40 px-9 py-2">
+                <BlockEditor
+                  blocks={notesBlocks}
+                  onChange={patchNotesBlocks}
+                  defaultKind="text"
+                  placeholder="Any free-form rule reminders… Type '/' for commands."
+                />
+              </div>
+              <p className="mt-1 text-[11px] text-fg-subtle">
+                Type <code>/</code> on any line for commands — <code>/text</code>,{" "}
+                <code>/h1</code>/<code>/h2</code>/<code>/h3</code>, <code>/todo</code>,{" "}
+                <code>/bullet</code>, <code>/numbered</code>, <code>/toggle</code>,{" "}
+                <code>/callout</code>, <code>/quote</code>, <code>/divider</code>. Click
+                Save to commit changes.
+              </p>
+            </div>
+          </div>
+
+          {tradesForReport.length > 0 ? (
+            <div className="space-y-3 rounded-xl border border-line bg-bg-elevated p-4">
+              <div className="text-sm font-medium">Rule-adherence report (linked accounts)</div>
+              <div className="grid gap-3 md:grid-cols-3">
+                <Stat
+                  label="Trades on this playbook"
+                  value={adherence.totalTrades}
+                  format="number"
+                />
+                <Stat
+                  label="Followed all rules"
+                  value={adherence.followedRules}
+                  format="number"
+                />
+                <Stat
+                  label="Adherence %"
+                  value={adherence.adherencePct}
+                  format="percent"
+                  positive={adherence.adherencePct >= 80}
+                />
+              </div>
+              {adherence.issues.length > 0 && (
+                <div className="text-xs text-fg-muted">
+                  {countIssues(adherence.issues, "outside-time-window")} outside time window ·{" "}
+                  {countIssues(adherence.issues, "wrong-session")} wrong session ·{" "}
+                  {countIssues(adherence.issues, "wrong-asset")} wrong asset ·{" "}
+                  {countIssues(adherence.issues, "below-rr-target")} below RR target
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-line bg-bg-soft/40 p-3 text-xs text-fg-muted">
+              No trades tagged with this playbook yet. Tag trades with this playbook from the Trades page (coming Phase 6) to see adherence scores.
+            </div>
+          )}
+        </CardBody>
+      )}
+    </Card>
+  );
+}
+
+function formatTimeWindow(tw: PlaybookRules["timeWindow"]): { start: string; end: string } {
+  if (!tw) return { start: "", end: "" };
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return {
+    start: `${pad(tw.startHour)}:${pad(tw.startMinute)}`,
+    end: `${pad(tw.endHour)}:${pad(tw.endMinute)}`
+  };
+}
+
+function parseHHMM(s: string): { h: number; m: number } | null {
+  const m = s.match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (h < 0 || h > 23 || min < 0 || min > 59) return null;
+  return { h, m: min };
+}
+
+/** Optional ideal entry window — free typing with commit on blur. */
+function TradeTimeWindowFields({
+  rules,
+  onPatch
+}: {
+  rules: PlaybookRules;
+  onPatch: (p: Partial<PlaybookRules>) => void;
+}) {
+  const formatted = formatTimeWindow(rules.timeWindow);
+  const [startText, setStartText] = useState(formatted.start);
+  const [endText, setEndText] = useState(formatted.end);
+
+  useEffect(() => {
+    const next = formatTimeWindow(rules.timeWindow);
+    setStartText(next.start);
+    setEndText(next.end);
+  }, [rules.timeWindow]);
+
+  function commitStart(raw: string) {
+    const tw = parseHHMM(raw.trim());
+    if (!tw) {
+      if (!raw.trim()) onPatch({ timeWindow: undefined });
+      return;
+    }
+    onPatch({
+      timeWindow: {
+        startHour: tw.h,
+        startMinute: tw.m,
+        endHour: rules.timeWindow?.endHour ?? 23,
+        endMinute: rules.timeWindow?.endMinute ?? 59
+      }
+    });
+  }
+
+  function commitEnd(raw: string) {
+    const tw = parseHHMM(raw.trim());
+    if (!tw) {
+      if (!raw.trim() && !startText.trim()) onPatch({ timeWindow: undefined });
+      return;
+    }
+    onPatch({
+      timeWindow: {
+        startHour: rules.timeWindow?.startHour ?? 0,
+        startMinute: rules.timeWindow?.startMinute ?? 0,
+        endHour: tw.h,
+        endMinute: tw.m
+      }
+    });
+  }
+
+  return (
+    <div>
+      <Label>Ideal trade time window (optional, 24h broker time)</Label>
+      <p className="mb-1.5 text-[11px] text-fg-subtle">
+        Sessions alone are enough for rules. Add a custom window (e.g. 17:30–18:00 EAT) only if you
+        want stricter entry timing on top of session filters.
+      </p>
+      <div className="flex items-center gap-2">
+        <Input
+          placeholder="09:30"
+          inputMode="numeric"
+          value={startText}
+          onChange={(e) => {
+            setStartText(e.target.value);
+            const tw = parseHHMM(e.target.value.trim());
+            if (tw) {
+              onPatch({
+                timeWindow: {
+                  startHour: tw.h,
+                  startMinute: tw.m,
+                  endHour: rules.timeWindow?.endHour ?? 23,
+                  endMinute: rules.timeWindow?.endMinute ?? 59
+                }
+              });
+            }
+          }}
+          onBlur={() => commitStart(startText)}
+        />
+        <span className="text-fg-subtle">→</span>
+        <Input
+          placeholder="16:00"
+          inputMode="numeric"
+          value={endText}
+          onChange={(e) => {
+            setEndText(e.target.value);
+            const tw = parseHHMM(e.target.value.trim());
+            if (tw) {
+              onPatch({
+                timeWindow: {
+                  startHour: rules.timeWindow?.startHour ?? 0,
+                  startMinute: rules.timeWindow?.startMinute ?? 0,
+                  endHour: tw.h,
+                  endMinute: tw.m
+                }
+              });
+            }
+          }}
+          onBlur={() => commitEnd(endText)}
+        />
+      </div>
+    </div>
+  );
+}
+
+function countIssues<T extends { kind: string }>(arr: T[], k: string): number {
+  return arr.filter((x) => x.kind === k).length;
+}
+
+/**
+ * Download a single playbook as a JSON file. Includes name, description,
+ * symbol aliases and the full rules payload (including both legacy
+ * plain-text `notes` and the Notion-style `notesBlocks`), so the
+ * exported file is a complete, re-importable copy of the playbook.
+ *
+ * Filename is `playbook-<safe-name>-<ISO-stamp>.json` so multiple
+ * downloads on the same day don't collide.
+ */
+function downloadPlaybook(input: {
+  name: string;
+  description: string;
+  rules: PlaybookRules;
+  aliasesText: string;
+  exportedAt: string;
+}) {
+  const aliases = input.aliasesText
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const payload = {
+    name: input.name,
+    description: input.description,
+    symbol_aliases: aliases,
+    rules: input.rules,
+    exported_at: input.exportedAt,
+    schema: "genesis-playbook/v1"
+  };
+  const stamp = input.exportedAt.replace(/[:.]/g, "-").slice(0, 19);
+  const safeName = (input.name || "playbook").replace(/[^A-Za-z0-9_-]+/g, "_") || "playbook";
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: "application/json;charset=utf-8"
+  });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `playbook-${safeName}-${stamp}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
