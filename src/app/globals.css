@@ -334,6 +334,45 @@ body {
   box-shadow: 0 20px 50px -20px rgba(59, 130, 246, 0.45);
 }
 
+.landing-feature-card {
+  background: linear-gradient(165deg, #1a1240 0%, #0d0f1e 45%, #12102a 100%);
+  border: 1px solid rgba(139, 92, 246, 0.22);
+  box-shadow: 0 24px 60px -24px rgba(88, 28, 135, 0.55);
+}
+
+.pricing-plan-card {
+  background: linear-gradient(160deg, #0c101c 0%, #080b14 100%);
+}
+
+.pricing-plan-card-starter {
+  border: 1px solid rgba(139, 92, 246, 0.35);
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.08);
+}
+
+.pricing-plan-card-popular {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(160deg, #0c101c 0%, #080b14 100%) padding-box,
+    linear-gradient(135deg, #7c3aed, #ec4899, #6366f1) border-box;
+  box-shadow: 0 20px 50px -20px rgba(168, 85, 247, 0.35);
+}
+
+.pricing-plan-cta-outline {
+  border-image: linear-gradient(90deg, #7c3aed, #ec4899) 1;
+  border: 1px solid;
+  border-image-slice: 1;
+  background: transparent;
+}
+
+@supports (background: linear-gradient(#fff, #fff) padding-box, linear-gradient(#7c3aed, #ec4899) border-box) {
+  .pricing-plan-cta-outline {
+    border: 1px solid transparent;
+    background:
+      linear-gradient(#0c101c, #0c101c) padding-box,
+      linear-gradient(90deg, #7c3aed, #ec4899) border-box;
+  }
+}
+
 @keyframes broker-ticker-scroll {
   0% { transform: translate3d(0, 0, 0); }
   100% { transform: translate3d(-33.333%, 0, 0); }
@@ -343,8 +382,22 @@ body {
   mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
 }
 
+.broker-ticker-item {
+  flex: 0 0 auto;
+}
+
 .broker-ticker-track {
   animation: broker-ticker-scroll 42s linear infinite;
+  width: max-content;
+  gap: 0;
+}
+
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
 }
 
 
@@ -475,5 +528,19 @@ body {
   content: attr(data-placeholder);
   color: rgba(140, 140, 160, 0.7);
   pointer-events: none;
+}
+
+/* Date inputs — calendar icon visible in all themes */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.85;
+  filter: invert(0.9) brightness(1.1);
+}
+html.light input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: none;
+  opacity: 0.55;
+}
+input[type="date"]::-webkit-datetime-edit {
+  color: rgb(var(--fg));
 }
 
