@@ -36,7 +36,7 @@ function under1000(n: number): string {
   if (n < 100) return under100(n);
   const h = Math.floor(n / 100);
   const r = n % 100;
-  return r ? `${ONES[h]} hundred ${under100(r)}` : `${ONES[h]} hundred`;
+  return r ? `${ONES[h]} hundred and ${under100(r)}` : `${ONES[h]} hundred`;
 }
 
 function intToWords(n: number): string {
