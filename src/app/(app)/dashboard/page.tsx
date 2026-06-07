@@ -72,7 +72,6 @@ export default function DashboardPage() {
     return any ? sum : null;
   }, [files]);
 
-  // Heavy computations — memoised so 10k+ trades don't recompute on every render.
   const parts = useMemo(() => computeGsScoreParts(filtered), [filtered]);
   const score = useMemo(() => gsScore(parts), [parts]);
   const equity = useMemo(() => dailyEquityCurve(filtered), [filtered]);
@@ -102,8 +101,6 @@ export default function DashboardPage() {
 
   if (loading) return <div className="text-sm text-fg-muted">Loading dashboard…</div>;
 
-  // No data → empty state. We deliberately do NOT fall back to mock/demo
-  // numbers if the user clears their filters or has no accounts.
   if (!trades.length || !files.length) {
     return (
       <div className="space-y-6">
@@ -159,7 +156,6 @@ export default function DashboardPage() {
         }
       />
 
-      {/* Hero row — 5 stat cards mirroring the TradeZella reference. */}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <NetPnlCard value={stats.net} tradeCount={filtered.length} />
         <WinRateCard
@@ -186,8 +182,6 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* Left column (4 cols): Daily P&L stacked over GS Score —
-          equal total height to the calendar on the right (8 cols). */}
       <div className="grid gap-3 lg:grid-cols-12 lg:items-stretch">
         <div className="flex flex-col gap-3 lg:col-span-4">
           <DailyPnlCard data={equity} />
@@ -196,8 +190,6 @@ export default function DashboardPage() {
         <CalendarCard trades={filtered} fileBalance={fileBalance} />
       </div>
 
-      {/* Net daily P&L bar chart on its own row, full width. */}
-      {/* Live floating P&L tick — visible when EA is streaming */}
       {liveSnapshot && liveSnapshot.floating_pnl != null && (
         <Card>
           <CardBody className="flex items-center justify-between gap-4 py-3">
@@ -223,7 +215,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* R:R distribution + Performance breakdowns. */}
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
@@ -331,8 +322,6 @@ function CalendarCard({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [openDate, setOpenDate] = useState<string | null>(null);
-  // Most recent observed account balance — Net ROI fallback for trades that
-  // don't carry their own balance snapshot.
   const balanceFallback = (() => {
     for (let i = trades.length - 1; i >= 0; i -= 1) {
       const b = trades[i].account_balance;
