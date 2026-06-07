@@ -37,7 +37,7 @@ export function BalanceSpeakButton({
     if (voice) utter.voice = voice;
 
     // Slightly slower, neutral — closer to automated bank IVR than default browser chatter.
-    utter.rate = 1.05;
+    utter.rate = 0.88;
     utter.pitch = 1;
     utter.volume = 1;
 
