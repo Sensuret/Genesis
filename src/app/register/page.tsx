@@ -243,18 +243,6 @@ export default function RegisterPage() {
                 <div className="rounded-lg bg-danger/10 p-3 text-xs text-danger">{error}</div>
               )}
 
-              <p className="text-center text-xs text-fg-muted">
-                By signing up you agree to our{" "}
-                <Link href="/terms" className="text-brand-300 hover:underline">
-                  Terms &amp; Conditions
-                </Link>{" "}
-                and{" "}
-                <Link href="/privacy" className="text-brand-300 hover:underline">
-                  Privacy Policy
-                </Link>
-                .
-              </p>
-
               <Button type="submit" className="w-full" disabled={loading || !hydrated}>
                 {!hydrated ? "Loading…" : loading ? "Creating account…" : "Create account"}
               </Button>

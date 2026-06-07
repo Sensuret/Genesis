@@ -61,7 +61,6 @@ const messages: MessageTree = {
     prop_firm: "Prop Firms",
     notebook: "Notebook",
     numerology: "Numerology & Astrology",
-    pricing: "Pricing",
     settings: "Settings",
     sign_out: "Sign out",
     theme: "Theme",

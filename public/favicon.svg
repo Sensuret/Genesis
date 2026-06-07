@@ -6,18 +6,5 @@
       <stop offset="100%" stop-color="#a78bfa"/>
     </linearGradient>
   </defs>
-  <rect width="64" height="64" rx="14" fill="#060810"/>
-  <!-- Matches in-app GsMark (viewBox 6 0 60 44) -->
-  <g transform="translate(32 33) scale(1.2) translate(-36 -22)">
-    <text
-      x="36"
-      y="34"
-      text-anchor="middle"
-      fill="url(#gs)"
-      font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif"
-      font-weight="800"
-      font-size="36"
-      letter-spacing="-0.05em"
-    >GS</text>
-  </g>
+  <text x="32" y="50" text-anchor="middle" fill="url(#gs)" font-family="ui-sans-serif,system-ui,sans-serif" font-weight="800" font-size="52" letter-spacing="-0.14em">GS</text>
 </svg>

@@ -5,24 +5,7 @@
       <stop offset="48%" stop-color="#3b82f6"/>
       <stop offset="100%" stop-color="#a78bfa"/>
     </linearGradient>
-    <radialGradient id="glow" cx="50%" cy="44%" r="50%">
-      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.22"/>
-      <stop offset="100%" stop-color="#060810" stop-opacity="0"/>
-    </radialGradient>
   </defs>
-  <rect width="180" height="180" rx="36" fill="#060810"/>
-  <rect width="180" height="180" rx="36" fill="url(#glow)"/>
-  <!-- Matches in-app GsMark proportions, scaled for home-screen icon -->
-  <g transform="translate(90 92) scale(2.35) translate(-36 -22)">
-    <text
-      x="36"
-      y="34"
-      text-anchor="middle"
-      fill="url(#gs)"
-      font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif"
-      font-weight="800"
-      font-size="36"
-      letter-spacing="-0.05em"
-    >GS</text>
-  </g>
+  <rect width="180" height="180" fill="#060810"/>
+  <text x="90" y="118" text-anchor="middle" fill="url(#gs)" font-family="ui-sans-serif,system-ui,sans-serif" font-weight="800" font-size="108" letter-spacing="-0.12em">GS</text>
 </svg>

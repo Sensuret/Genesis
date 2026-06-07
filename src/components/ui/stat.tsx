@@ -16,11 +16,9 @@ type StatProps = {
   currency?: string;
   /** Optional explicit colour for the value text (overrides positive/pnlColor). */
   valueClassName?: string;
-  /** Decorative emoji shown on the right side of the card. */
-  emoji?: string;
 };
 
-export function Stat({ label, value, format = "number", hint, positive, className, currency, valueClassName, emoji }: StatProps) {
+export function Stat({ label, value, format = "number", hint, positive, className, currency, valueClassName }: StatProps) {
   const { currency: activeCurrency, rates } = useMoney();
   const cur = currency ?? activeCurrency;
   const display =
@@ -44,12 +42,7 @@ export function Stat({ label, value, format = "number", hint, positive, classNam
           : "text-danger";
 
   return (
-    <Card className={cn("relative p-5", className)}>
-      {emoji && (
-        <span className="absolute right-4 top-4 text-2xl opacity-90" aria-hidden>
-          {emoji}
-        </span>
-      )}
+    <Card className={cn("p-5", className)}>
       <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-fg-muted">
         {label}
       </div>

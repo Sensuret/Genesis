@@ -201,7 +201,6 @@ export default function AccountPage() {
               <Label>Date of birth</Label>
               <Input
                 type="date"
-                className="[&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-90 dark:[&::-webkit-calendar-picker-indicator]:invert grey:[&::-webkit-calendar-picker-indicator]:invert purple:[&::-webkit-calendar-picker-indicator]:invert"
                 value={profile.dob ?? ""}
                 onChange={(e) => setProfile((p) => ({ ...p, dob: e.target.value }))}
               />
