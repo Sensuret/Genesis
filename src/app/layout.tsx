@@ -6,29 +6,27 @@ const siteDescription =
   "GƎNƎSIS is a premium trading analytics SaaS — journal trades, analyze edge, run prop-firm simulations, and integrate numerology + astrology into your edge.";
 
 export const metadata: Metadata = {
-  title: "GƎNƎSIS — Trade Analytics",
+  title: "GƎNƎSIS | Your Trading Partner",
   description: siteDescription,
   metadataBase: process.env.NEXT_PUBLIC_SITE_URL
     ? new URL(process.env.NEXT_PUBLIC_SITE_URL)
     : undefined,
   icons: {
-    icon: [
-      { url: "/favicon.svg", type: "image/svg+xml" },
-      { url: "/apple-touch-icon.svg", sizes: "180x180", type: "image/svg+xml" }
-    ],
+    icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+    shortcut: [{ url: "/favicon.svg", type: "image/svg+xml" }],
     apple: [{ url: "/apple-touch-icon.svg", sizes: "180x180", type: "image/svg+xml" }]
   },
   openGraph: {
-    title: "GƎNƎSIS — Trade Analytics",
+    title: "GƎNƎSIS | Your Trading Partner",
     description: siteDescription,
     type: "website",
-    images: [{ url: "/og-image.svg", width: 1200, height: 630, alt: "Genesis trade analytics" }]
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "GƎNƎSIS — GS trade analytics mark" }]
   },
   twitter: {
     card: "summary_large_image",
-    title: "GƎNƎSIS — Trade Analytics",
+    title: "GƎNƎSIS | Your Trading Partner",
     description: siteDescription,
-    images: ["/og-image.svg"]
+    images: ["/og-image.png"]
   }
 };
 
@@ -60,3 +58,4 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     </html>
   );
 }
+
