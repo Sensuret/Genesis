@@ -51,6 +51,7 @@ import { Button } from "@/components/ui/button";
 import { formatNumber, pnlColor } from "@/lib/utils";
 import { useFilters } from "@/lib/filters/store";
 import { useLiveState } from "@/lib/hooks/use-live-state";
+import { ProgressTracker } from "@/components/dashboard/progress-tracker";
 
 export default function DashboardPage() {
   const { trades, files, loading } = useTrades();
@@ -58,6 +59,18 @@ export default function DashboardPage() {
   const { snapshot: liveSnapshot } = useLiveState();
 
   const filtered = useMemo(() => applyAllFilters(trades, filters), [trades, filters]);
+
+  const fileBalance = useMemo(() => {
+    let sum = 0;
+    let any = false;
+    for (const f of files) {
+      if (f.account_balance != null) {
+        sum += f.account_balance;
+        any = true;
+      }
+    }
+    return any ? sum : null;
+  }, [files]);
 
   // Heavy computations — memoised so 10k+ trades don't recompute on every render.
   const parts = useMemo(() => computeGsScoreParts(filtered), [filtered]);
@@ -180,7 +193,7 @@ export default function DashboardPage() {
           <DailyPnlCard data={equity} />
           <GsScoreCard parts={parts} score={score} />
         </div>
-        <CalendarCard trades={filtered} />
+        <CalendarCard trades={filtered} fileBalance={fileBalance} />
       </div>
 
       {/* Net daily P&L bar chart on its own row, full width. */}
@@ -196,14 +209,19 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Net daily P&L (last 30)</CardTitle>
-        </CardHeader>
-        <CardBody>
-          <DailyPnlChart data={daily} />
-        </CardBody>
-      </Card>
+      <div className="grid gap-3 lg:grid-cols-12">
+        <Card className="lg:col-span-8">
+          <CardHeader>
+            <CardTitle>Net daily P&L (last 30)</CardTitle>
+          </CardHeader>
+          <CardBody>
+            <DailyPnlChart data={daily} />
+          </CardBody>
+        </Card>
+        <div className="lg:col-span-4">
+          <ProgressTracker trades={filtered} />
+        </div>
+      </div>
 
       {/* R:R distribution + Performance breakdowns. */}
       <div className="grid gap-4 lg:grid-cols-2">
@@ -304,7 +322,13 @@ function GsScoreCard({ parts, score }: { parts: Parameters<typeof gsScore>[0]; s
   );
 }
 
-function CalendarCard({ trades }: { trades: import("@/lib/supabase/types").TradeRow[] }) {
+function CalendarCard({
+  trades,
+  fileBalance
+}: {
+  trades: import("@/lib/supabase/types").TradeRow[];
+  fileBalance: number | null;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const [openDate, setOpenDate] = useState<string | null>(null);
   // Most recent observed account balance — Net ROI fallback for trades that
@@ -333,6 +357,7 @@ function CalendarCard({ trades }: { trades: import("@/lib/supabase/types").Trade
           date={openDate}
           trades={trades}
           balanceFallback={balanceFallback}
+          fileBalance={fileBalance}
           onClose={() => setOpenDate(null)}
         />
       )}

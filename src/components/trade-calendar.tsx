@@ -164,8 +164,8 @@ export function TradeCalendar({
 
       {/* Calendar grid: each week row spans 7 day cells + 1 week summary cell. */}
       <div
-        className="grid gap-1 overflow-x-auto"
-        style={{ gridTemplateColumns: "repeat(7, minmax(2.5rem, 1fr)) minmax(4rem, 5.5rem)" }}
+        className="grid min-w-0 gap-1 overflow-x-auto scrollbar-none sm:overflow-visible"
+        style={{ gridTemplateColumns: "repeat(7, minmax(2.25rem, 1fr)) minmax(3.5rem, 5.5rem)" }}
       >
         {weekRows.map((week, rowIdx) => (
           <Fragment key={rowIdx}>
@@ -195,13 +195,13 @@ function CalendarCell({
   onClick?: (isoDate: string) => void;
 }) {
   const { fmt } = useMoney();
-  if (!date) return <div className="h-16 rounded-lg" />;
+  if (!date) return <div className="h-14 rounded-lg sm:h-16" />;
   const isToday = sameDay(date, new Date());
   if (!bucket) {
     return (
       <div
         className={cn(
-          "flex h-16 flex-col rounded-lg border border-line/60 bg-bg-soft/40 px-1.5 py-1 text-[10px] text-fg-subtle",
+          "flex h-14 flex-col rounded-lg border border-line/60 bg-bg-soft/40 px-1.5 py-1 text-[10px] text-fg-subtle sm:h-16",
           isToday && "border-brand-500/60"
         )}
       >
@@ -214,7 +214,7 @@ function CalendarCell({
   const decided = bucket.wins + bucket.losses;
   const winPct = decided ? (bucket.wins / decided) * 100 : 0;
   const cellClasses = cn(
-    "flex h-16 flex-col justify-between rounded-lg border px-1.5 py-1 text-[10px] transition",
+    "flex h-14 flex-col justify-between rounded-lg border px-1.5 py-1 text-[10px] transition sm:h-16",
     positive
       ? "border-success/40 bg-success/15 text-success"
       : "border-danger/40 bg-danger/15 text-danger",

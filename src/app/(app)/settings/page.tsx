@@ -126,8 +126,17 @@ export default function SettingsPage() {
         </aside>
 
         {/* Right pane */}
-        <main className="min-w-0">
+        <main className="min-w-0 space-y-8">
           <SectionContent section={active} />
+          <footer className="border-t border-line pt-6 text-xs text-fg-muted">
+            <a href="/terms" className="text-brand-300 hover:underline">
+              Terms &amp; Conditions
+            </a>
+            <span className="mx-2 text-fg-subtle">·</span>
+            <a href="/privacy" className="text-brand-300 hover:underline">
+              Privacy Policy
+            </a>
+          </footer>
         </main>
       </div>
     </div>
@@ -142,10 +151,18 @@ function SectionContent({ section }: { section: SectionKey }) {
       return <SecuritySection />;
     case "subscription":
       return (
-        <ComingSoonSection
-          title="Subscription"
-          blurb="Plan, billing, invoices and team seats land here. Genesis is currently in active development — every account is on the open beta plan with all features unlocked."
-        />
+        <div className="space-y-4">
+          <ComingSoonSection
+            title="Subscription"
+            blurb="Manage your Starter or Pro plan, billing, and promo codes."
+          />
+          <a
+            href="/pricing"
+            className="inline-flex rounded-xl bg-brand-gradient px-4 py-2 text-sm font-medium text-white"
+          >
+            View pricing plans
+          </a>
+        </div>
       );
     case "accounts":
       return <AccountsSection />;

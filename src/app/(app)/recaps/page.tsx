@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";import Link from "next/link";
+import { useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { CalendarRange, ArrowRight } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
@@ -185,10 +186,13 @@ export default function RecapsPage() {
       </div>
 
       <div ref={captureRef} className="space-y-6">
-      <Card className="overflow-hidden">
-        <CardHeader className="flex flex-row items-center justify-between">
+      <Card>
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
           <CardTitle>Score Board</CardTitle>
-          <div className="flex items-center gap-1 rounded-xl border border-line bg-bg-elevated p-1">
+          <div
+            className="flex items-center gap-1 overflow-x-auto scrollbar-none rounded-xl border border-line bg-bg-elevated p-1"
+            data-screenshot-ignore="true"
+          >
             {PERIODS.map((p) => (
               <button
                 key={p.id}
@@ -222,8 +226,8 @@ export default function RecapsPage() {
                 />
               </div>
 
-              <div className="-mx-1 overflow-x-auto px-1 sm:overflow-visible">
-                <table className="w-full text-left text-sm">
+              <div className="w-full overflow-x-auto scrollbar-none sm:overflow-visible">
+                <table className="w-full min-w-0 text-left text-sm">
                   <thead className="border-b border-line bg-bg-soft/50 text-xs text-fg-subtle">
                     <tr>
                       <th className="px-4 py-3 font-medium">Session</th>

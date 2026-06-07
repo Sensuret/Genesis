@@ -255,27 +255,31 @@ export default function StreaksPage() {
             label="Best day streak"
             value={best(days)?.length ?? 0}
             hint={best(days) ? <span className="text-success font-medium">{fmt(best(days)!.pnl)} earned</span> : ""}
+            emoji="😎"
           />
           <Stat
             label="Best week streak"
             value={best(weeks)?.length ?? 0}
             hint={best(weeks) ? <span className="text-success font-medium">{fmt(best(weeks)!.pnl)} earned</span> : ""}
+            emoji="🚀"
           />
           <Stat
             label="Best quarter streak"
             value={best(quarters)?.length ?? 0}
             hint={best(quarters) ? <span className="text-success font-medium">{fmt(best(quarters)!.pnl)} earned</span> : ""}
+            emoji="💪"
           />
           <Stat
             label="Best year streak"
             value={best(years)?.length ?? 0}
             hint={best(years) ? <span className="text-success font-medium">{fmt(best(years)!.pnl)} earned</span> : ""}
+            emoji="🏆"
           />
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
-          <Stat label="Total lot size traded" value={formatNumber(lots, 2)} format="text" />
-          <Stat label="Trades in window" value={filtered.length} format="number" />
+          <Stat label="Total lot size traded" value={formatNumber(lots, 2)} format="text" emoji="📊" />
+          <Stat label="Trades in window" value={filtered.length} format="number" emoji="📈" />
         </div>
 
         <div className="grid gap-4 lg:grid-cols-2">
@@ -304,9 +308,14 @@ export default function StreaksPage() {
               const range = sessionRangeLabel(s, tz.offset, sessionWindows);
               return (
                 <div key={s} className="rounded-xl border border-line bg-bg-elevated p-4">
-                  <div className="text-xs uppercase tracking-wide text-fg-subtle">
-                    {s.replace(" ", "").toUpperCase()}
-                    <span className="ml-1 normal-case text-fg-muted">({range})</span>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="text-xs uppercase tracking-wide text-fg-subtle">
+                      {s.replace(" ", "").toUpperCase()}
+                      <span className="ml-1 normal-case text-fg-muted">({range})</span>
+                    </div>
+                    <span className="text-lg" aria-hidden>
+                      {top && top.length > 0 ? "🔥" : "🪵"}
+                    </span>
                   </div>
                   <div className="mt-1 text-2xl font-semibold">{top?.length ?? 0}</div>
                   <div className="mt-0.5 text-xs text-fg-muted">
