@@ -62,7 +62,7 @@ const CURRENCY_UNITS: Record<string, string> = {
   CAD: "Canadian dollars",
   AUD: "Australian dollars",
   EUR: "euros",
-  GBP: "British pounds",
+  GBP: "pounds",
   JPY: "Japanese yen",
   KES: "Kenyan shillings",
   ZAR: "South African rand",
