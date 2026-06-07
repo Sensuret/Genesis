@@ -346,7 +346,6 @@ function CalendarCard({
           date={openDate}
           trades={trades}
           balanceFallback={balanceFallback}
-          fileBalance={fileBalance}
           onClose={() => setOpenDate(null)}
         />
       )}
