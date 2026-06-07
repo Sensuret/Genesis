@@ -58,11 +58,11 @@ function intToWords(n: number): string {
 }
 
 const CURRENCY_UNITS: Record<string, string> = {
-  USD: "United States dollars",
+  USD: "US dollars",
   CAD: "Canadian dollars",
   AUD: "Australian dollars",
   EUR: "euros",
-  GBP: "pounds sterling",
+  GBP: "British pounds",
   JPY: "Japanese yen",
   KES: "Kenyan shillings",
   ZAR: "South African rand",
